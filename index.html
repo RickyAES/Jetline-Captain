@@ -217,7 +217,7 @@
   function hideOldLocalLogin(){try{
     let doc=frame.contentDocument;if(!doc||doc.getElementById('cloud-account-hide'))return;
     let st=doc.createElement('style');st.id='cloud-account-hide';
-    st.textContent='.acct-chip,.acct{display:none!important}';
+    st.textContent='.acct-chip,#acct{display:none!important}';
     doc.head.appendChild(st);
   }catch{}}
   function gameInfo(){try{return frame.contentWindow?.__game?.info?.()||null}catch{return null}}
