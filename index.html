@@ -217,8 +217,7 @@
   function hideOldLocalLogin(){try{
     let doc=frame.contentDocument;if(!doc||doc.getElementById('cloud-account-hide'))return;
     let st=doc.createElement('style');st.id='cloud-account-hide';
-    
-st.textContent = `
+    st.textContent = `
   .acct-chip, #acct {
     display: none !important;
   }
@@ -235,6 +234,7 @@ st.textContent = `
     flex-direction: column !important;
   }
 `;
+
 ;
     doc.head.appendChild(st);
   }catch{}}
