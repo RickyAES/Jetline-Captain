@@ -44,6 +44,36 @@
     #countryRows .rankrow{grid-template-columns:36px 1fr 90px 90px}
     #cloudBadge{display:inline-block;border:1px solid #277c8e;padding:4px 8px;border-radius:20px;color:#6de9c5;font-size:11px;margin-top:7px}
     @media(max-width:500px){.pilots{font-size:11px;max-width:140px}.pill{padding:0 8px;font-size:11px}#bar{gap:4px;padding-left:7px;padding-right:7px}.modal{padding:14px}.rankrow{grid-template-columns:27px 1fr 33px 53px 50px;gap:4px;font-size:11px}}
+  
+    #holdOpen{display:none}
+    #holdOpen.ready{display:inline-block}
+    #busyApron{position:fixed;left:10px;right:10px;bottom:10px;z-index:6;pointer-events:none;display:none;align-items:flex-end;gap:10px;opacity:.96}
+    #busyApron.show{display:flex}
+    #busyApron .terminal{flex:1;min-height:70px;border:1px solid #274769;border-radius:18px;background:linear-gradient(180deg,#10284f,#081731);box-shadow:0 8px 20px #0007;padding:10px 14px}
+    #busyApron .terminal h4{margin:0 0 6px;font-size:11px;letter-spacing:.12em;color:#8eddf4}
+    #busyApron .parked{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    #busyApron .plane{width:32px;height:18px;border-radius:10px 10px 4px 4px;background:linear-gradient(180deg,#f3f8ff,#a5bfd8);position:relative;box-shadow:0 0 0 1px #7fa6c9 inset,0 4px 10px #0005}
+    #busyApron .plane:before{content:'';position:absolute;left:6px;right:6px;top:8px;height:3px;background:#5d84aa;border-radius:3px}
+    #busyApron .plane:after{content:'';position:absolute;left:14px;top:-4px;width:4px;height:26px;background:#d6e7f7;border-radius:4px}
+    #busyApron .caption{min-width:145px;max-width:190px;padding:10px 12px;border-radius:16px;border:1px solid #31527c;background:#0a1a36e6;color:#d9edff;font-size:12px;line-height:1.35;box-shadow:0 8px 20px #0007}
+    #holdShade{display:none;position:fixed;inset:0;z-index:30;align-items:center;justify-content:center;padding:18px;background:#030b20d4;backdrop-filter:blur(6px)}
+    #holdShade.show{display:flex}
+    .holdCard{width:min(700px,100%);padding:18px;border-radius:20px;background:linear-gradient(160deg,#15356b,#08132d);border:1px solid #4ccfff;box-shadow:0 24px 60px #020715f2}
+    .holdTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+    .holdTop h2{font-size:20px;color:#8feaff}.holdTag{font-size:11px;font-weight:800;letter-spacing:.12em;color:#8feaff}
+    .holdBrief,.holdMeta,.holdAirport{border:1px solid #264d78;background:#0a1c39;border-radius:13px;padding:12px 13px;margin-top:10px}
+    .holdAirport{display:grid;grid-template-columns:1fr 180px;gap:12px;align-items:center}
+    .holdAirport .airportVisual{min-height:92px;border-radius:12px;background:linear-gradient(180deg,#14345f,#0a1730);padding:10px;display:flex;flex-wrap:wrap;gap:7px;align-content:flex-end;justify-content:center}
+    .holdAirport .airportVisual span{width:34px;height:16px;border-radius:10px 10px 4px 4px;background:linear-gradient(180deg,#f4fbff,#aac8e2);position:relative;display:inline-block;box-shadow:0 0 0 1px #7fa6c9 inset}
+    .holdAirport .airportVisual span:before{content:'';position:absolute;left:15px;top:-3px;width:4px;height:22px;border-radius:4px;background:#d8e8f8}
+    .holdAirport .airportVisual span:after{content:'';position:absolute;left:5px;right:5px;top:7px;height:3px;background:#5d84aa;border-radius:3px}
+    .holdChoices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+    .holdBtn{padding:14px 10px;border-radius:12px;border:1px solid #38bfdf;background:#133f72;color:#fff;font-size:15px;font-weight:900;letter-spacing:.02em}
+    .holdBtn.secondary{background:#1b2e53;border-color:#3f5c82}
+    #holdFeedback{min-height:22px;margin-top:12px;font-size:14px;color:#9bedff}
+    #holdFooter{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:16px}
+    @media(max-width:680px){.holdAirport{grid-template-columns:1fr}.holdChoices{grid-template-columns:1fr}#busyApron{left:6px;right:6px;bottom:6px}.caption{display:none}}
+
   </style>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -56,6 +86,7 @@
     <div class="right">
       <span class="pilots"><span class="dot" id="liveDot"></span><span id="liveLabel">OFFLINE MODE</span></span>
       <button class="pill" id="rankingOpen" type="button">🏆 RANKING</button>
+      <button class="pill" id="holdOpen" type="button">🛬 HOLDING</button>
       <button class="pill" id="fullscreenOpen" type="button" aria-label="Full screen">⛶</button>
     </div>
   </header>
@@ -111,6 +142,50 @@
       </div>
     </section>
   </div>
+
+  <div id="busyApron" aria-hidden="true">
+    <div class="terminal">
+      <h4>BUSY AIRPORT APRON</h4>
+      <div class="parked">
+        <span class="plane"></span><span class="plane"></span><span class="plane"></span><span class="plane"></span><span class="plane"></span><span class="plane"></span>
+      </div>
+    </div>
+    <div class="caption" id="busyApronCaption">Heavy traffic nearby. Expect holding or sequencing delays.</div>
+  </div>
+
+  <div id="holdShade" aria-hidden="true">
+    <section class="holdCard" role="dialog" aria-modal="true" aria-labelledby="holdTitle">
+      <div class="holdTop">
+        <div>
+          <div class="holdTag">ATC HOLDING CHALLENGE</div>
+          <h2 id="holdTitle">Busy airport arrival hold</h2>
+        </div>
+        <button class="close" id="closeHold" type="button" aria-label="Close">×</button>
+      </div>
+      <div class="holdBrief" id="holdAtcText"></div>
+      <div class="holdMeta" id="holdMeta"></div>
+      <div class="holdAirport">
+        <div>
+          <strong id="holdProcedureTitle">Choose the correct entry</strong>
+          <p id="holdProcedureText">Select the proper standard holding entry: direct, parallel or teardrop.</p>
+        </div>
+        <div class="airportVisual" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="holdChoices">
+        <button class="holdBtn" data-hold-choice="direct" type="button">DIRECT</button>
+        <button class="holdBtn" data-hold-choice="parallel" type="button">PARALLEL</button>
+        <button class="holdBtn" data-hold-choice="teardrop" type="button">TEARDROP</button>
+      </div>
+      <div id="holdFeedback" role="status" aria-live="polite"></div>
+      <div id="holdFooter">
+        <button class="holdBtn secondary" id="holdResume" type="button">RESUME FLIGHT</button>
+        <button class="holdBtn secondary" id="holdRestart" type="button">RESTART FLIGHT</button>
+        <button class="holdBtn secondary" id="holdMenu" type="button">BACK TO MENU</button>
+      </div>
+    </section>
+  </div>
 <script>
 'use strict';
 (()=>{
@@ -121,6 +196,7 @@
     /^(sb_publishable_|eyJ)[A-Za-z0-9_.-]+$/.test(config.supabasePublishableKey||'') && !!window.supabase?.createClient;
   let db=null, user=null, pilot=null, presence=null, presenceReady=false, gameLoaded=false;
   let gameStatus='menu', lastSeenInput=Date.now(), lastPresenceString='', lastBackup='', saving=false;
+  let lastFlightKey='', holdOpenState=false, holdAnswered=false, holdCurrent=null, holdTriggeredFor=new Set();
   let ranking={score:[],level:[],countries:[],online:0,flying:0,registered:0,me:{rankScore:0,rankLevel:0}};
   let onlineMap=new Map(), currentTab='score', cloudView='cloud';
   const sessionId='guest-'+((globalThis.crypto?.randomUUID?.()||String(Math.random()).slice(2)));
@@ -184,7 +260,7 @@
   $('rankingOpen').onclick=()=>openModal('ranking');
   $('closeModal').onclick=closeModal;
   $('shade').addEventListener('pointerdown',e=>{if(e.target===$('shade'))closeModal()});
-  window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+  window.addEventListener('keydown',e=>{if(e.key==='Escape'){ if(holdOpenState) closeHold(true); else closeModal(); }});
   $('country').value=countryCode()==='--'?'':countryCode();
   $('completeCountry').value=$('country').value;
   $('callsign').value=lsGet(sessionKey)||'';
@@ -194,10 +270,104 @@
     if(f.requestFullscreen)f.requestFullscreen().catch(()=>msg('This browser does not allow full screen. On iPhone: Safari → Share → Add to Home Screen.',true));
     else openModal('cloud'),msg('For iPhone full-screen play: Safari → Share → Add to Home Screen, then launch from the Home Screen.',true);
   };
+
+  $('holdOpen').onclick=()=>{const route=activeRouteInfo(); if(route) openHoldChallenge(route); else msg('Start a flight first, then open the holding challenge.', true)};
+  $('closeHold').onclick=()=>closeHold(true);
+  $('holdResume').onclick=()=>closeHold(true);
+  $('holdRestart').onclick=()=>{ try{frame.contentWindow?.__game?.restartFlight?.()}catch{} closeHold(false); };
+  $('holdMenu').onclick=()=>{ try{frame.contentWindow?.__game?.quit?.()}catch{} closeHold(false); };
+  document.querySelectorAll('[data-hold-choice]').forEach(btn=>btn.addEventListener('click',()=>answerHold(btn.dataset.holdChoice)));
+
   if(!configured){
     $('cloudConfigured').textContent='Cloud is not connected yet. Edit config.js with your Supabase Project URL and publishable key, then run the supplied SQL setup. Game works offline; real ranking is not available.';
     $('cloudConfigured').classList.add('warn');
     for(const id of ['loginBtn','registerBtn','completeBtn','saveNowBtn'])$(id).disabled=true;
+  }
+
+
+  const BUSY_AIRPORTS=new Set(['HND','NRT','SIN','LHR','JFK','LAX','SFO','DXB','CDG','FRA','AMS','HKG','ICN','SYD']);
+  const HOLD_CASES=[
+    {answer:'direct', title:'Direct entry', text:'Your inbound track approaches from the direct-entry sector. Cross the holding fix, turn right and continue in the published racetrack.'},
+    {answer:'parallel', title:'Parallel entry', text:'You are approaching from the non-holding side. Cross the fix, fly outbound on the reciprocal side, then turn back to intercept the inbound leg.'},
+    {answer:'teardrop', title:'Teardrop entry', text:'You are approaching from the holding side but offset into the teardrop sector. Cross the fix, fly the outbound heading with a 30° offset, then turn back inbound.'}
+  ];
+  function phaseLabel(p){return ({takeoff:'departure',route:'en route',approach:'arrival'})[p]||'flight';}
+  function activeRouteInfo(){
+    const info=gameInfo();
+    if(!info||info.st!=='play'||info.paused) return null;
+    const dep=info?.rwys?.dep||info?.route?.plan?.dep||'---';
+    const arr=info?.rwys?.arr||info?.route?.plan?.arr||info?.route?.dest||'---';
+    return {info,dep,arr,phase:info.phase||'route',t:info.t||0,busy:BUSY_AIRPORTS.has(dep)||BUSY_AIRPORTS.has(arr)};
+  }
+  function showBusyApron(route){
+    const el=$('busyApron');
+    if(!route||!route.busy||holdOpenState||document.visibilityState!=='visible'){el.classList.remove('show');return;}
+    $('busyApronCaption').textContent=`Heavy traffic at ${route.arr}. Multiple aircraft are parked and ATC may issue holding instructions.`;
+    el.classList.add('show');
+  }
+  function buildHoldScenario(route, forcedType){
+    const holdFixes=['DAGGA','KUDOS','SABER','TELEX','MANGO','DOVAN','ARAMA','LOTUS'];
+    const headings=[0,30,60,90,120,150,180,210,240,270,300,330];
+    const chosen=HOLD_CASES.find(x=>x.answer===forcedType)||HOLD_CASES[Math.floor(Math.random()*HOLD_CASES.length)];
+    let inbound=headings[Math.floor(Math.random()*headings.length)];
+    let outbound=(inbound+180)%360;
+    let turn='right';
+    let fromMap={direct:'direct-entry sector',parallel:'parallel-entry sector',teardrop:'teardrop-entry sector'};
+    return {
+      answer:chosen.answer,
+      title:chosen.title,
+      route:`${route.dep} → ${route.arr}`,
+      fix:holdFixes[Math.floor(Math.random()*holdFixes.length)],
+      inbound, outbound, turn,
+      expect:5+Math.floor(Math.random()*6),
+      traffic:8+Math.floor(Math.random()*15),
+      from:fromMap[chosen.answer],
+      text:chosen.text,
+      airport:route.arr,
+      phase:route.phase
+    };
+  }
+  function openHoldChallenge(route, forcedType){
+    if(holdOpenState) return;
+    holdCurrent=buildHoldScenario(route, forcedType);
+    holdAnswered=false; holdOpenState=true;
+    $('holdTitle').textContent=`${holdCurrent.route} · busy holding`;
+    $('holdAtcText').innerHTML=`<strong>ATC:</strong> "Jetline Captain, due busy ${holdCurrent.airport} traffic, hold over ${holdCurrent.fix}, inbound course ${String(holdCurrent.inbound).padStart(3,'0')}°, ${holdCurrent.turn} turns, expect further clearance in ${holdCurrent.expect} minutes."`;
+    $('holdMeta').innerHTML=`<strong>Scenario:</strong> ${holdCurrent.traffic} aircraft are sequenced and many more are parked on the apron. You are joining from the <strong>${holdCurrent.from}</strong> during the ${phaseLabel(holdCurrent.phase)} phase.`;
+    $('holdProcedureTitle').textContent=holdCurrent.title;
+    $('holdProcedureText').textContent='Select the correct standard holding entry: direct, parallel or teardrop. After answering, you can resume, restart, or go back to the menu.';
+    $('holdFeedback').textContent='';
+    $('holdShade').classList.add('show'); $('holdShade').setAttribute('aria-hidden','false');
+    showBusyApron(route);
+    try{frame.contentWindow?.__game?.pause?.()}catch{}
+  }
+  function closeHold(autoResume=true){
+    $('holdShade').classList.remove('show'); $('holdShade').setAttribute('aria-hidden','true');
+    holdOpenState=false;
+    if(autoResume){try{frame.contentWindow?.__game?.resume?.()}catch{}}
+  }
+  function answerHold(choice){
+    if(!holdCurrent) return;
+    holdAnswered=true;
+    if(choice===holdCurrent.answer){
+      $('holdFeedback').textContent=`Correct — ${holdCurrent.title}. ${holdCurrent.text}`;
+      $('holdFeedback').style.color='#7cf4ce';
+    }else{
+      $('holdFeedback').textContent=`Not quite. Correct answer: ${holdCurrent.answer.toUpperCase()}. ${holdCurrent.text}`;
+      $('holdFeedback').style.color='#ffd38a';
+    }
+  }
+  function maybeTriggerHold(){
+    const route=activeRouteInfo();
+    showBusyApron(route);
+    if(!route||!route.busy||holdOpenState) return;
+    const key=[route.dep,route.arr,route.info.level||0].join('|');
+    lastFlightKey=key;
+    if(holdTriggeredFor.has(key)) return;
+    if(route.t<18) return;
+    if(route.phase!=='route' && route.phase!=='approach') return;
+    holdTriggeredFor.add(key);
+    openHoldChallenge(route);
   }
 
   function sendToGame(data){if(!gameLoaded||!frame.contentWindow)return;
@@ -207,6 +377,7 @@
   function startGame(reload=false){
     if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html'+(reload?'?cloud_reload='+Date.now():'')}
   }
+  $('holdOpen').classList.add('ready');
   frame.addEventListener('load',()=>{
     gameLoaded=true;
     hello();setTimeout(hello,400);setTimeout(()=>{hello();hideOldLocalLogin()},1800);
@@ -217,24 +388,7 @@
   function hideOldLocalLogin(){try{
     let doc=frame.contentDocument;if(!doc||doc.getElementById('cloud-account-hide'))return;
     let st=doc.createElement('style');st.id='cloud-account-hide';
-    st.textContent = `
-  .acct-chip, #acct {
-    display: none !important;
-  }
-  #pauseCard.show,
-  #ui.paused #pauseCard {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    z-index: 9999 !important;
-  }
-  #pauseCard.show .pause-btns {
-    display: flex !important;
-    flex-direction: column !important;
-  }
-`;
-;
+    st.textContent='.acct-chip,.acct{display:none!important}';
     doc.head.appendChild(st);
   }catch{}}
   function gameInfo(){try{return frame.contentWindow?.__game?.info?.()||null}catch{return null}}
@@ -253,6 +407,7 @@
     const next=info?.st==='play'&&!info?.paused?'fly':'menu';
     if(next!==gameStatus){gameStatus=next;updatePresence()}
     if(pilot)renderProfile();
+    maybeTriggerHold();
   }
   window.addEventListener('pointerdown',()=>{lastSeenInput=Date.now()},{passive:true});
   window.addEventListener('keydown',()=>{lastSeenInput=Date.now()});
@@ -523,6 +678,7 @@
     }
   });
   setInterval(()=>{observeGame();updatePresence();if(db&&pilot)backUp()},12000);
+  setInterval(()=>maybeTriggerHold(),1800);
   setInterval(()=>{if(db)refreshRanking()},20000);
   setInterval(()=>{if(presenceReady)countPresence()},15000);
   window.addEventListener('pagehide',()=>{if(db&&pilot)backUp();presence?.untrack?.()});
