@@ -243,7 +243,7 @@
       </div>
       <div class="radarToolbar">
         <label>Airport<select id="radarAirport" aria-label="Airport radar"></select></label>
-        <label class="radarSearchWrap">Search smaller airports<input id="radarAirportSearch" type="search" placeholder="Seletar, Chiang Mai, Indonesia..." autocomplete="off" aria-label="Search airport name or code"></label>
+        <label class="radarSearchWrap">Search all airports<input id="radarAirportSearch" type="search" placeholder="London, Haneda, Seletar, Phuket..." autocomplete="off" aria-label="Search international and regional airports"></label>
         <label>Airline filter<select id="radarFilter" aria-label="Airline filter">
           <option value="SIA">Singapore Airlines (SIA)</option>
           <option value="ALL">All detected aircraft</option>
@@ -470,8 +470,14 @@
   },{passive:false});
   radarCanvas.addEventListener('touchend',ev=>{if(ev.touches.length<2)radarPinchDistance=0;},{passive:true});
   let airportCatalogueLoaded=false,airportCatalogueLoading=false,airportDirectoryPromise=null;
-  const regionLabels={SG:'Singapore',ID:'Indonesia',TH:'Thailand',OTHER:'Other airports'};
-  function regionForAirport(a){return ['SG','ID','TH'].includes(a?.country)?a.country:'OTHER';}
+  // The original international airports are always kept in the unfiltered dropdown.
+  // The extended country catalogue must ADD choices, never push out the 200+ original destinations.
+  const originalAirportCodes=new Set();
+  const regionLabels={WORLD:'International & original airports',SG:'Singapore regional',ID:'Indonesia regional',TH:'Thailand regional',OTHER:'Other regional airports'};
+  function regionForAirport(a,code){
+    if(originalAirportCodes.has(code))return 'WORLD';
+    return ['SG','ID','TH'].includes(a?.country)?a.country:'OTHER';
+  }
   function airportLabel(code,a){
     const tag=a?.iata&&a.iata!==code?' · '+a.iata:'';
     const place=a?.municipality&&a.municipality!==a.name?' · '+a.municipality:'';
@@ -480,24 +486,43 @@
   function rebuildAirportOptions(){
     const sel=$('radarAirport'),search=String($('radarAirportSearch').value||'').trim().toLowerCase();
     sel.replaceChildren();
-    const matches=Object.entries(airports).filter(([code,a])=>!search||(`${code} ${a.name||''} ${a.municipality||''} ${a.iata||''}`).toLowerCase().includes(search));
-    matches.sort((x,y)=>{
-      const order={SG:0,ID:1,TH:2,OTHER:3};
-      return order[regionForAirport(x[1])]-order[regionForAirport(y[1])] || x[1].name.localeCompare(y[1].name) || x[0].localeCompare(y[0]);
-    });
-    const cap=search?250:240;
-    const shown=matches.slice(0,cap);
-    // Selected airport remains available when a search filters it out.
+    const matching=Object.entries(airports).filter(([code,a])=>!search||(`${code} ${a?.name||''} ${a?.municipality||''} ${a?.iata||''} ${a?.country||''}`).toLowerCase().includes(search));
+    const sortAlpha=(x,y)=>String(x[1]?.name||x[0]).localeCompare(String(y[1]?.name||y[0]))||x[0].localeCompare(y[0]);
+    let shown=[];
+    if(search){
+      // Searching international OR small airports returns matching results from the whole catalogue.
+      const order={WORLD:0,SG:1,ID:2,TH:3,OTHER:4};
+      matching.sort((x,y)=>order[regionForAirport(x[1],x[0])]-order[regionForAirport(y[1],y[0])]||sortAlpha(x,y));
+      shown=matching.slice(0,450);
+    }else{
+      const originals=matching.filter(([code])=>originalAirportCodes.has(code)).sort(sortAlpha);
+      const regional=matching.filter(([code])=>!originalAirportCodes.has(code));
+      const groups={SG:[],ID:[],TH:[],OTHER:[]};
+      for(const pair of regional){const k=regionForAirport(pair[1],pair[0]);groups[k].push(pair);}
+      for(const g of Object.values(groups))g.sort((a,b)=>{
+        const rank=t=>t==='large_airport'?0:t==='medium_airport'?1:2;
+        return rank(a[1]?.type)-rank(b[1]?.type)||sortAlpha(a,b);
+      });
+      // Keep 100+ extra regional options visible without dropping even one original airport.
+      const extras=[...groups.SG.slice(0,25),...groups.ID.slice(0,65),...groups.TH.slice(0,65),...groups.OTHER.slice(0,10)];
+      shown=[...originals,...extras];
+    }
+    // Always retain the selected airport, including while the search is active.
     if(airports[radarAirport]&&!shown.some(([code])=>code===radarAirport))shown.unshift([radarAirport,airports[radarAirport]]);
     const groups={};
     for(const [code,a] of shown){
-      const region=regionForAirport(a);
-      if(!groups[region]){groups[region]=document.createElement('optgroup');groups[region].label=regionLabels[region];sel.append(groups[region]);}
+      const region=regionForAirport(a,code);
+      if(!groups[region]){
+        groups[region]=document.createElement('optgroup');
+        groups[region].label=regionLabels[region];sel.append(groups[region]);
+      }
       const opt=document.createElement('option');opt.value=code;opt.textContent=airportLabel(code,a);groups[region].append(opt);
     }
     sel.value=radarAirport;
-    $('radarCatalogStatus').textContent=search ? `${matches.length} airports matched · ${shown.length} displayed. Refine your search to see more.` :
-      `${Object.keys(airports).length} airports listed · Search to find Indonesia and Thailand regional airfields.`;
+    const extraCount=Math.max(0,Object.keys(airports).length-originalAirportCodes.size);
+    $('radarCatalogStatus').textContent=search
+      ? `${matching.length} matching airports · ${shown.length} displayed. Search by name, country or airport code.`
+      : `${originalAirportCodes.size} original airports preserved · ${extraCount} additional regional airports available · search all airports.`;
   }
   function showAirportRunway(){
     const a=airports[radarAirport]||{};const runways=Array.isArray(a.runways)?a.runways:[];
@@ -522,13 +547,16 @@
       try{
         const r=await fetch('airports.json',{cache:'force-cache'});
         if(!r.ok)throw new Error('Airport directory unavailable');
-        airports=await r.json();
+        const base=await r.json();
+        if(!base||typeof base!=='object'||Array.isArray(base))throw new Error('Invalid original airport directory');
+        airports=base;
+        originalAirportCodes.clear();
+        for(const code of Object.keys(base))originalAirportCodes.add(code);
         rebuildAirportOptions();showAirportRunway();
       }catch(e){$('radarCatalogStatus').textContent='Base airport database could not be loaded.';console.warn(e);}
     }
     if(airportCatalogueLoaded||airportCatalogueLoading)return;
     airportCatalogueLoading=true;
-    $('radarCatalogStatus').textContent='Loading Indonesia / Thailand regional airport and runway catalogue…';
     try{
       const response=await fetch('/api/airport-catalog',{cache:'default'});
       if(!response.ok)throw new Error('Extended airport catalogue unavailable');
