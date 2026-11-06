@@ -280,8 +280,23 @@
     if(!window.speechSynthesis || !window.SpeechSynthesisUtterance)return;
     try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(msg);u.lang='en-US';u.rate=0.92;u.pitch=0.91;u.volume=0.86;window.speechSynthesis.speak(u)}catch(e){console.warn('ATC speech unavailable',e)}
   }
+  function gameHoldingExempt(yes){
+    try{
+      const native=frame.contentWindow?.__game;
+      if(typeof native?.setAtcHolding==='function')return native.setAtcHolding(!!yes);
+    }catch(e){console.warn('ATC hold exemption update failed',e)}
+    return null;
+  }
+  function updateHoldHud(r){
+    try{
+      const elapsed=atcHold?Math.max(0,(r?.t??atcHold.lastT)-atcHold.startedAt):0;
+      frame.contentWindow?.__holdHud?.update({active:!!atcHold&&atcHold.stage!=='released',elapsed,stage:atcHold?.stage||''});
+    }catch(e){console.warn('FCU holding timer update failed',e)}
+  }
   function resetHold(){
+    gameHoldingExempt(false);
     atcHold=null;atcHoldDone=false;atcHoldSchedule=null;
+    updateHoldHud(null);
     $('holdAlert').classList.remove('active','minimized');$('holdApron').classList.remove('show');
   }
   function setHoldStage(stage,t){
@@ -299,7 +314,7 @@
     else if(h.stage==='turn-in')text='MANEUVER: Turn back to the inbound holding course; use FCU HDG mode or manual controls.';
     else if(h.stage==='established')text='HOLD ESTABLISHED. Maintain heading, altitude and speed. Await further clearance.';
     else if(h.stage==='released')text='ATC has cleared you to leave the hold. Restore NAV mode or resume your flight plan.';
-    $('holdInstruction').textContent=text;
+    $('holdInstruction').textContent=text+(h.stage!=='released'?' WAYPOINT MISSES SUSPENDED while holding.':' Waypoint checks resumed.');
   }
   function renderHold(r){
     if(!atcHold)return;
@@ -332,6 +347,9 @@
     atcHold={fix,arr:r.arr,dep:r.dep,stage:'clearance',startedAt:r.t,stageAt:r.t,
       lastT:r.t,steady:0,headingAtClearance:r.heading,inbound,outbound,turn,entry,
       outboundTarget:outbound,alt,maxKt,points:0,answered:false,wrong:false};
+    const bypass=gameHoldingExempt(true);
+    if(!bypass?.active)console.warn('Native missed-fix protection is not active; ensure updated game.html is deployed.');
+    updateHoldHud(r);
     const clearance=`Jetline ${r.info.level||1}, due arrival congestion at ${r.arr}, hold at ${fix}. Inbound course ${padHdg(inbound)}, right-hand turns. Maintain ${alt} feet. Speed not above ${maxKt} knots. Expect further clearance.`;
     $('holdClearance').textContent='ATC: '+clearance;
     $('holdFeedback').textContent='New clearance — read back and act now.';
@@ -421,6 +439,8 @@
       }
     }else if(h.stage==='established'){
       if(r.t-h.stageAt>=11){setHoldStage('released',r.t);
+        gameHoldingExempt(false); // ATC clearance resumes normal route checks; passed fixes are safely skipped.
+        updateHoldHud(null);
         if(altOk&&speedOk)h.points+=25;
         $('holdClearance').textContent=`ATC: Jetline, cleared to exit the hold. Resume navigation to ${h.arr}.`;
         $('holdFeedback').textContent=`Holding challenge complete: ${h.points}/100 procedure points (separate from flight score).`;
@@ -428,9 +448,9 @@
         speech(`Jetline, cleared to leave the hold. Resume flight planned route to ${h.arr}.`);
       }
     }else if(h.stage==='released'&&r.t-h.stageAt>14){
-      atcHoldDone=true;atcHold=null;$('holdAlert').classList.remove('active','minimized');
+      atcHoldDone=true;gameHoldingExempt(false);atcHold=null;updateHoldHud(null);$('holdAlert').classList.remove('active','minimized');
     }
-    if(atcHold)renderHold(r);
+    if(atcHold){renderHold(r);updateHoldHud(r)}
   }
   $('holdAck').addEventListener('click',respondHold);
   $('holdMin').addEventListener('click',()=>{
