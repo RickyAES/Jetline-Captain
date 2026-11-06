@@ -89,8 +89,8 @@
     .radarSide{border-radius:13px;border:1px solid #235272;background:#0a1c35;min-height:180px;max-height:480px;overflow:auto}
     .radarSide h3{padding:12px;margin:0;font-size:13px;color:#8feaff;position:sticky;top:0;background:#0a1c35;border-bottom:1px solid #254761}
     #radarList{display:flex;flex-direction:column}
-    .radarPlane{border:0;border-bottom:1px solid #23445c;background:transparent;padding:10px;color:#ddefff;display:grid;grid-template-columns:1fr auto;gap:3px;font-size:12px;text-align:left}
-    .radarPlane.selected{background:#174e68}.radarPlane .quiet{color:#8aafc6;font-size:11px}
+    .radarPlane{border:0;border-bottom:1px solid #23445c;background:transparent;padding:10px;color:#ddefff;display:grid;grid-template-columns:1fr auto;gap:3px;font-size:12px;text-align:left;align-items:start}
+    .radarPlane.selected{background:#174e68}.radarPlane .quiet{color:#8aafc6;font-size:11px}.radarPlane .sub{grid-column:1 / -1;color:#b7d4e7;font-size:11px;line-height:1.35}.radarPlane .tag{justify-self:end;color:#9cefff;font-size:10px}
     .radarPlane strong{color:#7eebf2}.radarPlane .sq{color:#f5d18a}
     #radarDetail{border-top:1px solid #23445c;padding:11px;font-size:12px;line-height:1.55;color:#bce2ef;min-height:40px}
     #radarFoot{font-size:11px;color:#9fbad1;margin:10px 0 0;line-height:1.5}
@@ -113,28 +113,7 @@
     #fuelWarning{font-weight:800;color:#ffc56c;min-height:18px}
     #fuelFoot{color:#9fbad0;font-size:11px;line-height:1.5;margin-top:8px}
     @media(max-width:740px){#fuelOpen{font-size:11px;padding:0 7px;min-width:62px}#fuelPanel{top:calc(55px + env(safe-area-inset-top,0px));right:6px}}
-
-    /* Geographic map is the default radar view; scope remains available as a toggle. */
-    #radarSurface{position:relative}
-    #radarMap{position:absolute;inset:0;z-index:1;background:#0d2836}
-    #radarCanvas{position:absolute;inset:0;z-index:2;display:none}
-    #radarSurface.scope #radarMap{display:none}
-    #radarSurface.scope #radarCanvas{display:block}
-    .radarViewButtons{display:flex;gap:5px;align-items:center;align-self:end}
-    .radarViewButton{padding:10px 9px;border-radius:8px;border:1px solid #3c799b;background:#0d2a4b;color:#b9ddf0;font-size:12px;font-weight:800;white-space:nowrap}
-    .radarViewButton.active{border-color:#43d4ef;background:#1376a0;color:#fff}
-    #radarMap .leaflet-container{background:#0d2836}
-    #radarMap .leaflet-control-attribution{font-size:10px;line-height:1.2}
-    .jetlinePlanePin{background:transparent;border:0}
-    .jetlinePlanePin svg{display:block;filter:drop-shadow(0 1px 2px #061321)}
-    #radarMapMessage{position:absolute;z-index:510;top:10px;left:10px;right:10px;pointer-events:none;display:none;background:#091a36e8;border:1px solid #3a7493;color:#d5efff;border-radius:9px;padding:8px 10px;font-size:12px;line-height:1.4}
-    #radarMapMessage.show{display:block}
-    @media(max-width:650px){.radarViewButtons{flex:1}.radarViewButton{flex:1;font-size:11px;padding:9px 5px}}
-
   </style>
-  <!-- Leaflet provides a real interactive geographic airport map. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -243,7 +222,7 @@
   <div id="radarShade" aria-hidden="true">
     <section id="radarPanel" role="dialog" aria-modal="true" aria-labelledby="radarTitle">
       <div class="radarHeader">
-        <h2 id="radarTitle">📡 Live Airport Radar · 100 km</h2>
+        <h2 id="radarTitle">📡 Synthetic Airport Radar · 100 km</h2>
         <button class="close" type="button" id="radarClose" aria-label="Close live radar">×</button>
       </div>
       <div class="radarToolbar">
@@ -252,26 +231,18 @@
           <option value="SIA">Singapore Airlines (SIA)</option>
           <option value="ALL">All detected aircraft</option>
         </select></label>
-        <div class="radarViewButtons" role="group" aria-label="Radar display mode">
-          <button id="radarMapButton" class="radarViewButton active" type="button" aria-pressed="true">🗺 MAP</button>
-          <button id="radarScopeButton" class="radarViewButton" type="button" aria-pressed="false">📡 SCOPE</button>
-        </div>
         <button id="radarRefresh" type="button">↻ REFRESH</button>
       </div>
       <div id="radarStatus" role="status">Select an airport to request real aircraft positions.</div>
       <div class="radarContent">
-        <div class="radarRadar" id="radarSurface">
-          <div id="radarMap" aria-label="Interactive geographic airport map showing live aircraft within 100 kilometres"></div>
-          <div id="radarMapMessage" role="status"></div>
-          <canvas id="radarCanvas" width="520" height="520" aria-label="Radar scope of live aircraft within 100 kilometres"></canvas>
-        </div>
+        <div class="radarRadar"><canvas id="radarCanvas" width="520" height="520" aria-label="Radar of live aircraft within 100 kilometres"></canvas></div>
         <div class="radarSide">
           <h3 id="radarListTitle">AIRCRAFT · 100 KM</h3>
           <div id="radarList"></div>
-          <div id="radarDetail">Select an aircraft marker or list item to view its callsign, altitude, speed and heading.</div>
+          <div id="radarDetail">Select an aircraft marker or list item to view its flight number, destination, aircraft type, speed and heading.</div>
         </div>
       </div>
-      <p id="radarFoot">Actual positions supplied by <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
+      <p id="radarFoot">Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
     </section>
   </div>
 
@@ -371,88 +342,16 @@
   // LIVE AIRPORT RADAR — a separate Vercel function proxies the provider (no browser CORS).
   // Never generate mock aircraft when the feed is empty or unavailable.
   let airports={}, radarAirport='WSSS', radarOpenState=false, radarManualAirport=false;
-  let radarData=null, radarSelected=null, radarBusy=false, radarPoll=null, radarRequestId=0;
+  let radarData=null, radarSelected=null, radarBusy=false, radarPoll=null, radarRequestId=0, radarAnim=0, radarLastFetchMs=0;
   const radarScale=100, radarTrails=new Map();
   const radarCanvas=$('radarCanvas');
-  let radarView='map', geographicMap=null, geoBaseLayer=null, geoOverlays=null, geoAirport=null;
-  function mapMessage(message){
-    const el=$('radarMapMessage');el.textContent=message||'';el.classList.toggle('show',!!message);
-  }
-  function initGeographicMap(){
-    if(geographicMap) return true;
-    if(!window.L){
-      mapMessage('Geographic map library could not load. Select SCOPE to use the radar display.');
-      return false;
-    }
-    const center=airports[radarAirport]||{lat:1.3501,lon:103.9947};
-    geographicMap=L.map('radarMap', {zoomControl:true, scrollWheelZoom:false, preferCanvas:true, attributionControl:true}).setView([center.lat,center.lon],8);
-    geoBaseLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
-    }).addTo(geographicMap);
-    let loadedAnyTile=false;
-    geoBaseLayer.on('tileload',()=>{loadedAnyTile=true;mapMessage('')});
-    geoBaseLayer.on('tileerror',()=>{
-      if(!loadedAnyTile)mapMessage('Map tiles cannot load on this connection. Use SCOPE for a radar-only view.');
-    });
-    geoOverlays=L.layerGroup().addTo(geographicMap);
-    centerGeographicMap();
-    return true;
-  }
-  function centerGeographicMap(){
-    if(!geographicMap)return;
-    const center=airports[radarAirport];if(!center)return;
-    if(geoAirport){geoAirport.remove();geoAirport=null;}
-    geoAirport=L.layerGroup().addTo(geographicMap);
-    for(const radiusKm of [25,50,75,100]){
-      L.circle([center.lat,center.lon], {radius:radiusKm*1000,color:'#1abacb',weight:radiusKm===100?2:1,opacity:.7,fill:false,dashArray:radiusKm===100?'6 6':undefined,interactive:false}).addTo(geoAirport);
-    }
-    L.circleMarker([center.lat,center.lon],{radius:6,color:'#ffd38a',fillColor:'#ffb95d',fillOpacity:1,weight:2}).bindTooltip(`${radarAirport} · ${center.name}`,{direction:'top'}).addTo(geoAirport);
-    const ringBounds=L.circle([center.lat,center.lon],{radius:100000}).getBounds();
-    geographicMap.fitBounds(ringBounds,{padding:[12,12],maxZoom:10,animate:false});
-    setTimeout(()=>geographicMap?.invalidateSize(),90);
-    drawGeographicPlanes();
-  }
-  function drawGeographicPlanes(){
-    if(!geographicMap||!geoOverlays)return;
-    geoOverlays.clearLayers();
-    for(const p of radarFlights()){
-      const key=p.hex||p.callsign||'';
-      const trail=radarTrails.get(key)||[];
-      if(trail.length>=2)L.polyline(trail.map(t=>[t.lat,t.lon]),{color:'#32a9ab',weight:2,opacity:.75,interactive:false}).addTo(geoOverlays);
-      // Position data and callsigns come only from the real aircraft feed.
-      const heading=Number.isFinite(Number(p.heading))?Number(p.heading):0;
-      const chosen=key===radarSelected,airline=p.callsign?.startsWith('SIA');
-      const color=chosen?'#ffcd70':airline?'#32dba9':'#b0d6fc';
-      const html=`<svg width="25" height="29" viewBox="0 0 25 29" aria-hidden="true"><g transform="rotate(${heading} 12.5 14.5)"><path d="M12.5 1 L15 11 L24 19 L24 22 L14 19 L13.5 25 L17 27 L17 29 L12.5 27 L8 29 L8 27 L11.5 25 L11 19 L1 22 L1 19 L10 11 Z" stroke="#102e41" stroke-width="1" fill="${color}"/></g></svg>`;
-      const marker=L.marker([p.lat,p.lon],{icon:L.divIcon({className:'jetlinePlanePin',html,iconSize:[25,29],iconAnchor:[12.5,14.5]})}).addTo(geoOverlays);
-      const tooltip=document.createElement('div');
-      tooltip.textContent=`${p.callsign||p.hex||'UNKNOWN'} · ${p.km} km · ${fmtRadar(p.altFt)} ft · ${fmtRadar(p.speedKt)} kt`;
-      marker.bindTooltip(tooltip,{direction:'top'});
-      marker.on('click',()=>selectRadarPlane(p));
-    }
-  }
-  function changeRadarView(view){
-    radarView=view==='scope'?'scope':'map';
-    const scope=radarView==='scope';
-    $('radarSurface').classList.toggle('scope',scope);
-    $('radarMapButton').classList.toggle('active',!scope);
-    $('radarScopeButton').classList.toggle('active',scope);
-    $('radarMapButton').setAttribute('aria-pressed',String(!scope));
-    $('radarScopeButton').setAttribute('aria-pressed',String(scope));
-    if(scope)drawRadar();
-    else if(initGeographicMap()){
-      requestAnimationFrame(()=>{geographicMap.invalidateSize();centerGeographicMap();});
-    }
-  }
-  $('radarMapButton').onclick=()=>changeRadarView('map');
-  $('radarScopeButton').onclick=()=>changeRadarView('scope');
   const radKm=(lat,lon,lat0,lon0)=>{
     const north=(lat-lat0)*111.195;
     const east=(lon-lon0)*111.195*Math.cos(lat0*Math.PI/180);
     return {north,east};
   };
   const radarFlights=()=>{
-    const all=radarData?.aircraft||[];
+    const all=(radarData?.aircraft||[]).map(animatedPlane).filter(p=>Number.isFinite(p.km)?p.km<=100.05:true);
     return $('radarFilter').value==='SIA'?all.filter(p=>p.callsign?.startsWith('SIA')):all;
   };
   const fmtRadar=n=>Number.isFinite(n)?String(n):'—';
@@ -460,7 +359,6 @@
     if(!airports[code]||!$('radarAirport'))return;
     radarAirport=code;radarManualAirport=manual||radarManualAirport;
     $('radarAirport').value=code;
-    if(geographicMap)centerGeographicMap();
     if(radarOpenState)loadRadar();
   }
   async function loadRadarAirports(){
@@ -479,17 +377,39 @@
       sel.value=radarAirport;
     }catch(e){$('radarStatus').textContent='Airport database could not be loaded.';console.warn(e)}
   }
-  const radarStatus=(message,error=false)=>{
-    $('radarStatus').textContent=message;
-    $('radarStatus').classList.toggle('error',error);
-  };
+
+const radarStatus=(message,error=false)=>{
+  $('radarStatus').textContent=message;
+  $('radarStatus').classList.toggle('error',error);
+};
+function movePoint(lat,lon,heading,km){
+  const h=((Number(heading)||0)%360+360)%360*Math.PI/180;
+  const north=Math.cos(h)*km,east=Math.sin(h)*km;
+  const nextLat=lat+north/110.574;
+  const denom=Math.max(.15,Math.cos(nextLat*Math.PI/180))*111.320;
+  const nextLon=lon+east/denom;
+  return {lat:nextLat,lon:nextLon};
+}
+function planeDestination(p){
+  return (p.destination||p.destinationIcao||p.destinationIata||p.routeTo||'').trim()||'DEST N/A';
+}
+function planeType(p){ return (p.type||'TYPE N/A').trim() || 'TYPE N/A'; }
+function planeFlightNo(p){ return (p.callsign||p.hex||'UNIDENTIFIED').trim() || 'UNIDENTIFIED'; }
+function animatedPlane(p){
+  if(!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return p;
+  const elapsed=Math.min(55, Math.max(0,(Date.now()-radarLastFetchMs)/1000));
+  if(!Number.isFinite(Number(p.speedKt)) || !Number.isFinite(Number(p.heading)) || elapsed<=0) return {...p};
+  const km=Number(p.speedKt)*1.852*(elapsed/3600);
+  const pos=movePoint(Number(p.lat),Number(p.lon),Number(p.heading),km);
+  const center=airports[radarAirport]||{lat:1.3501,lon:103.9947};
+  const dist=distanceKm(pos.lat,pos.lon,center.lat,center.lon);
+  return {...p, lat:pos.lat, lon:pos.lon, km:Math.round(dist*10)/10};
+}
   function openRadar(){
     closeModal();radarOpenState=true;
     $('radarShade').classList.add('show');
     $('radarShade').setAttribute('aria-hidden','false');
-    if(!Object.keys(airports).length){
-      loadRadarAirports().then(()=>{changeRadarView(radarView);loadRadar();});
-    } else {changeRadarView(radarView);loadRadar();}
+    if(!Object.keys(airports).length){loadRadarAirports().then(loadRadar);}else loadRadar();
     clearInterval(radarPoll);radarPoll=setInterval(()=>{
       if(document.visibilityState==='visible'&&radarOpenState)loadRadar();
     },60000);
@@ -499,6 +419,7 @@
     $('radarShade').classList.remove('show');
     $('radarShade').setAttribute('aria-hidden','true');
     clearInterval(radarPoll);radarPoll=null;
+    cancelAnimationFrame(radarAnim);radarAnim=0;
   }
   window.addEventListener('resize',()=>{if(radarOpenState)drawRadar()});
   $('radarOpen').onclick=openRadar;
@@ -509,7 +430,7 @@
     radarAirport=e.target.value;
     if(radarAirport==='WSSS')$('radarFilter').value='SIA';
     else $('radarFilter').value='ALL';
-    centerGeographicMap();renderRadar();loadRadar();
+    loadRadar();
   };
   $('radarFilter').onchange=()=>{radarSelected=null;renderRadar();};
   $('radarRefresh').onclick=()=>loadRadar();
@@ -565,38 +486,87 @@
     const km=radKm(p.lat,p.lon,center.lat,center.lon);
     return {x:g.cx+km.east/radarScale*g.R,y:g.cy-km.north/radarScale*g.R};
   }
-  function drawRadar(){
-    const g=radarGeometry(),ctx=radarCanvas.getContext('2d');if(!ctx)return;
-    ctx.setTransform(g.dpr,0,0,g.dpr,0,0);
-    ctx.clearRect(0,0,g.width,g.height);
-    ctx.fillStyle='#041a27';ctx.fillRect(0,0,g.width,g.height);
-    ctx.strokeStyle='#1f5461';ctx.lineWidth=1;
-    for(let ring=25;ring<=radarScale;ring+=25){ctx.beginPath();ctx.arc(g.cx,g.cy,g.R*ring/radarScale,0,Math.PI*2);ctx.stroke();}
-    ctx.beginPath();ctx.moveTo(g.cx-g.R,g.cy);ctx.lineTo(g.cx+g.R,g.cy);
-    ctx.moveTo(g.cx,g.cy-g.R);ctx.lineTo(g.cx,g.cy+g.R);ctx.stroke();
-    ctx.fillStyle='#70a8bb';ctx.font='12px ui-monospace,monospace';ctx.textAlign='center';
-    ctx.fillText('N',g.cx,g.cy-g.R-10);ctx.fillText('S',g.cx,g.cy+g.R+17);
-    ctx.fillText('W',g.cx-g.R-14,g.cy+4);ctx.fillText('E',g.cx+g.R+14,g.cy+4);
-    for(const n of [25,50,75,100]){ctx.fillStyle='#507f8b';ctx.fillText(`${n} km`,g.cx+4,g.cy-g.R*n/radarScale+13);}
-    ctx.fillStyle='#ffbe75';ctx.beginPath();ctx.arc(g.cx,g.cy,5,0,2*Math.PI);ctx.fill();
-    ctx.fillStyle='#c9e9f3';ctx.textAlign='left';ctx.font='12px system-ui';
-    ctx.fillText(radarAirport+' · '+(airports[radarAirport]?.name||''),10,18);
-    const center=airports[radarAirport];if(!center)return;
-    ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,2*Math.PI);ctx.clip();
-    for(const p of radarFlights()){
-      const key=p.hex||p.callsign,trail=radarTrails.get(key)||[];
-      if(trail.length>=2){ctx.strokeStyle='rgba(82,214,209,.38)';ctx.lineWidth=1.5;ctx.beginPath();trail.forEach((t,i)=>{const q=pointXY(t,g);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke();}
-      const q=pointXY(p,g),h=(p.heading||0)*Math.PI/180;
-      ctx.save();ctx.translate(q.x,q.y);ctx.rotate(h);
-      ctx.fillStyle=key===radarSelected?'#ffd278':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
-      ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();ctx.restore();
-      ctx.font='10px system-ui';ctx.fillStyle='#e3faf4';ctx.textAlign='left';
-      ctx.fillText((p.callsign||p.hex||'UNKNOWN').slice(0,9),q.x+8,q.y-3);
-    }
-    ctx.restore();
-    if(!radarData){ctx.textAlign='center';ctx.fillStyle='#b5d4e4';ctx.font='13px system-ui';ctx.fillText('NO VERIFIED LIVE POSITIONS',g.cx,g.cy+g.R*.58)}
+
+function drawLineSet(ctx,g,lines,color,width=1.2,dash=[]){
+  ctx.save();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash);
+  for(const line of lines){
+    ctx.beginPath();
+    line.forEach((pt,i)=>{
+      const x=g.cx + pt[0]/radarScale*g.R;
+      const y=g.cy - pt[1]/radarScale*g.R;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    });
+    ctx.stroke();
   }
-  function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;renderRadar()}
+  ctx.restore();
+}
+function airportSchematic(centerCode){
+  if(centerCode==='WSSS'){
+    return {
+      country:[
+        [[-42,12],[-34,17],[-22,19],[-6,18],[10,15],[24,12],[35,7],[40,1],[34,-5],[20,-9],[4,-11],[-12,-9],[-28,-3],[-39,4],[-42,12]],
+        [[-52,27],[-36,29],[-18,29],[2,27],[18,24],[34,22],[49,20]],
+        [[-12,-24],[6,-23],[24,-20],[42,-16],[56,-11]]
+      ],
+      runways:[ [[-2,-6],[3,10]], [[3,-10],[8,6]] ],
+      labels:[ ['SINGAPORE',-18,21], ['JOHOR',24,27], ['BATAM / BINTAN',18,-22] ]
+    };
+  }
+  return {
+    country:[
+      [[-55,25],[-30,32],[-6,27],[15,20],[35,9],[54,4]],
+      [[-48,-14],[-26,-8],[-8,-10],[12,-17],[32,-19],[51,-14]]
+    ],
+    runways:[ [[-5,-7],[5,7]], [[-2,-10],[8,4]] ],
+    labels:[ ['TERMINAL AREA',8,24], ['COASTLINE',26,-16] ]
+  };
+}
+function drawRadar(){
+  const g=radarGeometry(),ctx=radarCanvas.getContext('2d');if(!ctx)return;
+  ctx.setTransform(g.dpr,0,0,g.dpr,0,0);
+  ctx.clearRect(0,0,g.width,g.height);
+  ctx.fillStyle='#061926';ctx.fillRect(0,0,g.width,g.height);
+  const grad=ctx.createRadialGradient(g.cx,g.cy,g.R*.1,g.cx,g.cy,g.R*1.05);
+  grad.addColorStop(0,'#0a2a39');grad.addColorStop(1,'#041119');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,g.width,g.height);
+  // background grid
+  ctx.strokeStyle='rgba(57,103,120,.22)';ctx.lineWidth=1;
+  for(let i=0;i<=10;i++){
+    const x=g.cx-g.R + (2*g.R/10)*i; ctx.beginPath(); ctx.moveTo(x,g.cy-g.R); ctx.lineTo(x,g.cy+g.R); ctx.stroke();
+    const y=g.cy-g.R + (2*g.R/10)*i; ctx.beginPath(); ctx.moveTo(g.cx-g.R,y); ctx.lineTo(g.cx+g.R,y); ctx.stroke();
+  }
+  // outer rings
+  ctx.strokeStyle='#1f5461';ctx.lineWidth=1;
+  for(let ring=25;ring<=radarScale;ring+=25){ctx.beginPath();ctx.arc(g.cx,g.cy,g.R*ring/radarScale,0,Math.PI*2);ctx.stroke();}
+  ctx.beginPath();ctx.moveTo(g.cx-g.R,g.cy);ctx.lineTo(g.cx+g.R,g.cy);ctx.moveTo(g.cx,g.cy-g.R);ctx.lineTo(g.cx,g.cy+g.R);ctx.stroke();
+  const schematic=airportSchematic(radarAirport);
+  drawLineSet(ctx,g,schematic.country,'rgba(103,220,228,.8)',1.4);
+  drawLineSet(ctx,g,schematic.runways,'rgba(255,214,123,.95)',2.2);
+  ctx.fillStyle='#7fcddb';ctx.font='11px ui-monospace,monospace';ctx.textAlign='center';
+  for(const [txt,e,n] of schematic.labels){ctx.fillText(txt, g.cx+e/radarScale*g.R, g.cy-n/radarScale*g.R);}
+  ctx.fillStyle='#70a8bb';ctx.font='12px ui-monospace,monospace';ctx.fillText('N',g.cx,g.cy-g.R-10);ctx.fillText('S',g.cx,g.cy+g.R+17);ctx.fillText('W',g.cx-g.R-14,g.cy+4);ctx.fillText('E',g.cx+g.R+14,g.cy+4);
+  for(const n of [25,50,75,100]){ctx.fillStyle='#507f8b';ctx.fillText(`${n} km`,g.cx+4,g.cy-g.R*n/radarScale+13);}
+  // airport symbol
+  ctx.fillStyle='#ffbe75';ctx.beginPath();ctx.arc(g.cx,g.cy,5,0,2*Math.PI);ctx.fill();
+  ctx.font='12px system-ui';ctx.textAlign='left';ctx.fillStyle='#d8f6ff';
+  ctx.fillText(radarAirport+' · '+(airports[radarAirport]?.name||''),10,18);
+  ctx.fillStyle='#8ecddd';ctx.fillText('Synthetic airport map · live aircraft positions',10,35);
+  ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,2*Math.PI);ctx.clip();
+  for(const p of radarFlights()){
+    const key=p.hex||p.callsign,trail=radarTrails.get(key)||[];
+    if(trail.length>=2){ctx.strokeStyle='rgba(82,214,209,.30)';ctx.lineWidth=1.5;ctx.beginPath();trail.forEach((t,i)=>{const q=pointXY(t,g);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke();}
+    const q=pointXY(p,g),h=(p.heading||0)*Math.PI/180;
+    ctx.save();ctx.translate(q.x,q.y);ctx.rotate(h);
+    ctx.fillStyle=key===radarSelected?'#ffd278':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
+    ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();ctx.restore();
+    ctx.font='10px system-ui';ctx.fillStyle='#e3faf4';ctx.textAlign='left';
+    ctx.fillText((planeFlightNo(p)).slice(0,11),q.x+8,q.y-5);
+    ctx.fillStyle='#88b9cf';ctx.fillText((planeDestination(p)).slice(0,10),q.x+8,q.y+7);
+  }
+  ctx.restore();
+  if(!radarData){ctx.textAlign='center';ctx.fillStyle='#b5d4e4';ctx.font='13px system-ui';ctx.fillText('NO VERIFIED LIVE POSITIONS',g.cx,g.cy+g.R*.58)}
+}
+function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;renderRadar()}
   function renderRadar(){
     const flights=radarFlights();
     $('radarListTitle').textContent=`DETECTED AIRCRAFT · ${flights.length} · 100 KM`;
@@ -608,18 +578,18 @@
     }
     for(const p of flights){
       const b=document.createElement('button');b.type='button';b.className='radarPlane'+((p.hex||p.callsign)===radarSelected?' selected':'');
-      const primary=document.createElement('strong');primary.textContent=p.callsign||p.hex||'UNIDENTIFIED';
+      const primary=document.createElement('strong');primary.textContent=planeFlightNo(p);
       const distance=document.createElement('span');distance.textContent=`${p.km} km`;
-      const detail=document.createElement('span');detail.className='quiet';detail.textContent=`${fmtRadar(p.altFt)} ft · ${fmtRadar(p.speedKt)} kt`;
-      const live=document.createElement('span');live.className='quiet';live.textContent=p.airline?'SIA':'ADS-B';
-      b.append(primary,distance,detail,live);b.onclick=()=>selectRadarPlane(p);list.appendChild(b);
+      const info1=document.createElement('span');info1.className='sub';info1.textContent=`DEST ${planeDestination(p)} · TYPE ${planeType(p)}`;
+      const info2=document.createElement('span');info2.className='quiet';info2.textContent=`${fmtRadar(p.altFt)} ft · ${fmtRadar(p.speedKt)} kt · HDG ${fmtRadar(p.heading)}°`;
+      const live=document.createElement('span');live.className='tag';live.textContent=p.airline?'SIA LIVE':'ADS-B';
+      b.append(primary,distance,info1,info2,live);b.onclick=()=>selectRadarPlane(p);list.appendChild(b);
     }
     const selected=flights.find(p=>(p.hex||p.callsign)===radarSelected);
     $('radarDetail').textContent=selected?
       `${selected.callsign||selected.hex} · ${selected.km} km from airport · Altitude ${fmtRadar(selected.altFt)} ft · Ground speed ${fmtRadar(selected.speedKt)} kt · Track ${fmtRadar(selected.heading)}° · Position age ${fmtRadar(selected.ageSec)} s`:
       'Tap a flight marker or list entry to see aircraft details.';
     drawRadar();
-    drawGeographicPlanes();
   }
   radarCanvas.addEventListener('click',event=>{
     const g=radarGeometry(),box=radarCanvas.getBoundingClientRect();
