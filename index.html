@@ -69,6 +69,50 @@
     #holdApron{position:fixed;z-index:6;right:10px;bottom:10px;display:none;pointer-events:none;background:#07172dcf;border:1px solid #366485;border-radius:10px;padding:6px 9px;color:#d7e9ff;font-size:11px;opacity:.88}
     #holdApron.show{display:block}
     @media(max-width:650px){#holdAlert{top:calc(54px + env(safe-area-inset-top,0px));max-height:calc(65dvh - 65px);font-size:12px}#holdApron{display:none!important}.holdBtns button{padding:7px 8px}}
+  
+    /* Live radar is informational only. Aircraft from real ADS-B, not game traffic. */
+    #radarOpen{white-space:nowrap}
+    #radarShade{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;padding:10px;background:#030b20d9;backdrop-filter:blur(5px)}
+    #radarShade.show{display:flex}
+    #radarPanel{width:min(880px,100%);max-height:96dvh;overflow:auto;border-radius:18px;border:1px solid #4fd5f4;background:linear-gradient(155deg,#122c56,#08152f);box-shadow:0 16px 60px #000b;padding:14px}
+    #radarTitle{font-size:20px;line-height:1.3;color:#b1f2ff;margin:0}
+    .radarHeader{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .radarToolbar{display:flex;flex-wrap:wrap;align-items:end;gap:8px;margin:9px 0}
+    .radarToolbar label{margin:0;min-width:120px;flex:1}
+    #radarAirport,#radarFilter{width:100%;color:#f2fbff;background:#0b1c38;border:1px solid #3d7298;border-radius:8px;padding:9px}
+    #radarRefresh{background:#146185;border:1px solid #43c5f0;color:#fff;border-radius:9px;padding:10px 12px;font-weight:800;white-space:nowrap}
+    #radarStatus{font-size:12px;color:#b0cce4;line-height:1.5;margin:5px 0 9px;min-height:18px}
+    #radarStatus.error{color:#ffca9b}
+    .radarContent{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr);gap:12px}
+    .radarRadar{position:relative;overflow:hidden;border-radius:14px;border:1px solid #235d67;background:#061f2d;aspect-ratio:1/1;min-height:260px;max-height:480px}
+    #radarCanvas{display:block;width:100%;height:100%;touch-action:manipulation}
+    .radarSide{border-radius:13px;border:1px solid #235272;background:#0a1c35;min-height:180px;max-height:480px;overflow:auto}
+    .radarSide h3{padding:12px;margin:0;font-size:13px;color:#8feaff;position:sticky;top:0;background:#0a1c35;border-bottom:1px solid #254761}
+    #radarList{display:flex;flex-direction:column}
+    .radarPlane{border:0;border-bottom:1px solid #23445c;background:transparent;padding:10px;color:#ddefff;display:grid;grid-template-columns:1fr auto;gap:3px;font-size:12px;text-align:left}
+    .radarPlane.selected{background:#174e68}.radarPlane .quiet{color:#8aafc6;font-size:11px}
+    .radarPlane strong{color:#7eebf2}.radarPlane .sq{color:#f5d18a}
+    #radarDetail{border-top:1px solid #23445c;padding:11px;font-size:12px;line-height:1.55;color:#bce2ef;min-height:40px}
+    #radarFoot{font-size:11px;color:#9fbad1;margin:10px 0 0;line-height:1.5}
+    @media(max-width:650px){#bar .pilots{display:none}#radarOpen{font-size:11px;padding:0 7px}.radarContent{grid-template-columns:1fr}.radarRadar{min-height:220px;max-height:55dvh}.radarSide{max-height:175px}.radarToolbar label{font-size:10px;min-width:140px}#radarPanel{padding:10px}.radarSide h3{font-size:12px}#radarTitle{font-size:17px}}
+
+
+    /* Fuel is a game simulation, separate from real ADS-B traffic. */
+    #fuelOpen{min-width:95px;white-space:nowrap;display:none;border-color:#396e77}
+    #fuelOpen.active{display:inline-block}
+    #fuelOpen.low{border-color:#ffbf61;color:#ffda91;background:#54351f}
+    #fuelOpen.critical{border-color:#f78282;color:#ffe1e1;background:#682731}
+    #fuelPanel{display:none;position:fixed;top:calc(57px + env(safe-area-inset-top,0px));right:12px;z-index:19;width:min(340px,calc(100vw - 24px));padding:13px;border:1px solid #50c6ed;border-radius:14px;background:linear-gradient(150deg,#112f57f7,#06142cf7);box-shadow:0 12px 32px #000b;color:#edf8ff;font-size:12px}
+    #fuelPanel.show{display:block}
+    #fuelPanel .fuelTitle{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:14px;font-weight:850;color:#9ae9ff}
+    #fuelPanel .fuelTitle button{background:transparent;border:1px solid #496c8d;color:#fff;border-radius:7px;padding:4px 9px}
+    #fuelPanel .fuelRow{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #274869}
+    #fuelPanel .fuelRow strong{font-variant-numeric:tabular-nums;color:#f0fdff}
+    #fuelBar{height:13px;border-radius:30px;background:#253b56;overflow:hidden;margin:12px 0 7px}
+    #fuelFill{height:100%;width:100%;border-radius:inherit;background:linear-gradient(90deg,#1b9ab6,#6af3ba);transition:width .7s}
+    #fuelWarning{font-weight:800;color:#ffc56c;min-height:18px}
+    #fuelFoot{color:#9fbad0;font-size:11px;line-height:1.5;margin-top:8px}
+    @media(max-width:740px){#fuelOpen{font-size:11px;padding:0 7px;min-width:62px}#fuelPanel{top:calc(55px + env(safe-area-inset-top,0px));right:6px}}
   </style>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -81,6 +125,8 @@
     <div class="right">
       <span class="pilots"><span class="dot" id="liveDot"></span><span id="liveLabel">OFFLINE MODE</span></span>
       <button class="pill" id="rankingOpen" type="button">🏆 RANKING</button>
+      <button class="pill" id="radarOpen" type="button">📡 RADAR</button>
+      <button class="pill" id="fuelOpen" type="button" aria-label="Show simulated aircraft fuel">⛽ FUEL</button>
       <button class="pill" id="fullscreenOpen" type="button" aria-label="Full screen">⛶</button>
     </div>
   </header>
@@ -157,6 +203,49 @@
     </div>
   </section>
   <div id="holdApron" aria-hidden="true">✈ BUSY ARRIVAL · AIRCRAFT PARKED AT GATES</div>
+
+  <!-- Real ADS-B radar - independent of simulator traffic and Supabase. -->
+
+  <aside id="fuelPanel" aria-label="Flight fuel data" aria-live="off">
+    <div class="fuelTitle">⛽ FUEL SYSTEM <button id="fuelClose" type="button">✕</button></div>
+    <div id="fuelBar"><div id="fuelFill"></div></div>
+    <div class="fuelRow"><span>Fuel remaining</span><strong id="fuelRemaining">—</strong></div>
+    <div class="fuelRow"><span>Fuel used</span><strong id="fuelUsed">—</strong></div>
+    <div class="fuelRow"><span>Burn rate</span><strong id="fuelBurn">—</strong></div>
+    <div class="fuelRow"><span>Endurance at current burn</span><strong id="fuelEndurance">—</strong></div>
+    <div class="fuelRow"><span>Reserve threshold</span><strong id="fuelReserve">—</strong></div>
+    <div class="fuelRow"><span>Mission time remaining</span><strong id="fuelMissionClock">—</strong></div>
+    <div id="fuelWarning" role="status"></div>
+    <div id="fuelFoot">Simulation only, not certified aircraft performance. Fuel burns according to thrust and engine status. Restart a flight to refuel; fuel exhaustion shuts both engines down.</div>
+  </aside>
+
+  <div id="radarShade" aria-hidden="true">
+    <section id="radarPanel" role="dialog" aria-modal="true" aria-labelledby="radarTitle">
+      <div class="radarHeader">
+        <h2 id="radarTitle">📡 Live Airport Radar · 100 km</h2>
+        <button class="close" type="button" id="radarClose" aria-label="Close live radar">×</button>
+      </div>
+      <div class="radarToolbar">
+        <label>Airport<select id="radarAirport" aria-label="Airport radar"></select></label>
+        <label>Airline filter<select id="radarFilter" aria-label="Airline filter">
+          <option value="SIA">Singapore Airlines (SIA)</option>
+          <option value="ALL">All detected aircraft</option>
+        </select></label>
+        <button id="radarRefresh" type="button">↻ REFRESH</button>
+      </div>
+      <div id="radarStatus" role="status">Select an airport to request real aircraft positions.</div>
+      <div class="radarContent">
+        <div class="radarRadar"><canvas id="radarCanvas" width="520" height="520" aria-label="Radar of live aircraft within 100 kilometres"></canvas></div>
+        <div class="radarSide">
+          <h3 id="radarListTitle">AIRCRAFT · 100 KM</h3>
+          <div id="radarList"></div>
+          <div id="radarDetail">Select an aircraft marker or list item to view its callsign, altitude, speed and heading.</div>
+        </div>
+      </div>
+      <p id="radarFoot">Actual positions supplied by <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
+    </section>
+  </div>
+
 <script>
 'use strict';
 (()=>{
@@ -231,7 +320,7 @@
   $('rankingOpen').onclick=()=>openModal('ranking');
   $('closeModal').onclick=closeModal;
   $('shade').addEventListener('pointerdown',e=>{if(e.target===$('shade'))closeModal()});
-  window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&!radarOpenState)closeModal()});
   $('country').value=countryCode()==='--'?'':countryCode();
   $('completeCountry').value=$('country').value;
   $('callsign').value=lsGet(sessionKey)||'';
@@ -248,6 +337,201 @@
     for(const id of ['loginBtn','registerBtn','completeBtn','saveNowBtn'])$(id).disabled=true;
   }
 
+
+
+  // LIVE AIRPORT RADAR — a separate Vercel function proxies the provider (no browser CORS).
+  // Never generate mock aircraft when the feed is empty or unavailable.
+  let airports={}, radarAirport='WSSS', radarOpenState=false, radarManualAirport=false;
+  let radarData=null, radarSelected=null, radarBusy=false, radarPoll=null, radarRequestId=0;
+  const radarScale=100, radarTrails=new Map();
+  const radarCanvas=$('radarCanvas');
+  const radKm=(lat,lon,lat0,lon0)=>{
+    const north=(lat-lat0)*111.195;
+    const east=(lon-lon0)*111.195*Math.cos(lat0*Math.PI/180);
+    return {north,east};
+  };
+  const radarFlights=()=>{
+    const all=radarData?.aircraft||[];
+    return $('radarFilter').value==='SIA'?all.filter(p=>p.callsign?.startsWith('SIA')):all;
+  };
+  const fmtRadar=n=>Number.isFinite(n)?String(n):'—';
+  function chooseRadarAirport(code, manual=false){
+    if(!airports[code]||!$('radarAirport'))return;
+    radarAirport=code;radarManualAirport=manual||radarManualAirport;
+    $('radarAirport').value=code;
+    if(radarOpenState)loadRadar();
+  }
+  async function loadRadarAirports(){
+    try{
+      const r=await fetch('airports.json',{cache:'force-cache'});
+      if(!r.ok)throw new Error('Airport directory unavailable');
+      airports=await r.json();
+      const sel=$('radarAirport');
+      sel.replaceChildren();
+      for(const code of Object.keys(airports).sort((a,b)=>{
+        const x=airports[a].name.localeCompare(airports[b].name);
+        return x||a.localeCompare(b);
+      })){
+        const o=document.createElement('option');o.value=code;o.textContent=`${airports[code].name} (${code})`;sel.append(o);
+      }
+      sel.value=radarAirport;
+    }catch(e){$('radarStatus').textContent='Airport database could not be loaded.';console.warn(e)}
+  }
+  const radarStatus=(message,error=false)=>{
+    $('radarStatus').textContent=message;
+    $('radarStatus').classList.toggle('error',error);
+  };
+  function openRadar(){
+    closeModal();radarOpenState=true;
+    $('radarShade').classList.add('show');
+    $('radarShade').setAttribute('aria-hidden','false');
+    if(!Object.keys(airports).length){loadRadarAirports().then(loadRadar);}else loadRadar();
+    clearInterval(radarPoll);radarPoll=setInterval(()=>{
+      if(document.visibilityState==='visible'&&radarOpenState)loadRadar();
+    },60000);
+  }
+  function closeRadar(){
+    radarOpenState=false;radarRequestId++;
+    $('radarShade').classList.remove('show');
+    $('radarShade').setAttribute('aria-hidden','true');
+    clearInterval(radarPoll);radarPoll=null;
+  }
+  window.addEventListener('resize',()=>{if(radarOpenState)drawRadar()});
+  $('radarOpen').onclick=openRadar;
+  $('radarClose').onclick=closeRadar;
+  $('radarShade').addEventListener('pointerdown',e=>{if(e.target===$('radarShade'))closeRadar();});
+  $('radarAirport').onchange=e=>{
+    radarManualAirport=true;radarTrails.clear();radarData=null;radarSelected=null;
+    radarAirport=e.target.value;
+    if(radarAirport==='WSSS')$('radarFilter').value='SIA';
+    else $('radarFilter').value='ALL';
+    loadRadar();
+  };
+  $('radarFilter').onchange=()=>{radarSelected=null;renderRadar();};
+  $('radarRefresh').onclick=()=>loadRadar();
+  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&radarOpenState)closeRadar();});
+  document.addEventListener('visibilitychange',()=>{if(radarOpenState&&document.visibilityState==='visible')loadRadar();});
+  async function loadRadar(){
+    if(!radarOpenState||radarBusy||!airports[radarAirport])return;
+    radarBusy=true;
+    const requested=radarAirport,id=++radarRequestId;
+    $('radarRefresh').disabled=true;
+    radarStatus(`Requesting real ADS-B positions around ${airports[requested].name}…`);
+    try{
+      const response=await fetch(`/api/radar?airport=${encodeURIComponent(requested)}`,{cache:'no-store'});
+      let d=null;try{d=await response.json()}catch{}
+      if(!response.ok)throw new Error(d?.error||`Server returned ${response.status}`);
+      if(!Array.isArray(d?.aircraft)||d?.airport?.icao!==requested)throw new Error('Unexpected radar data');
+      if(id!==radarRequestId||requested!==radarAirport||!radarOpenState)return;
+      radarData=d;
+      const stamp=Date.parse(d.asOf||d.fetchedAt);
+      const when=Number.isFinite(stamp)?new Date(stamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'unknown time';
+      radarStatus(`LIVE DATA · ${d.aircraft.length} aircraft detected within 100 km of ${d.airport.name} · Feed timestamp ${when} · Refresh every 60 s`);
+      const liveKeys=new Set();
+      for(const p of d.aircraft){
+        const key=p.hex||p.callsign;if(!key)continue;liveKeys.add(key);
+        const tr=radarTrails.get(key)||[];
+        if(!tr.length||Math.abs(tr[tr.length-1].lat-p.lat)>1e-5||Math.abs(tr[tr.length-1].lon-p.lon)>1e-5){
+          tr.push({lat:p.lat,lon:p.lon});if(tr.length>8)tr.shift();
+        }
+        radarTrails.set(key,tr);
+      }
+      for(const key of radarTrails.keys())if(!liveKeys.has(key))radarTrails.delete(key);
+      renderRadar();
+    }catch(e){
+      if(id===radarRequestId){
+        radarData=null;radarTrails.clear();
+        radarStatus(`NO LIVE DATA — ${e.message}. The radar does not invent aircraft.`,true);
+        renderRadar();
+      }
+    }finally{radarBusy=false;$('radarRefresh').disabled=false;}
+  }
+  function radarGeometry(){
+    const bounds=radarCanvas.getBoundingClientRect();
+    const width=Math.max(200,Math.floor(bounds.width||480));
+    const height=Math.max(200,Math.floor(bounds.height||480));
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const pw=Math.round(width*dpr),ph=Math.round(height*dpr);
+    if(radarCanvas.width!==pw||radarCanvas.height!==ph){radarCanvas.width=pw;radarCanvas.height=ph;}
+    const cx=width/2,cy=height/2,R=Math.min(width,height)*.43;
+    return {width,height,cx,cy,R,dpr};
+  }
+  function pointXY(p,g){
+    const center=airports[radarAirport]||{lat:1.3501,lon:103.9947};
+    const km=radKm(p.lat,p.lon,center.lat,center.lon);
+    return {x:g.cx+km.east/radarScale*g.R,y:g.cy-km.north/radarScale*g.R};
+  }
+  function drawRadar(){
+    const g=radarGeometry(),ctx=radarCanvas.getContext('2d');if(!ctx)return;
+    ctx.setTransform(g.dpr,0,0,g.dpr,0,0);
+    ctx.clearRect(0,0,g.width,g.height);
+    ctx.fillStyle='#041a27';ctx.fillRect(0,0,g.width,g.height);
+    ctx.strokeStyle='#1f5461';ctx.lineWidth=1;
+    for(let ring=25;ring<=radarScale;ring+=25){ctx.beginPath();ctx.arc(g.cx,g.cy,g.R*ring/radarScale,0,Math.PI*2);ctx.stroke();}
+    ctx.beginPath();ctx.moveTo(g.cx-g.R,g.cy);ctx.lineTo(g.cx+g.R,g.cy);
+    ctx.moveTo(g.cx,g.cy-g.R);ctx.lineTo(g.cx,g.cy+g.R);ctx.stroke();
+    ctx.fillStyle='#70a8bb';ctx.font='12px ui-monospace,monospace';ctx.textAlign='center';
+    ctx.fillText('N',g.cx,g.cy-g.R-10);ctx.fillText('S',g.cx,g.cy+g.R+17);
+    ctx.fillText('W',g.cx-g.R-14,g.cy+4);ctx.fillText('E',g.cx+g.R+14,g.cy+4);
+    for(const n of [25,50,75,100]){ctx.fillStyle='#507f8b';ctx.fillText(`${n} km`,g.cx+4,g.cy-g.R*n/radarScale+13);}
+    ctx.fillStyle='#ffbe75';ctx.beginPath();ctx.arc(g.cx,g.cy,5,0,2*Math.PI);ctx.fill();
+    ctx.fillStyle='#c9e9f3';ctx.textAlign='left';ctx.font='12px system-ui';
+    ctx.fillText(radarAirport+' · '+(airports[radarAirport]?.name||''),10,18);
+    const center=airports[radarAirport];if(!center)return;
+    ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,2*Math.PI);ctx.clip();
+    for(const p of radarFlights()){
+      const key=p.hex||p.callsign,trail=radarTrails.get(key)||[];
+      if(trail.length>=2){ctx.strokeStyle='rgba(82,214,209,.38)';ctx.lineWidth=1.5;ctx.beginPath();trail.forEach((t,i)=>{const q=pointXY(t,g);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke();}
+      const q=pointXY(p,g),h=(p.heading||0)*Math.PI/180;
+      ctx.save();ctx.translate(q.x,q.y);ctx.rotate(h);
+      ctx.fillStyle=key===radarSelected?'#ffd278':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
+      ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();ctx.restore();
+      ctx.font='10px system-ui';ctx.fillStyle='#e3faf4';ctx.textAlign='left';
+      ctx.fillText((p.callsign||p.hex||'UNKNOWN').slice(0,9),q.x+8,q.y-3);
+    }
+    ctx.restore();
+    if(!radarData){ctx.textAlign='center';ctx.fillStyle='#b5d4e4';ctx.font='13px system-ui';ctx.fillText('NO VERIFIED LIVE POSITIONS',g.cx,g.cy+g.R*.58)}
+  }
+  function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;renderRadar()}
+  function renderRadar(){
+    const flights=radarFlights();
+    $('radarListTitle').textContent=`DETECTED AIRCRAFT · ${flights.length} · 100 KM`;
+    const list=$('radarList');list.replaceChildren();
+    if(!flights.length){
+      const empty=document.createElement('p');empty.style.padding='12px';
+      empty.textContent=radarData?('No '+($('radarFilter').value==='SIA'?'Singapore Airlines flights':'aircraft')+' currently reported within 100 km.'):'No live aircraft positions available.';
+      list.appendChild(empty);
+    }
+    for(const p of flights){
+      const b=document.createElement('button');b.type='button';b.className='radarPlane'+((p.hex||p.callsign)===radarSelected?' selected':'');
+      const primary=document.createElement('strong');primary.textContent=p.callsign||p.hex||'UNIDENTIFIED';
+      const distance=document.createElement('span');distance.textContent=`${p.km} km`;
+      const detail=document.createElement('span');detail.className='quiet';detail.textContent=`${fmtRadar(p.altFt)} ft · ${fmtRadar(p.speedKt)} kt`;
+      const live=document.createElement('span');live.className='quiet';live.textContent=p.airline?'SIA':'ADS-B';
+      b.append(primary,distance,detail,live);b.onclick=()=>selectRadarPlane(p);list.appendChild(b);
+    }
+    const selected=flights.find(p=>(p.hex||p.callsign)===radarSelected);
+    $('radarDetail').textContent=selected?
+      `${selected.callsign||selected.hex} · ${selected.km} km from airport · Altitude ${fmtRadar(selected.altFt)} ft · Ground speed ${fmtRadar(selected.speedKt)} kt · Track ${fmtRadar(selected.heading)}° · Position age ${fmtRadar(selected.ageSec)} s`:
+      'Tap a flight marker or list entry to see aircraft details.';
+    drawRadar();
+  }
+  radarCanvas.addEventListener('click',event=>{
+    const g=radarGeometry(),box=radarCanvas.getBoundingClientRect();
+    const x=event.clientX-box.left,y=event.clientY-box.top;
+    const nearest=radarFlights().map(p=>({p,d:Math.hypot(pointXY(p,g).x-x,pointXY(p,g).y-y)})).sort((a,b)=>a.d-b.d)[0];
+    if(nearest&&nearest.d<24)selectRadarPlane(nearest.p);
+  });
+  function autoRadarAirport(){
+    if(radarManualAirport||!Object.keys(airports).length)return;
+    const r=safeRouteInfo();const dest=r?.arr,dep=r?.dep;
+    const chosen=airports[dest]?dest:airports[dep]?dep:null;
+    if(chosen&&chosen!==radarAirport){
+      radarTrails.clear();radarData=null;radarSelected=null;
+      chooseRadarAirport(chosen,false);
+      $('radarFilter').value=chosen==='WSSS'?'SIA':'ALL';
+    }
+  }
 
   // Airport-density event: the flight continues throughout the unscheduled ATC diversion.
   // This is a procedural flying challenge layered on the existing aircraft dynamics.
@@ -488,6 +772,33 @@
     doc.head.appendChild(st);
   }catch{}}
   function gameInfo(){try{return frame.contentWindow?.__game?.info?.()||null}catch{return null}}
+
+  let fuelPanelOpen=false;
+  const fuelTimeText=secs=>{const q=Math.max(0,Math.floor(Number(secs)||0));return String(Math.floor(q/3600)).padStart(2,'0')+':'+String(Math.floor(q%3600/60)).padStart(2,'0')+':'+String(q%60).padStart(2,'0')};
+  function renderFuel(){
+    const info=gameInfo(), f=info?.fuel;
+    const playing=info&&(info.st==='play'||info.st==='end');
+    $('fuelOpen').classList.toggle('active',!!playing);
+    if(!playing){$('fuelPanel').classList.remove('show');fuelPanelOpen=false;return;}
+    if(!f){$('fuelOpen').textContent='⛽ FUEL —';return;}
+    const pct=Math.max(0,Math.min(100,Number(f.pct)||0));
+    $('fuelOpen').textContent=`⛽ ${pct}%`;
+    $('fuelOpen').classList.toggle('low',pct<=20&&pct>10);
+    $('fuelOpen').classList.toggle('critical',pct<=10);
+    $('fuelFill').style.width=pct+'%';
+    $('fuelFill').style.background=pct<=10?'#ff5f75':pct<=20?'#ffca70':'linear-gradient(90deg,#1b9ab6,#6af3ba)';
+    $('fuelRemaining').textContent=`${Number(f.remainingKg).toLocaleString()} kg / ${Number(f.startKg).toLocaleString()} kg (${pct}%)`;
+    $('fuelUsed').textContent=`${Number(f.usedKg).toLocaleString()} kg`;
+    $('fuelBurn').textContent=`${Number(f.burnKgH).toLocaleString()} kg/hr`;
+    $('fuelEndurance').textContent=Number.isFinite(f.enduranceMin)?`${f.enduranceMin} min`:'—';
+    $('fuelReserve').textContent=`${Number(f.reserveKg).toLocaleString()} kg`;
+    $('fuelMissionClock').textContent=info.holdingExempt?'PAUSED · ATC HOLD':fuelTimeText(info.missionTimeRemaining);
+    $('fuelWarning').textContent=f.flamedOut?'⚠ FUEL EXHAUSTED — ENGINE FLAMEOUT':pct<=10?'⚠ CRITICAL FUEL':pct<=20?'⚠ LOW FUEL':f.remainingKg<f.reserveKg?'BELOW FUEL RESERVE':'Fuel quantity normal';
+  }
+  $('fuelOpen').onclick=()=>{fuelPanelOpen=!fuelPanelOpen;$('fuelPanel').classList.toggle('show',fuelPanelOpen);renderFuel()};
+  $('fuelClose').onclick=()=>{fuelPanelOpen=false;$('fuelPanel').classList.remove('show')};
+  setInterval(renderFuel,950);
+
   window.addEventListener('message',ev=>{
     if(ev.source!==frame.contentWindow||ev.origin!==location.origin)return;
     const d=ev.data;if(!d||d.src!=='jetline')return;
@@ -775,6 +1086,8 @@
   });
   setInterval(()=>{observeGame();updatePresence();if(db&&pilot)backUp()},12000);
   setInterval(pollAdhocHold,850);
+  setInterval(autoRadarAirport,3000);
+  loadRadarAirports();
   setInterval(()=>{if(db)refreshRanking()},20000);
   setInterval(()=>{if(presenceReady)countPresence()},15000);
   window.addEventListener('pagehide',()=>{if(db&&pilot)backUp();presence?.untrack?.()});
