@@ -9,35 +9,26 @@ function distanceKm(lat1,lon1,lat2,lon2){
     Math.cos(lat1*radians)*Math.cos(lat2*radians)*Math.sin((lon2-lon1)*radians/2)**2;
   return 12742*Math.asin(Math.min(1,Math.sqrt(a)));
 }
-
-function str(v,max=24){return typeof v==='string'?v.trim().slice(0,max):'';}
-function extractDestination(a){
-  const direct=[a.airport_to_icao,a.airport_to_iata,a.dst,a.dest,a.to,a.routeTo];
-  for(const v of direct){const s=str(v,20).toUpperCase(); if(s) return s;}
-  const route=str(a.route||a.route_string||a.from_to||'',40).toUpperCase();
-  if(route && route.includes('-')){
-    const parts=route.split('-').map(x=>x.trim()).filter(Boolean);
-    if(parts.length>=2) return parts[parts.length-1].slice(0,20);
-  }
-  return '';
-}
-function extractOrigin(a){
-  const direct=[a.airport_from_icao,a.airport_from_iata,a.src,a.from,a.origin,a.routeFrom];
-  for(const v of direct){const s=str(v,20).toUpperCase(); if(s) return s;}
-  const route=str(a.route||a.route_string||a.from_to||'',40).toUpperCase();
-  if(route && route.includes('-')){
-    const parts=route.split('-').map(x=>x.trim()).filter(Boolean);
-    if(parts.length>=1) return parts[0].slice(0,20);
-  }
-  return '';
-}
 module.exports=async function handler(req,res){
   res.setHeader('Content-Type','application/json; charset=utf-8');
   res.setHeader('X-Content-Type-Options','nosniff');
   if(req.method!=='GET')return res.status(405).json({error:'GET only'});
   const icao=String(req.query?.airport||'WSSS').trim().toUpperCase();
-  const airport=Object.prototype.hasOwnProperty.call(AIRPORTS,icao)?AIRPORTS[icao]:null;
-  if(!airport)return res.status(400).json({error:'Unknown airport. Select a supported airport code.'});
+  const known=Object.prototype.hasOwnProperty.call(AIRPORTS,icao)?AIRPORTS[icao]:null;
+  let airport=known;
+  if(!known){
+    // Extra regional airfields supplied by the server's OurAirports catalogue.
+    // Region bounds prevent this public endpoint being used for arbitrary global queries.
+    const lat=Number(req.query?.lat),lon=Number(req.query?.lon);
+    const name=String(req.query?.name||icao).replace(/[<>]/g,'').slice(0,80);
+    const allowed= /^(?:[A-Z0-9][A-Z0-9-]{1,18})$/.test(icao)
+      && Number.isFinite(lat)&&Number.isFinite(lon)
+      && ((lat>=5.0&&lat<=21.0&&lon>=97.0&&lon<=106.0)
+        || (lat>=-12.0&&lat<=7.0&&lon>=94.0&&lon<=143.0)
+        || (lat>=1.0&&lat<=1.6&&lon>=103.5&&lon<=104.2));
+    if(allowed)airport={lat,lon,name};
+  }
+  if(!airport)return res.status(400).json({error:'Unknown airport or invalid regional coordinates.'});
   // The provider point endpoint's radius unit is *nautical miles*.
   // Request ~101.9 km (55 nautical miles), then enforce an EXACT 100.0 km haversine radius below.
   const url=`${SOURCE}/v2/point/${airport.lat}/${airport.lon}/55`;
@@ -63,8 +54,6 @@ module.exports=async function handler(req,res){
       const age=Number(a.seen_pos??a.seen??0);
       if(Number.isFinite(age)&&age>120)continue; // do not show stale positions as live
       const callsign=String(a.flight||'').trim().toUpperCase().slice(0,14);
-      const destination=extractDestination(a);
-      const origin=extractOrigin(a);
       aircraft.push({
         hex:String(a.hex||'').slice(0,14),callsign,
         lat:a.lat,lon:a.lon,km:Math.round(dist*10)/10,
@@ -74,7 +63,6 @@ module.exports=async function handler(req,res){
         ageSec:Number.isFinite(age)?Math.max(0,Math.round(age)):null,
         type:String(a.t||'').trim().slice(0,16),
         registration:String(a.r||'').trim().slice(0,16),
-        origin, destination,
         airline:callsign.startsWith('SIA')?'Singapore Airlines':null
       });
     }
