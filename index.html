@@ -113,7 +113,28 @@
     #fuelWarning{font-weight:800;color:#ffc56c;min-height:18px}
     #fuelFoot{color:#9fbad0;font-size:11px;line-height:1.5;margin-top:8px}
     @media(max-width:740px){#fuelOpen{font-size:11px;padding:0 7px;min-width:62px}#fuelPanel{top:calc(55px + env(safe-area-inset-top,0px));right:6px}}
+
+    /* Geographic map is the default radar view; scope remains available as a toggle. */
+    #radarSurface{position:relative}
+    #radarMap{position:absolute;inset:0;z-index:1;background:#0d2836}
+    #radarCanvas{position:absolute;inset:0;z-index:2;display:none}
+    #radarSurface.scope #radarMap{display:none}
+    #radarSurface.scope #radarCanvas{display:block}
+    .radarViewButtons{display:flex;gap:5px;align-items:center;align-self:end}
+    .radarViewButton{padding:10px 9px;border-radius:8px;border:1px solid #3c799b;background:#0d2a4b;color:#b9ddf0;font-size:12px;font-weight:800;white-space:nowrap}
+    .radarViewButton.active{border-color:#43d4ef;background:#1376a0;color:#fff}
+    #radarMap .leaflet-container{background:#0d2836}
+    #radarMap .leaflet-control-attribution{font-size:10px;line-height:1.2}
+    .jetlinePlanePin{background:transparent;border:0}
+    .jetlinePlanePin svg{display:block;filter:drop-shadow(0 1px 2px #061321)}
+    #radarMapMessage{position:absolute;z-index:510;top:10px;left:10px;right:10px;pointer-events:none;display:none;background:#091a36e8;border:1px solid #3a7493;color:#d5efff;border-radius:9px;padding:8px 10px;font-size:12px;line-height:1.4}
+    #radarMapMessage.show{display:block}
+    @media(max-width:650px){.radarViewButtons{flex:1}.radarViewButton{flex:1;font-size:11px;padding:9px 5px}}
+
   </style>
+  <!-- Leaflet provides a real interactive geographic airport map. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -231,11 +252,19 @@
           <option value="SIA">Singapore Airlines (SIA)</option>
           <option value="ALL">All detected aircraft</option>
         </select></label>
+        <div class="radarViewButtons" role="group" aria-label="Radar display mode">
+          <button id="radarMapButton" class="radarViewButton active" type="button" aria-pressed="true">🗺 MAP</button>
+          <button id="radarScopeButton" class="radarViewButton" type="button" aria-pressed="false">📡 SCOPE</button>
+        </div>
         <button id="radarRefresh" type="button">↻ REFRESH</button>
       </div>
       <div id="radarStatus" role="status">Select an airport to request real aircraft positions.</div>
       <div class="radarContent">
-        <div class="radarRadar"><canvas id="radarCanvas" width="520" height="520" aria-label="Radar of live aircraft within 100 kilometres"></canvas></div>
+        <div class="radarRadar" id="radarSurface">
+          <div id="radarMap" aria-label="Interactive geographic airport map showing live aircraft within 100 kilometres"></div>
+          <div id="radarMapMessage" role="status"></div>
+          <canvas id="radarCanvas" width="520" height="520" aria-label="Radar scope of live aircraft within 100 kilometres"></canvas>
+        </div>
         <div class="radarSide">
           <h3 id="radarListTitle">AIRCRAFT · 100 KM</h3>
           <div id="radarList"></div>
@@ -345,6 +374,78 @@
   let radarData=null, radarSelected=null, radarBusy=false, radarPoll=null, radarRequestId=0;
   const radarScale=100, radarTrails=new Map();
   const radarCanvas=$('radarCanvas');
+  let radarView='map', geographicMap=null, geoBaseLayer=null, geoOverlays=null, geoAirport=null;
+  function mapMessage(message){
+    const el=$('radarMapMessage');el.textContent=message||'';el.classList.toggle('show',!!message);
+  }
+  function initGeographicMap(){
+    if(geographicMap) return true;
+    if(!window.L){
+      mapMessage('Geographic map library could not load. Select SCOPE to use the radar display.');
+      return false;
+    }
+    const center=airports[radarAirport]||{lat:1.3501,lon:103.9947};
+    geographicMap=L.map('radarMap', {zoomControl:true, scrollWheelZoom:false, preferCanvas:true, attributionControl:true}).setView([center.lat,center.lon],8);
+    geoBaseLayer=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>'
+    }).addTo(geographicMap);
+    let loadedAnyTile=false;
+    geoBaseLayer.on('tileload',()=>{loadedAnyTile=true;mapMessage('')});
+    geoBaseLayer.on('tileerror',()=>{
+      if(!loadedAnyTile)mapMessage('Map tiles cannot load on this connection. Use SCOPE for a radar-only view.');
+    });
+    geoOverlays=L.layerGroup().addTo(geographicMap);
+    centerGeographicMap();
+    return true;
+  }
+  function centerGeographicMap(){
+    if(!geographicMap)return;
+    const center=airports[radarAirport];if(!center)return;
+    if(geoAirport){geoAirport.remove();geoAirport=null;}
+    geoAirport=L.layerGroup().addTo(geographicMap);
+    for(const radiusKm of [25,50,75,100]){
+      L.circle([center.lat,center.lon], {radius:radiusKm*1000,color:'#1abacb',weight:radiusKm===100?2:1,opacity:.7,fill:false,dashArray:radiusKm===100?'6 6':undefined,interactive:false}).addTo(geoAirport);
+    }
+    L.circleMarker([center.lat,center.lon],{radius:6,color:'#ffd38a',fillColor:'#ffb95d',fillOpacity:1,weight:2}).bindTooltip(`${radarAirport} · ${center.name}`,{direction:'top'}).addTo(geoAirport);
+    const ringBounds=L.circle([center.lat,center.lon],{radius:100000}).getBounds();
+    geographicMap.fitBounds(ringBounds,{padding:[12,12],maxZoom:10,animate:false});
+    setTimeout(()=>geographicMap?.invalidateSize(),90);
+    drawGeographicPlanes();
+  }
+  function drawGeographicPlanes(){
+    if(!geographicMap||!geoOverlays)return;
+    geoOverlays.clearLayers();
+    for(const p of radarFlights()){
+      const key=p.hex||p.callsign||'';
+      const trail=radarTrails.get(key)||[];
+      if(trail.length>=2)L.polyline(trail.map(t=>[t.lat,t.lon]),{color:'#32a9ab',weight:2,opacity:.75,interactive:false}).addTo(geoOverlays);
+      // Position data and callsigns come only from the real aircraft feed.
+      const heading=Number.isFinite(Number(p.heading))?Number(p.heading):0;
+      const chosen=key===radarSelected,airline=p.callsign?.startsWith('SIA');
+      const color=chosen?'#ffcd70':airline?'#32dba9':'#b0d6fc';
+      const html=`<svg width="25" height="29" viewBox="0 0 25 29" aria-hidden="true"><g transform="rotate(${heading} 12.5 14.5)"><path d="M12.5 1 L15 11 L24 19 L24 22 L14 19 L13.5 25 L17 27 L17 29 L12.5 27 L8 29 L8 27 L11.5 25 L11 19 L1 22 L1 19 L10 11 Z" stroke="#102e41" stroke-width="1" fill="${color}"/></g></svg>`;
+      const marker=L.marker([p.lat,p.lon],{icon:L.divIcon({className:'jetlinePlanePin',html,iconSize:[25,29],iconAnchor:[12.5,14.5]})}).addTo(geoOverlays);
+      const tooltip=document.createElement('div');
+      tooltip.textContent=`${p.callsign||p.hex||'UNKNOWN'} · ${p.km} km · ${fmtRadar(p.altFt)} ft · ${fmtRadar(p.speedKt)} kt`;
+      marker.bindTooltip(tooltip,{direction:'top'});
+      marker.on('click',()=>selectRadarPlane(p));
+    }
+  }
+  function changeRadarView(view){
+    radarView=view==='scope'?'scope':'map';
+    const scope=radarView==='scope';
+    $('radarSurface').classList.toggle('scope',scope);
+    $('radarMapButton').classList.toggle('active',!scope);
+    $('radarScopeButton').classList.toggle('active',scope);
+    $('radarMapButton').setAttribute('aria-pressed',String(!scope));
+    $('radarScopeButton').setAttribute('aria-pressed',String(scope));
+    if(scope)drawRadar();
+    else if(initGeographicMap()){
+      requestAnimationFrame(()=>{geographicMap.invalidateSize();centerGeographicMap();});
+    }
+  }
+  $('radarMapButton').onclick=()=>changeRadarView('map');
+  $('radarScopeButton').onclick=()=>changeRadarView('scope');
   const radKm=(lat,lon,lat0,lon0)=>{
     const north=(lat-lat0)*111.195;
     const east=(lon-lon0)*111.195*Math.cos(lat0*Math.PI/180);
@@ -359,6 +460,7 @@
     if(!airports[code]||!$('radarAirport'))return;
     radarAirport=code;radarManualAirport=manual||radarManualAirport;
     $('radarAirport').value=code;
+    if(geographicMap)centerGeographicMap();
     if(radarOpenState)loadRadar();
   }
   async function loadRadarAirports(){
@@ -385,7 +487,9 @@
     closeModal();radarOpenState=true;
     $('radarShade').classList.add('show');
     $('radarShade').setAttribute('aria-hidden','false');
-    if(!Object.keys(airports).length){loadRadarAirports().then(loadRadar);}else loadRadar();
+    if(!Object.keys(airports).length){
+      loadRadarAirports().then(()=>{changeRadarView(radarView);loadRadar();});
+    } else {changeRadarView(radarView);loadRadar();}
     clearInterval(radarPoll);radarPoll=setInterval(()=>{
       if(document.visibilityState==='visible'&&radarOpenState)loadRadar();
     },60000);
@@ -405,7 +509,7 @@
     radarAirport=e.target.value;
     if(radarAirport==='WSSS')$('radarFilter').value='SIA';
     else $('radarFilter').value='ALL';
-    loadRadar();
+    centerGeographicMap();renderRadar();loadRadar();
   };
   $('radarFilter').onchange=()=>{radarSelected=null;renderRadar();};
   $('radarRefresh').onclick=()=>loadRadar();
@@ -515,6 +619,7 @@
       `${selected.callsign||selected.hex} · ${selected.km} km from airport · Altitude ${fmtRadar(selected.altFt)} ft · Ground speed ${fmtRadar(selected.speedKt)} kt · Track ${fmtRadar(selected.heading)}° · Position age ${fmtRadar(selected.ageSec)} s`:
       'Tap a flight marker or list entry to see aircraft details.';
     drawRadar();
+    drawGeographicPlanes();
   }
   radarCanvas.addEventListener('click',event=>{
     const g=radarGeometry(),box=radarCanvas.getBoundingClientRect();
