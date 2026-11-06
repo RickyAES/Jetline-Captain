@@ -9,6 +9,28 @@ function distanceKm(lat1,lon1,lat2,lon2){
     Math.cos(lat1*radians)*Math.cos(lat2*radians)*Math.sin((lon2-lon1)*radians/2)**2;
   return 12742*Math.asin(Math.min(1,Math.sqrt(a)));
 }
+
+function str(v,max=24){return typeof v==='string'?v.trim().slice(0,max):'';}
+function extractDestination(a){
+  const direct=[a.airport_to_icao,a.airport_to_iata,a.dst,a.dest,a.to,a.routeTo];
+  for(const v of direct){const s=str(v,20).toUpperCase(); if(s) return s;}
+  const route=str(a.route||a.route_string||a.from_to||'',40).toUpperCase();
+  if(route && route.includes('-')){
+    const parts=route.split('-').map(x=>x.trim()).filter(Boolean);
+    if(parts.length>=2) return parts[parts.length-1].slice(0,20);
+  }
+  return '';
+}
+function extractOrigin(a){
+  const direct=[a.airport_from_icao,a.airport_from_iata,a.src,a.from,a.origin,a.routeFrom];
+  for(const v of direct){const s=str(v,20).toUpperCase(); if(s) return s;}
+  const route=str(a.route||a.route_string||a.from_to||'',40).toUpperCase();
+  if(route && route.includes('-')){
+    const parts=route.split('-').map(x=>x.trim()).filter(Boolean);
+    if(parts.length>=1) return parts[0].slice(0,20);
+  }
+  return '';
+}
 module.exports=async function handler(req,res){
   res.setHeader('Content-Type','application/json; charset=utf-8');
   res.setHeader('X-Content-Type-Options','nosniff');
@@ -41,6 +63,8 @@ module.exports=async function handler(req,res){
       const age=Number(a.seen_pos??a.seen??0);
       if(Number.isFinite(age)&&age>120)continue; // do not show stale positions as live
       const callsign=String(a.flight||'').trim().toUpperCase().slice(0,14);
+      const destination=extractDestination(a);
+      const origin=extractOrigin(a);
       aircraft.push({
         hex:String(a.hex||'').slice(0,14),callsign,
         lat:a.lat,lon:a.lon,km:Math.round(dist*10)/10,
@@ -50,6 +74,7 @@ module.exports=async function handler(req,res){
         ageSec:Number.isFinite(age)?Math.max(0,Math.round(age)):null,
         type:String(a.t||'').trim().slice(0,16),
         registration:String(a.r||'').trim().slice(0,16),
+        origin, destination,
         airline:callsign.startsWith('SIA')?'Singapore Airlines':null
       });
     }
