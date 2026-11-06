@@ -45,35 +45,30 @@
     #cloudBadge{display:inline-block;border:1px solid #277c8e;padding:4px 8px;border-radius:20px;color:#6de9c5;font-size:11px;margin-top:7px}
     @media(max-width:500px){.pilots{font-size:11px;max-width:140px}.pill{padding:0 8px;font-size:11px}#bar{gap:4px;padding-left:7px;padding-right:7px}.modal{padding:14px}.rankrow{grid-template-columns:27px 1fr 33px 53px 50px;gap:4px;font-size:11px}}
   
-    #holdOpen{display:none}
-    #holdOpen.ready{display:inline-block}
-    #busyApron{position:fixed;left:10px;right:10px;bottom:10px;z-index:6;pointer-events:none;display:none;align-items:flex-end;gap:10px;opacity:.96}
-    #busyApron.show{display:flex}
-    #busyApron .terminal{flex:1;min-height:70px;border:1px solid #274769;border-radius:18px;background:linear-gradient(180deg,#10284f,#081731);box-shadow:0 8px 20px #0007;padding:10px 14px}
-    #busyApron .terminal h4{margin:0 0 6px;font-size:11px;letter-spacing:.12em;color:#8eddf4}
-    #busyApron .parked{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-    #busyApron .plane{width:32px;height:18px;border-radius:10px 10px 4px 4px;background:linear-gradient(180deg,#f3f8ff,#a5bfd8);position:relative;box-shadow:0 0 0 1px #7fa6c9 inset,0 4px 10px #0005}
-    #busyApron .plane:before{content:'';position:absolute;left:6px;right:6px;top:8px;height:3px;background:#5d84aa;border-radius:3px}
-    #busyApron .plane:after{content:'';position:absolute;left:14px;top:-4px;width:4px;height:26px;background:#d6e7f7;border-radius:4px}
-    #busyApron .caption{min-width:145px;max-width:190px;padding:10px 12px;border-radius:16px;border:1px solid #31527c;background:#0a1a36e6;color:#d9edff;font-size:12px;line-height:1.35;box-shadow:0 8px 20px #0007}
-    #holdShade{display:none;position:fixed;inset:0;z-index:30;align-items:center;justify-content:center;padding:18px;background:#030b20d4;backdrop-filter:blur(6px)}
-    #holdShade.show{display:flex}
-    .holdCard{width:min(700px,100%);padding:18px;border-radius:20px;background:linear-gradient(160deg,#15356b,#08132d);border:1px solid #4ccfff;box-shadow:0 24px 60px #020715f2}
-    .holdTop{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
-    .holdTop h2{font-size:20px;color:#8feaff}.holdTag{font-size:11px;font-weight:800;letter-spacing:.12em;color:#8feaff}
-    .holdBrief,.holdMeta,.holdAirport{border:1px solid #264d78;background:#0a1c39;border-radius:13px;padding:12px 13px;margin-top:10px}
-    .holdAirport{display:grid;grid-template-columns:1fr 180px;gap:12px;align-items:center}
-    .holdAirport .airportVisual{min-height:92px;border-radius:12px;background:linear-gradient(180deg,#14345f,#0a1730);padding:10px;display:flex;flex-wrap:wrap;gap:7px;align-content:flex-end;justify-content:center}
-    .holdAirport .airportVisual span{width:34px;height:16px;border-radius:10px 10px 4px 4px;background:linear-gradient(180deg,#f4fbff,#aac8e2);position:relative;display:inline-block;box-shadow:0 0 0 1px #7fa6c9 inset}
-    .holdAirport .airportVisual span:before{content:'';position:absolute;left:15px;top:-3px;width:4px;height:22px;border-radius:4px;background:#d8e8f8}
-    .holdAirport .airportVisual span:after{content:'';position:absolute;left:5px;right:5px;top:7px;height:3px;background:#5d84aa;border-radius:3px}
-    .holdChoices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
-    .holdBtn{padding:14px 10px;border-radius:12px;border:1px solid #38bfdf;background:#133f72;color:#fff;font-size:15px;font-weight:900;letter-spacing:.02em}
-    .holdBtn.secondary{background:#1b2e53;border-color:#3f5c82}
-    #holdFeedback{min-height:22px;margin-top:12px;font-size:14px;color:#9bedff}
-    #holdFooter{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:16px}
-    @media(max-width:680px){.holdAirport{grid-template-columns:1fr}.holdChoices{grid-template-columns:1fr}#busyApron{left:6px;right:6px;bottom:6px}.caption{display:none}}
-
+    /* AD-HOC ATC HOLD: live, non-modal, touch-friendly, never pauses the flight */
+    #holdAlert{position:fixed;z-index:18;left:10px;top:calc(57px + env(safe-area-inset-top,0px));width:min(420px,calc(100% - 20px));max-height:calc(95dvh - 80px);overflow:auto;display:none;border:1px solid #5cddff;border-radius:14px;background:linear-gradient(140deg,#102c55f5,#08172cf5);color:#eef7ff;box-shadow:0 10px 28px #0009;padding:12px;pointer-events:auto}
+    #holdAlert.active{display:block}
+    #holdAlert.minimized{width:270px;max-height:55px;overflow:hidden}
+    #holdAlert.minimized .holdBody{display:none}
+    .holdHead{display:flex;align-items:center;justify-content:space-between;gap:6px}
+    .holdHead strong{color:#79eaff;font:800 12px/1.3 system-ui;letter-spacing:.055em}
+    .holdHead .holdMin{border:1px solid #4c95be;border-radius:7px;padding:4px 8px;color:#e8f8ff;background:#123764;font-size:11px}
+    .holdAtc{padding:9px;border-left:3px solid #ffc15b;background:#0c1b33;border-radius:7px;color:#f8e9cd;font-size:12px;font-weight:650;line-height:1.4;margin-top:10px}
+    .holdLine{display:flex;justify-content:space-between;gap:8px;margin-top:8px;color:#bde2fa;font-size:12px}
+    .holdLine strong{color:#f0faff}
+    .holdReadback{margin-top:9px;font-size:12px;line-height:1.35;color:#d8eafb}
+    .holdBtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+    .holdBtns button{border:1px solid #4dbfdf;border-radius:7px;color:#f0fbff;background:#184678;padding:8px 10px;font-size:12px;font-weight:800}
+    .holdBtns button:active{background:#2b6a9a}
+    .holdBtns button[disabled]{opacity:.45}
+    .holdBtns button.suggest{background:#167da2;border-color:#51e8f2}
+    #holdEntryControls[hidden],#holdHeadingControls[hidden],#holdAckControls[hidden]{display:none}
+    #holdFeedback{font-size:12px;color:#84e4bc;min-height:18px;line-height:1.3;margin-top:9px}
+    #holdTarget{font-variant-numeric:tabular-nums;font-weight:800;color:#7cf1ff}
+    #holdCurrent{font-variant-numeric:tabular-nums;font-weight:800;color:#fef5c6}
+    #holdApron{position:fixed;z-index:6;right:10px;bottom:10px;display:none;pointer-events:none;background:#07172dcf;border:1px solid #366485;border-radius:10px;padding:6px 9px;color:#d7e9ff;font-size:11px;opacity:.88}
+    #holdApron.show{display:block}
+    @media(max-width:650px){#holdAlert{top:calc(54px + env(safe-area-inset-top,0px));max-height:calc(65dvh - 65px);font-size:12px}#holdApron{display:none!important}.holdBtns button{padding:7px 8px}}
   </style>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -86,7 +81,6 @@
     <div class="right">
       <span class="pilots"><span class="dot" id="liveDot"></span><span id="liveLabel">OFFLINE MODE</span></span>
       <button class="pill" id="rankingOpen" type="button">🏆 RANKING</button>
-      <button class="pill" id="holdOpen" type="button">🛬 HOLDING</button>
       <button class="pill" id="fullscreenOpen" type="button" aria-label="Full screen">⛶</button>
     </div>
   </header>
@@ -143,49 +137,25 @@
     </section>
   </div>
 
-  <div id="busyApron" aria-hidden="true">
-    <div class="terminal">
-      <h4>BUSY AIRPORT APRON</h4>
-      <div class="parked">
-        <span class="plane"></span><span class="plane"></span><span class="plane"></span><span class="plane"></span><span class="plane"></span><span class="plane"></span>
+  <section id="holdAlert" aria-live="off" aria-label="ATC Holding Clearance">
+    <div class="holdHead"><strong id="holdStateTag">📡 ATC · HOLD CLEARANCE</strong><button id="holdMin" class="holdMin" type="button" aria-label="Minimize ATC message">MINIMIZE</button></div>
+    <div class="holdBody">
+      <div class="holdAtc" id="holdClearance">Stand by for holding instructions.</div>
+      <div class="holdLine"><span id="holdRoute">Arrival holding</span><span id="holdTimer">00:00</span></div>
+      <div class="holdLine"><span>YOUR HDG <strong id="holdCurrent">---</strong></span><span>TARGET <strong id="holdTarget">---</strong></span></div>
+      <div class="holdLine"><span id="holdAlt">ALT ---</span><span id="holdSpeed">SPD ---</span></div>
+      <div class="holdReadback" id="holdInstruction">ATC holding diversion is active. Keep flying while reading back clearance.</div>
+      <div id="holdAckControls" class="holdBtns"><button id="holdAck" type="button" class="suggest">ROGER · HOLDING</button></div>
+      <div id="holdEntryControls" class="holdBtns" hidden>
+        <button data-entry="direct" type="button">DIRECT ENTRY</button><button data-entry="parallel" type="button">PARALLEL ENTRY</button><button data-entry="teardrop" type="button">TEARDROP ENTRY</button>
       </div>
-    </div>
-    <div class="caption" id="busyApronCaption">Heavy traffic nearby. Expect holding or sequencing delays.</div>
-  </div>
-
-  <div id="holdShade" aria-hidden="true">
-    <section class="holdCard" role="dialog" aria-modal="true" aria-labelledby="holdTitle">
-      <div class="holdTop">
-        <div>
-          <div class="holdTag">ATC HOLDING CHALLENGE</div>
-          <h2 id="holdTitle">Busy airport arrival hold</h2>
-        </div>
-        <button class="close" id="closeHold" type="button" aria-label="Close">×</button>
-      </div>
-      <div class="holdBrief" id="holdAtcText"></div>
-      <div class="holdMeta" id="holdMeta"></div>
-      <div class="holdAirport">
-        <div>
-          <strong id="holdProcedureTitle">Choose the correct entry</strong>
-          <p id="holdProcedureText">Select the proper standard holding entry: direct, parallel or teardrop.</p>
-        </div>
-        <div class="airportVisual" aria-hidden="true">
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        </div>
-      </div>
-      <div class="holdChoices">
-        <button class="holdBtn" data-hold-choice="direct" type="button">DIRECT</button>
-        <button class="holdBtn" data-hold-choice="parallel" type="button">PARALLEL</button>
-        <button class="holdBtn" data-hold-choice="teardrop" type="button">TEARDROP</button>
+      <div id="holdHeadingControls" class="holdBtns" hidden>
+        <button id="holdHdgMode" type="button">FCU HDG MODE</button><button id="holdMinus" type="button">HDG −10°</button><button id="holdPlus" type="button">HDG +10°</button>
       </div>
       <div id="holdFeedback" role="status" aria-live="polite"></div>
-      <div id="holdFooter">
-        <button class="holdBtn secondary" id="holdResume" type="button">RESUME FLIGHT</button>
-        <button class="holdBtn secondary" id="holdRestart" type="button">RESTART FLIGHT</button>
-        <button class="holdBtn secondary" id="holdMenu" type="button">BACK TO MENU</button>
-      </div>
-    </section>
-  </div>
+    </div>
+  </section>
+  <div id="holdApron" aria-hidden="true">✈ BUSY ARRIVAL · AIRCRAFT PARKED AT GATES</div>
 <script>
 'use strict';
 (()=>{
@@ -196,7 +166,7 @@
     /^(sb_publishable_|eyJ)[A-Za-z0-9_.-]+$/.test(config.supabasePublishableKey||'') && !!window.supabase?.createClient;
   let db=null, user=null, pilot=null, presence=null, presenceReady=false, gameLoaded=false;
   let gameStatus='menu', lastSeenInput=Date.now(), lastPresenceString='', lastBackup='', saving=false;
-  let lastFlightKey='', holdOpenState=false, holdAnswered=false, holdCurrent=null, holdTriggeredFor=new Set();
+  let atcHold=null, atcHoldFlight='', atcHoldSchedule=null, previousGameT=null, atcHoldDone=false;
   let ranking={score:[],level:[],countries:[],online:0,flying:0,registered:0,me:{rankScore:0,rankLevel:0}};
   let onlineMap=new Map(), currentTab='score', cloudView='cloud';
   const sessionId='guest-'+((globalThis.crypto?.randomUUID?.()||String(Math.random()).slice(2)));
@@ -260,7 +230,7 @@
   $('rankingOpen').onclick=()=>openModal('ranking');
   $('closeModal').onclick=closeModal;
   $('shade').addEventListener('pointerdown',e=>{if(e.target===$('shade'))closeModal()});
-  window.addEventListener('keydown',e=>{if(e.key==='Escape'){ if(holdOpenState) closeHold(true); else closeModal(); }});
+  window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
   $('country').value=countryCode()==='--'?'':countryCode();
   $('completeCountry').value=$('country').value;
   $('callsign').value=lsGet(sessionKey)||'';
@@ -271,13 +241,6 @@
     else openModal('cloud'),msg('For iPhone full-screen play: Safari → Share → Add to Home Screen, then launch from the Home Screen.',true);
   };
 
-  $('holdOpen').onclick=()=>{const route=activeRouteInfo(); if(route) openHoldChallenge(route); else msg('Start a flight first, then open the holding challenge.', true)};
-  $('closeHold').onclick=()=>closeHold(true);
-  $('holdResume').onclick=()=>closeHold(true);
-  $('holdRestart').onclick=()=>{ try{frame.contentWindow?.__game?.restartFlight?.()}catch{} closeHold(false); };
-  $('holdMenu').onclick=()=>{ try{frame.contentWindow?.__game?.quit?.()}catch{} closeHold(false); };
-  document.querySelectorAll('[data-hold-choice]').forEach(btn=>btn.addEventListener('click',()=>answerHold(btn.dataset.holdChoice)));
-
   if(!configured){
     $('cloudConfigured').textContent='Cloud is not connected yet. Edit config.js with your Supabase Project URL and publishable key, then run the supplied SQL setup. Game works offline; real ranking is not available.';
     $('cloudConfigured').classList.add('warn');
@@ -285,91 +248,199 @@
   }
 
 
-  const BUSY_AIRPORTS=new Set(['HND','NRT','SIN','LHR','JFK','LAX','SFO','DXB','CDG','FRA','AMS','HKG','ICN','SYD']);
-  const HOLD_CASES=[
-    {answer:'direct', title:'Direct entry', text:'Your inbound track approaches from the direct-entry sector. Cross the holding fix, turn right and continue in the published racetrack.'},
-    {answer:'parallel', title:'Parallel entry', text:'You are approaching from the non-holding side. Cross the fix, fly outbound on the reciprocal side, then turn back to intercept the inbound leg.'},
-    {answer:'teardrop', title:'Teardrop entry', text:'You are approaching from the holding side but offset into the teardrop sector. Cross the fix, fly the outbound heading with a 30° offset, then turn back inbound.'}
-  ];
-  function phaseLabel(p){return ({takeoff:'departure',route:'en route',approach:'arrival'})[p]||'flight';}
-  function activeRouteInfo(){
+  // Airport-density event: the flight continues throughout the unscheduled ATC diversion.
+  // This is a procedural flying challenge layered on the existing aircraft dynamics.
+  const BUSY_AIRPORTS=new Set(['WSSS','RJTT','RJAA','EGLL','EGKK','KJFK','KLAX','KSFO','OMDB','LFPG','EDDF','EHAM','VHHH','RKSI','YSSY','WIII','VTBS','WMKK','RCTP','ZBAA','ZSPD','RJBB','KORD','KATL','VIDP','RPLL','WADD','ZGGG']);
+  const DEG=180/Math.PI;
+  const angle=h=>((Math.round(Number(h)||0)%360)+360)%360;
+  const delta=(a,b)=>((angle(a)-angle(b)+540)%360)-180;
+  const padHdg=h=>String(angle(h)).padStart(3,'0')+'°';
+  function safeRouteInfo(){
     const info=gameInfo();
-    if(!info||info.st!=='play'||info.paused) return null;
+    if(!info || info.st==='boot' || !info.plane)return null;
     const dep=info?.rwys?.dep||info?.route?.plan?.dep||'---';
     const arr=info?.rwys?.arr||info?.route?.plan?.arr||info?.route?.dest||'---';
-    return {info,dep,arr,phase:info.phase||'route',t:info.t||0,busy:BUSY_AIRPORTS.has(dep)||BUSY_AIRPORTS.has(arr)};
+    const heading=angle(info.plane.hdg);
+    const phase=info.phase||'takeoff';
+    return {info,dep,arr,heading,phase,t:Number(info.t)||0,busy:BUSY_AIRPORTS.has(arr),alt:Number(info.plane.alt)||0,kt:Number(info.plane.kt)||0};
   }
-  function showBusyApron(route){
-    const el=$('busyApron');
-    if(!route||!route.busy||holdOpenState||document.visibilityState!=='visible'){el.classList.remove('show');return;}
-    $('busyApronCaption').textContent=`Heavy traffic at ${route.arr}. Multiple aircraft are parked and ATC may issue holding instructions.`;
-    el.classList.add('show');
+  function updateApron(route){
+    const show=route && (route.busy||atcHold)&& route.info.st==='play' && document.visibilityState==='visible';
+    $('holdApron').classList.toggle('show',!!show);
+    if(show)$('holdApron').textContent=`✈ BUSY ${route.arr} · AIRCRAFT PARKED AT GATES`;
   }
-  function buildHoldScenario(route, forcedType){
-    const holdFixes=['DAGGA','KUDOS','SABER','TELEX','MANGO','DOVAN','ARAMA','LOTUS'];
-    const headings=[0,30,60,90,120,150,180,210,240,270,300,330];
-    const chosen=HOLD_CASES.find(x=>x.answer===forcedType)||HOLD_CASES[Math.floor(Math.random()*HOLD_CASES.length)];
-    let inbound=headings[Math.floor(Math.random()*headings.length)];
-    let outbound=(inbound+180)%360;
-    let turn='right';
-    let fromMap={direct:'direct-entry sector',parallel:'parallel-entry sector',teardrop:'teardrop-entry sector'};
-    return {
-      answer:chosen.answer,
-      title:chosen.title,
-      route:`${route.dep} → ${route.arr}`,
-      fix:holdFixes[Math.floor(Math.random()*holdFixes.length)],
-      inbound, outbound, turn,
-      expect:5+Math.floor(Math.random()*6),
-      traffic:8+Math.floor(Math.random()*15),
-      from:fromMap[chosen.answer],
-      text:chosen.text,
-      airport:route.arr,
-      phase:route.phase
-    };
+  function targetSpeed(alt){return alt>14000?265:alt>6000?230:200}
+  function entryFor(currentHeading,inbound,turn){
+    // Simplified right/left-turn sectors for a playable training challenge.
+    // Actual instrument procedure geometry depends on aircraft track and fix location.
+    const d=delta(currentHeading,inbound)*(turn==='right'?1:-1);
+    return d>=-70 && d<=110?'direct':d>110?'parallel':'teardrop';
   }
-  function openHoldChallenge(route, forcedType){
-    if(holdOpenState) return;
-    holdCurrent=buildHoldScenario(route, forcedType);
-    holdAnswered=false; holdOpenState=true;
-    $('holdTitle').textContent=`${holdCurrent.route} · busy holding`;
-    $('holdAtcText').innerHTML=`<strong>ATC:</strong> "Jetline Captain, due busy ${holdCurrent.airport} traffic, hold over ${holdCurrent.fix}, inbound course ${String(holdCurrent.inbound).padStart(3,'0')}°, ${holdCurrent.turn} turns, expect further clearance in ${holdCurrent.expect} minutes."`;
-    $('holdMeta').innerHTML=`<strong>Scenario:</strong> ${holdCurrent.traffic} aircraft are sequenced and many more are parked on the apron. You are joining from the <strong>${holdCurrent.from}</strong> during the ${phaseLabel(holdCurrent.phase)} phase.`;
-    $('holdProcedureTitle').textContent=holdCurrent.title;
-    $('holdProcedureText').textContent='Select the correct standard holding entry: direct, parallel or teardrop. After answering, you can resume, restart, or go back to the menu.';
-    $('holdFeedback').textContent='';
-    $('holdShade').classList.add('show'); $('holdShade').setAttribute('aria-hidden','false');
-    showBusyApron(route);
-    try{frame.contentWindow?.__game?.pause?.()}catch{}
+  function speech(msg){
+    if(!window.speechSynthesis || !window.SpeechSynthesisUtterance)return;
+    try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(msg);u.lang='en-US';u.rate=0.92;u.pitch=0.91;u.volume=0.86;window.speechSynthesis.speak(u)}catch(e){console.warn('ATC speech unavailable',e)}
   }
-  function closeHold(autoResume=true){
-    $('holdShade').classList.remove('show'); $('holdShade').setAttribute('aria-hidden','true');
-    holdOpenState=false;
-    if(autoResume){try{frame.contentWindow?.__game?.resume?.()}catch{}}
+  function resetHold(){
+    atcHold=null;atcHoldDone=false;atcHoldSchedule=null;
+    $('holdAlert').classList.remove('active','minimized');$('holdApron').classList.remove('show');
   }
-  function answerHold(choice){
-    if(!holdCurrent) return;
-    holdAnswered=true;
-    if(choice===holdCurrent.answer){
-      $('holdFeedback').textContent=`Correct — ${holdCurrent.title}. ${holdCurrent.text}`;
-      $('holdFeedback').style.color='#7cf4ce';
-    }else{
-      $('holdFeedback').textContent=`Not quite. Correct answer: ${holdCurrent.answer.toUpperCase()}. ${holdCurrent.text}`;
-      $('holdFeedback').style.color='#ffd38a';
+  function setHoldStage(stage,t){
+    if(!atcHold)return;
+    atcHold.stage=stage;atcHold.stageAt=t;atcHold.steady=0;
+  }
+  function holdInstructions(){
+    if(!atcHold)return;
+    const h=atcHold;
+    let text='';
+    if(h.stage==='clearance')text='Unexpected ATC instruction. Acknowledge the clearance while continuing to fly.';
+    else if(h.stage==='entry')text='Choose the entry appropriate to your present approach heading. The airplane is still flying.';
+    else if(h.stage==='turn-out')text='MANEUVER: Set a heading to the outbound leg using your FCU or joystick. Maintain assigned altitude and safe speed.';
+    else if(h.stage==='outbound')text='Maintain outbound heading for the simulated leg. ATC will instruct when to turn inbound.';
+    else if(h.stage==='turn-in')text='MANEUVER: Turn back to the inbound holding course; use FCU HDG mode or manual controls.';
+    else if(h.stage==='established')text='HOLD ESTABLISHED. Maintain heading, altitude and speed. Await further clearance.';
+    else if(h.stage==='released')text='ATC has cleared you to leave the hold. Restore NAV mode or resume your flight plan.';
+    $('holdInstruction').textContent=text;
+  }
+  function renderHold(r){
+    if(!atcHold)return;
+    const h=atcHold;
+    $('holdAlert').classList.add('active');
+    $('holdStateTag').textContent=h.stage==='released'?'✅ ATC · RESUME FLIGHT':'📡 ATC · UNEXPECTED HOLD';
+    $('holdRoute').textContent=`${r?.arr||h.arr} · FIX ${h.fix} · ${h.turn.toUpperCase()} TURNS`;
+    const elapsed=Math.max(0,(r?.t??h.stageAt)-h.startedAt);
+    $('holdTimer').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0');
+    $('holdCurrent').textContent=r?padHdg(r.heading):'---';
+    const target=['turn-out','outbound'].includes(h.stage)?h.outboundTarget:['turn-in','established'].includes(h.stage)?h.inbound:null;
+    $('holdTarget').textContent=target==null?'---':padHdg(target);
+    $('holdAlt').textContent=`ALT ${r?Math.round(r.alt):'---'} / ${h.alt} FT`;
+    $('holdSpeed').textContent=`SPD ${r?Math.round(r.kt):'---'} / ≤${h.maxKt} KT`;
+    $('holdAckControls').hidden=h.stage!=='clearance';
+    $('holdEntryControls').hidden=h.stage!=='entry';
+    $('holdHeadingControls').hidden=!['turn-out','outbound','turn-in','established'].includes(h.stage);
+    holdInstructions();
+  }
+  function issueHold(r){
+    const f=r.info?.route?.wps?.[r.info.wpIdx]||r.info?.route?.wps?.[Math.min(1,(r.info?.route?.wps?.length||1)-1)];
+    const fix=String(f?.name||'ARRIVAL FIX').replace(/[^A-Z0-9 ]/gi,'').slice(0,12)||'ARRIVAL FIX';
+    const offsets=[-155,-115,-45,25,90,145];
+    const inbound=angle(Math.round((r.heading+offsets[Math.floor(Math.random()*offsets.length)])/5)*5);
+    const turn='right';
+    const entry=entryFor(r.heading,inbound,turn);
+    const outbound=angle(inbound+180);
+    const alt=Math.max(1500,Math.round(r.alt/100)*100);
+    const maxKt=targetSpeed(alt);
+    atcHold={fix,arr:r.arr,dep:r.dep,stage:'clearance',startedAt:r.t,stageAt:r.t,
+      lastT:r.t,steady:0,headingAtClearance:r.heading,inbound,outbound,turn,entry,
+      outboundTarget:outbound,alt,maxKt,points:0,answered:false,wrong:false};
+    const clearance=`Jetline ${r.info.level||1}, due arrival congestion at ${r.arr}, hold at ${fix}. Inbound course ${padHdg(inbound)}, right-hand turns. Maintain ${alt} feet. Speed not above ${maxKt} knots. Expect further clearance.`;
+    $('holdClearance').textContent='ATC: '+clearance;
+    $('holdFeedback').textContent='New clearance — read back and act now.';
+    $('holdFeedback').style.color='#ffd48a';
+    $('holdAlert').classList.remove('minimized');
+    renderHold(r);
+    speech(clearance);
+  }
+  function respondHold(){
+    if(!atcHold||atcHold.stage!=='clearance')return;
+    setHoldStage('entry',atcHold.lastT);
+    $('holdFeedback').textContent=`ATC readback received. Select your entry. Your approach heading was ${padHdg(atcHold.headingAtClearance)}.`;
+    $('holdFeedback').style.color='#9bedff';
+    renderHold(safeRouteInfo());
+  }
+  function selectEntry(type){
+    if(!atcHold||atcHold.stage!=='entry')return;
+    const h=atcHold;
+    h.answered=true;h.wrong=type!==h.entry;
+    h.points=h.wrong?0:25;
+    if(type==='teardrop')h.outboundTarget=angle(h.outbound-30);
+    else h.outboundTarget=h.outbound;
+    const correct= h.wrong?`ATC correction: expected ${h.entry.toUpperCase()} entry for this simplified scenario. `:`Correct ${type.toUpperCase()} entry. `;
+    $('holdFeedback').textContent=correct+`Fly ${padHdg(h.outboundTarget)} to enter the hold.`;
+    $('holdFeedback').style.color=h.wrong?'#ffd48a':'#72e7b4';
+    setHoldStage('turn-out',h.lastT);
+    renderHold(safeRouteInfo());
+  }
+  function fcuHeadingMode(){
+    const game=frame.contentWindow?.__game;
+    const info=gameInfo();
+    if(!game||info?.st!=='play')return;
+    if(info.autoflight?.fcu?.lmode!=='hdg')game.fcuTap?.('hdg');
+    $('holdFeedback').textContent='FCU heading mode selected. Turn the HDG knob or use aircraft controls to comply.';
+  }
+  function changeFcu(deltaDegrees){
+    const game=frame.contentWindow?.__game;
+    const info=gameInfo();
+    if(!game||info?.st!=='play')return;
+    if(info.autoflight?.fcu?.lmode!=='hdg')game.fcuTap?.('hdg');
+    game.fcuTurn?.('hdg',deltaDegrees);
+  }
+  function pollAdhocHold(){
+    const r=safeRouteInfo();
+    updateApron(r);
+    if(!r)return;
+    if(r.info.st==='end'||r.info.st==='intro'){
+      if(atcHold)resetHold();
+      if(r.info.st==='intro')atcHoldFlight='';
+      previousGameT=null;
+      return;
     }
+    if(r.info.st!=='play')return;
+    if(previousGameT!=null&&r.t+5<previousGameT){resetHold();atcHoldFlight='';}
+    previousGameT=r.t;
+    const key=`${r.dep}|${r.arr}|${r.info.level||1}`;
+    if(key!==atcHoldFlight){resetHold();atcHoldFlight=key;
+      atcHoldSchedule={at:r.t+21+Math.random()*17,congested:r.busy||Math.random()<0.35};
+    }
+    if(!atcHold){
+      if(!atcHoldDone&&atcHoldSchedule?.congested&&r.t>=atcHoldSchedule.at&&['route','approach'].includes(r.phase)&&!r.info.paused){
+        issueHold(r);
+      }
+      return;
+    }
+    const h=atcHold;
+    if(r.info.paused)return; // respect the player's own pause control
+    const dt=Math.max(0,Math.min(2,r.t-h.lastT));h.lastT=r.t;
+    const hdgErr=t=>Math.abs(delta(r.heading,t));
+    const altOk=Math.abs(r.alt-h.alt)<=500;
+    const speedOk=r.kt<=h.maxKt+15;
+    if(h.stage==='turn-out'){
+      h.steady=hdgErr(h.outboundTarget)<20&&altOk&&speedOk?h.steady+dt:0;
+      if(h.steady>=4){h.points+=25;setHoldStage('outbound',r.t);
+        $('holdFeedback').textContent=`Good heading capture. Fly outbound ${padHdg(h.outboundTarget)} for the holding leg.`;
+        speech(`Continue outbound heading ${angle(h.outboundTarget)}.`);
+      }
+    }else if(h.stage==='outbound'){
+      if(r.t-h.stageAt>=13){setHoldStage('turn-in',r.t);
+        $('holdFeedback').textContent=`ATC: Turn ${h.turn} to intercept inbound ${padHdg(h.inbound)}.`;
+        speech(`Jetline, turn right to intercept inbound course ${angle(h.inbound)}.`);
+      }
+    }else if(h.stage==='turn-in'){
+      h.steady=hdgErr(h.inbound)<20&&altOk&&speedOk?h.steady+dt:0;
+      if(h.steady>=4){h.points+=25;setHoldStage('established',r.t);
+        $('holdFeedback').textContent='Holding established. Maintain altitude and await ATC release.';
+      }
+    }else if(h.stage==='established'){
+      if(r.t-h.stageAt>=11){setHoldStage('released',r.t);
+        if(altOk&&speedOk)h.points+=25;
+        $('holdClearance').textContent=`ATC: Jetline, cleared to exit the hold. Resume navigation to ${h.arr}.`;
+        $('holdFeedback').textContent=`Holding challenge complete: ${h.points}/100 procedure points (separate from flight score).`;
+        $('holdFeedback').style.color='#78ebbe';
+        speech(`Jetline, cleared to leave the hold. Resume flight planned route to ${h.arr}.`);
+      }
+    }else if(h.stage==='released'&&r.t-h.stageAt>14){
+      atcHoldDone=true;atcHold=null;$('holdAlert').classList.remove('active','minimized');
+    }
+    if(atcHold)renderHold(r);
   }
-  function maybeTriggerHold(){
-    const route=activeRouteInfo();
-    showBusyApron(route);
-    if(!route||!route.busy||holdOpenState) return;
-    const key=[route.dep,route.arr,route.info.level||0].join('|');
-    lastFlightKey=key;
-    if(holdTriggeredFor.has(key)) return;
-    if(route.t<18) return;
-    if(route.phase!=='route' && route.phase!=='approach') return;
-    holdTriggeredFor.add(key);
-    openHoldChallenge(route);
-  }
-
+  $('holdAck').addEventListener('click',respondHold);
+  $('holdMin').addEventListener('click',()=>{
+    const e=$('holdAlert');e.classList.toggle('minimized');
+    $('holdMin').textContent=e.classList.contains('minimized')?'EXPAND':'MINIMIZE';
+  });
+  document.querySelectorAll('[data-entry]').forEach(e=>e.addEventListener('click',()=>selectEntry(e.dataset.entry)));
+  $('holdHdgMode').addEventListener('click',fcuHeadingMode);
+  $('holdMinus').addEventListener('click',()=>changeFcu(-10));
+  $('holdPlus').addEventListener('click',()=>changeFcu(10));
   function sendToGame(data){if(!gameLoaded||!frame.contentWindow)return;
     try{frame.contentWindow.postMessage(data,location.origin)}catch(e){console.warn('Game message failed',e)}
   }
@@ -377,7 +448,6 @@
   function startGame(reload=false){
     if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html'+(reload?'?cloud_reload='+Date.now():'')}
   }
-  $('holdOpen').classList.add('ready');
   frame.addEventListener('load',()=>{
     gameLoaded=true;
     hello();setTimeout(hello,400);setTimeout(()=>{hello();hideOldLocalLogin()},1800);
@@ -388,7 +458,7 @@
   function hideOldLocalLogin(){try{
     let doc=frame.contentDocument;if(!doc||doc.getElementById('cloud-account-hide'))return;
     let st=doc.createElement('style');st.id='cloud-account-hide';
-    st.textContent='.acct-chip,.acct{display:none!important}';
+    st.textContent='.acct-chip,#acct{display:none!important}#pauseCard.show,#ui.paused #pauseCard{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}';
     doc.head.appendChild(st);
   }catch{}}
   function gameInfo(){try{return frame.contentWindow?.__game?.info?.()||null}catch{return null}}
@@ -407,7 +477,7 @@
     const next=info?.st==='play'&&!info?.paused?'fly':'menu';
     if(next!==gameStatus){gameStatus=next;updatePresence()}
     if(pilot)renderProfile();
-    maybeTriggerHold();
+    pollAdhocHold();
   }
   window.addEventListener('pointerdown',()=>{lastSeenInput=Date.now()},{passive:true});
   window.addEventListener('keydown',()=>{lastSeenInput=Date.now()});
@@ -678,7 +748,7 @@
     }
   });
   setInterval(()=>{observeGame();updatePresence();if(db&&pilot)backUp()},12000);
-  setInterval(()=>maybeTriggerHold(),1800);
+  setInterval(pollAdhocHold,850);
   setInterval(()=>{if(db)refreshRanking()},20000);
   setInterval(()=>{if(presenceReady)countPresence()},15000);
   window.addEventListener('pagehide',()=>{if(db&&pilot)backUp();presence?.untrack?.()});
