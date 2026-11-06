@@ -142,6 +142,7 @@
     <div class="holdBody">
       <div class="holdAtc" id="holdClearance">Stand by for holding instructions.</div>
       <div class="holdLine"><span id="holdRoute">Arrival holding</span><span id="holdTimer">00:00</span></div>
+      <div class="holdLine"><span id="holdMissionClock">⏸ MISSION CLOCK PAUSED</span><span id="holdMissionRemaining">--:-- LEFT</span></div>
       <div class="holdLine"><span>YOUR HDG <strong id="holdCurrent">---</strong></span><span>TARGET <strong id="holdTarget">---</strong></span></div>
       <div class="holdLine"><span id="holdAlt">ALT ---</span><span id="holdSpeed">SPD ---</span></div>
       <div class="holdReadback" id="holdInstruction">ATC holding diversion is active. Keep flying while reading back clearance.</div>
@@ -280,10 +281,10 @@
     if(!window.speechSynthesis || !window.SpeechSynthesisUtterance)return;
     try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(msg);u.lang='en-US';u.rate=0.92;u.pitch=0.91;u.volume=0.86;window.speechSynthesis.speak(u)}catch(e){console.warn('ATC speech unavailable',e)}
   }
-  function gameHoldingExempt(yes){
+  function gameHoldingExempt(yes,atcClearance=false){
     try{
       const native=frame.contentWindow?.__game;
-      if(typeof native?.setAtcHolding==='function')return native.setAtcHolding(!!yes);
+      if(typeof native?.setAtcHolding==='function')return native.setAtcHolding(!!yes,!!atcClearance);
     }catch(e){console.warn('ATC hold exemption update failed',e)}
     return null;
   }
@@ -314,7 +315,7 @@
     else if(h.stage==='turn-in')text='MANEUVER: Turn back to the inbound holding course; use FCU HDG mode or manual controls.';
     else if(h.stage==='established')text='HOLD ESTABLISHED. Maintain heading, altitude and speed. Await further clearance.';
     else if(h.stage==='released')text='ATC has cleared you to leave the hold. Restore NAV mode or resume your flight plan.';
-    $('holdInstruction').textContent=text+(h.stage!=='released'?' WAYPOINT MISSES SUSPENDED while holding.':' Waypoint checks resumed.');
+    $('holdInstruction').textContent=text+(h.stage!=='released'?' MISSION CLOCK PAUSED; WAYPOINT MISSES SUSPENDED while holding.':' Mission countdown and waypoint checks resumed.');
   }
   function renderHold(r){
     if(!atcHold)return;
@@ -322,8 +323,12 @@
     $('holdAlert').classList.add('active');
     $('holdStateTag').textContent=h.stage==='released'?'✅ ATC · RESUME FLIGHT':'📡 ATC · UNEXPECTED HOLD';
     $('holdRoute').textContent=`${r?.arr||h.arr} · FIX ${h.fix} · ${h.turn.toUpperCase()} TURNS`;
-    const elapsed=Math.max(0,(r?.t??h.stageAt)-h.startedAt);
+    const elapsed=Math.max(0,(h.releasedAt??r?.t??h.stageAt)-h.startedAt);
     $('holdTimer').textContent=String(Math.floor(elapsed/60)).padStart(2,'0')+':'+String(Math.floor(elapsed%60)).padStart(2,'0');
+    const missionLeft=Math.max(0,Math.ceil(Number(r?.info?.missionTimeRemaining)||0));
+    $('holdMissionClock').textContent=h.stage==='released'?'▶ MISSION CLOCK RESUMED':'⏸ MISSION CLOCK PAUSED';
+    $('holdMissionClock').style.color=h.stage==='released'?'#83f2c2':'#8feaff';
+    $('holdMissionRemaining').textContent=String(Math.floor(missionLeft/60)).padStart(2,'0')+':'+String(missionLeft%60).padStart(2,'0')+' LEFT';
     $('holdCurrent').textContent=r?padHdg(r.heading):'---';
     const target=['turn-out','outbound'].includes(h.stage)?h.outboundTarget:['turn-in','established'].includes(h.stage)?h.inbound:null;
     $('holdTarget').textContent=target==null?'---':padHdg(target);
@@ -439,11 +444,12 @@
       }
     }else if(h.stage==='established'){
       if(r.t-h.stageAt>=11){setHoldStage('released',r.t);
-        gameHoldingExempt(false); // ATC clearance resumes normal route checks; passed fixes are safely skipped.
+        const cleared=gameHoldingExempt(false,true); // Exclude holding time, grant at least 120 seconds to rejoin the route and skip passed fixes.
+        h.releasedAt=r.t;
         updateHoldHud(null);
         if(altOk&&speedOk)h.points+=25;
         $('holdClearance').textContent=`ATC: Jetline, cleared to exit the hold. Resume navigation to ${h.arr}.`;
-        $('holdFeedback').textContent=`Holding challenge complete: ${h.points}/100 procedure points (separate from flight score).`;
+        $('holdFeedback').textContent=`Holding complete: ${h.points}/100 procedure points. Flight clock resumes with ${Math.ceil(cleared?.timeRemaining||0)} seconds remaining. (Separate from flight score.)`;
         $('holdFeedback').style.color='#78ebbe';
         speech(`Jetline, cleared to leave the hold. Resume flight planned route to ${h.arr}.`);
       }
