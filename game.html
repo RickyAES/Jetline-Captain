@@ -5712,5 +5712,260 @@ window.__holdHud={update};
 })();
 </script>
 
+<style id="jc-checklist-ecam-style">
+/* ECAM-style informational annunciator inside the existing engine display.
+   It is intentionally small and does not cover engine needles or gear/flap buttons. */
+#jc-ecam-alert{
+ position:absolute;z-index:17;display:none;box-sizing:border-box;
+ background:rgba(1,13,20,.92);border:1px solid rgba(74,128,129,.50);
+ border-radius:4px;padding:3px 4px;overflow:hidden;
+ color:#80f9b7;font:800 9px/1.2 Consolas,Menlo,monospace;
+ pointer-events:none;min-width:78px;
+}
+#jc-ecam-alert .jc-ecam-head{display:flex;align-items:center;justify-content:space-between;gap:3px;margin-bottom:2px;}
+#jc-ecam-alert .jc-ecam-title{font-size:9px;white-space:nowrap;color:#6beec3;}
+#jc-ecam-alert .jc-ecam-open{pointer-events:auto;touch-action:manipulation;cursor:pointer;
+ padding:2px 4px;border-radius:3px;border:1px solid #3b8a95;background:#194757;
+ color:#e4ffff;font:900 9px/1 system-ui,sans-serif;}
+#jc-ecam-alert .jc-ecam-msg{white-space:nowrap;text-overflow:ellipsis;overflow:hidden;line-height:1.35;}
+#jc-ecam-alert .jc-ecam-msg.red{color:#ff6969;}
+#jc-ecam-alert .jc-ecam-msg.amber{color:#ffc875;}
+#jc-ecam-alert .jc-ecam-msg.green{color:#88eeb4;}
+#jc-ecam-alert .jc-ecam-msg.cyan{color:#7fccee;}
+#jc-settings-modal .jc-settings-tabs{grid-template-columns:repeat(4,minmax(0,1fr));}
+#jc-settings-modal .jc-settings-tab{font-size:clamp(9px,2.3vw,12px);padding:8px 3px;overflow-wrap:anywhere;}
+#jc-settings-checklist .jc-fault-box{border:1px solid #3c607e;background:#091d31;border-radius:9px;padding:9px;margin:10px 0;color:#abdfec;font:800 11px/1.45 system-ui,sans-serif}
+#jc-settings-checklist .jc-fault-box .jc-fault-title{color:#b3ebff;margin-bottom:3px}
+#jc-settings-checklist .jc-fault-box .jc-fault-item.red{color:#ff7272}
+#jc-settings-checklist .jc-fault-box .jc-fault-item.amber{color:#ffcd84}
+#jc-settings-checklist .jc-fault-box .jc-fault-item.green{color:#8ce9b1}
+#jc-settings-checklist .jc-fault-box .jc-fault-item.cyan{color:#8acff5}
+#jc-settings-checklist .jc-checklist-header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+#jc-settings-checklist .jc-checklist-title{font-weight:900;color:#9de5f5;font-size:13px}
+#jc-settings-checklist .jc-checklist-note{font-size:11px;line-height:1.5;color:#b8cee3;margin:6px 0 12px}
+#jc-settings-checklist .jc-checklist-phases{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:11px}
+#jc-settings-checklist .jc-checklist-phase{border:1px solid #376883;background:#112b43;color:#d8f3ff;
+ border-radius:7px;min-height:31px;padding:6px 8px;font:800 10px/1 system-ui,sans-serif;cursor:pointer}
+#jc-settings-checklist .jc-checklist-phase.active{background:#1a6783;border-color:#9feaff;color:white}
+#jc-settings-checklist .jc-checklist-row{display:flex;align-items:flex-start;gap:9px;border-bottom:1px solid #315371;
+ padding:9px 3px;line-height:1.35;color:#f1f6fb;font-size:12px}
+#jc-settings-checklist .jc-checklist-row input{margin:2px 0 0;width:18px;height:18px;flex-shrink:0;accent-color:#6cdeae}
+#jc-settings-checklist .jc-checklist-row span{flex:1}
+#jc-settings-checklist .jc-checklist-row small{color:#8ed3ec;font-size:10px;white-space:nowrap}
+#jc-settings-checklist .jc-checklist-row.done span{text-decoration:line-through;opacity:.70}
+#jc-settings-checklist .jc-checklist-progress{display:flex;justify-content:space-between;gap:9px;color:#82e4b5;font-weight:800;padding:9px 0}
+#jc-settings-checklist #jc-checklist-reset{min-height:34px;padding:7px 10px;background:#294159;border:1px solid #5a8499;
+ border-radius:7px;color:#e7f6ff;font:700 11px system-ui,sans-serif;cursor:pointer}
+@media(max-width:480px){#jc-ecam-alert{font-size:8px;padding:2px 3px}
+ #jc-ecam-alert .jc-ecam-title{font-size:8px}#jc-ecam-alert .jc-ecam-open{font-size:8px;padding:1px 3px}}
+</style>
+<script id="jc-ecam-checklists-script">
+(()=>{
+ 'use strict';
+ if(document.getElementById('jc-ecam-alert'))return;
+ const ui=document.getElementById('ui');
+ const settings=document.getElementById('jc-settings-modal');
+ if(!ui || !settings)return;
+ const $=id=>document.getElementById(id);
+ const alert=document.createElement('div');alert.id='jc-ecam-alert';
+ alert.innerHTML='<div class="jc-ecam-head"><span class="jc-ecam-title">ECAM / CHECK</span><button class="jc-ecam-open" type="button">CHECKLIST</button></div><div class="jc-ecam-msg green">SYSTEMS NORMAL</div><div class="jc-ecam-msg cyan">OPEN CHECKLIST →</div>';
+ ui.appendChild(alert);
+ const tablist=settings.querySelector('.jc-settings-tabs');
+ const tab=document.createElement('button');tab.type='button';tab.className='jc-settings-tab';
+ tab.dataset.tab='checklist';tab.setAttribute('role','tab');tab.setAttribute('aria-selected','false');
+ tab.setAttribute('aria-controls','jc-settings-checklist');tab.textContent='📋 CHECKLIST';tablist.appendChild(tab);
+ const pane=document.createElement('div');pane.id='jc-settings-checklist';
+ pane.className='jc-settings-pane';pane.setAttribute('role','tabpanel');
+ pane.innerHTML='<div class="jc-checklist-header"><span class="jc-checklist-title">FLIGHT CHECKLISTS</span><button type="button" id="jc-checklist-reset">RESET TICKS</button></div><p class="jc-checklist-note">Jetline Captain simulation checklist, not a certified Airbus checklist. AUTO items reflect game telemetry; tick MANUAL items after checking them yourself.</p><div class="jc-fault-box" role="status" aria-live="off"><div class="jc-fault-title">ECAM FAULT / STATUS</div><div class="jc-fault-items">SYSTEMS NORMAL</div></div><div class="jc-checklist-phases" role="group" aria-label="Flight stage"></div><div class="jc-checklist-progress"></div><div class="jc-checklist-items"></div>';
+ settings.appendChild(pane);
+ tab.addEventListener('click',()=>window.__jcGeneralSettings?.select?.('checklist'));
+ alert.querySelector('.jc-ecam-open').addEventListener('click',e=>{
+   e.stopPropagation();window.__jcGeneralSettings?.open?.('checklist');
+ });
+ // A short, game-oriented checklist for every flight phase. AUTO items are read-only.
+ const stages=[
+  {id:'PREFLIGHT',label:'PRE-FLIGHT',items:[
+   ['Route and destination loaded','route'],['Fuel planned and on board','fuel'],
+   ['Aircraft / flight controls inspected'],['Flight plan and runway reviewed'],
+   ['Altimeter / QNH checked'],['Weather and airport briefing reviewed']]},
+  {id:'START',label:'BEFORE START',items:[
+   ['Adequate fuel available','fuel'],['Parking brake and surroundings checked'],
+   ['Cabin and doors checked'],['Engine start clearance obtained'],
+   ['Engine 1 and 2 running after start','engines']]},
+  {id:'TAXI',label:'TAXI',items:[
+   ['Both engines running','engines'],['Taxi clearance and route confirmed'],
+   ['Brake and steering check completed'],['Flight controls checked'],
+   ['Takeoff flaps selected','flaps'],['Flight instruments checked']]},
+  {id:'TAKEOFF',label:'BEFORE TAKEOFF',items:[
+   ['Both engines available','engines'],['Takeoff flaps set','flaps'],
+   ['Fuel within planned limits','fuel'],['Departure runway confirmed'],
+   ['Takeoff performance / V-speeds checked'],['Takeoff clearance received']]},
+  {id:'CLIMB',label:'CLIMB',items:[
+   ['Landing gear retracted','gearUp'],['Flaps retracted when appropriate','flapsUp'],
+   ['Climb power checked'],['Flight director / navigation checked']]},
+  {id:'CRUISE',label:'CRUISE',items:[
+   ['Engines operating','engines'],['Fuel remaining above reserve','fuelReserve'],
+   ['Route and altitude verified'],['Weather / turbulence reviewed'],['Arrival briefing planned']]},
+  {id:'DESCENT',label:'DESCENT',items:[
+   ['Destination and arrival runway reviewed','route'],['Arrival fuel reviewed','fuelReserve'],
+   ['Descent / approach clearance confirmed'],['Altimeter setting confirmed'],
+   ['Approach speed and navigation setup checked']]},
+  {id:'APPROACH',label:'APPROACH',items:[
+   ['Both engines operating','engines'],['Landing gear extended','gearDown'],
+   ['Landing flaps selected','landingFlaps'],['Airspeed at approach target','approachSpeed'],
+   ['Landing briefing completed'],['Landing clearance confirmed']]},
+  {id:'LANDING',label:'LANDING',items:[
+   ['Landing gear down','gearDown'],['Landing flaps set','landingFlaps'],
+   ['Approach speed controlled','landingSpeed'],['Descent rate controlled','sink'],
+   ['Landing clearance confirmed']]},
+  {id:'AFTER',label:'AFTER LANDING',items:[
+   ['Reverse thrust stowed','reverseOff'],['Flaps retracted','flapsUp'],
+   ['Runway vacated / taxi clearance'],['Landing lights and cockpit after-landing flow'],
+   ['Parking / engine shutdown flow completed']]}
+ ];
+ let activeStage='PREFLIGHT';
+ const manualChecked=new Set(),phaseButtons=pane.querySelector('.jc-checklist-phases');
+ const itemsBox=pane.querySelector('.jc-checklist-items');
+ const progress=pane.querySelector('.jc-checklist-progress');
+ let prevLevel=null, prevTime=null, lastSnapshot=null;
+ const safeNum=v=>Number.isFinite(Number(v))?Number(v):NaN;
+ function autoStatus(name,s){
+  const p=s?.plane||{},f=s?.fuel||{};
+  switch(name){
+   case 'route':return !!(s?.route?.dest||s?.rwys?.arr);
+   case 'fuel':return safeNum(f.remainingKg)>Math.max(250,safeNum(f.reserveKg)||0);
+   case 'fuelReserve':return safeNum(f.remainingKg)>Math.max(250,safeNum(f.reserveKg)||0);
+   case 'engines':return p.eng1===true&&p.eng2===true;
+   case 'flaps':return safeNum(p.flaps)>=0.7;
+   case 'landingFlaps':return safeNum(p.flaps)>=1.7;
+   case 'flapsUp':return safeNum(p.flaps)<=0.3;
+   case 'gearUp':return safeNum(p.gear)<=0.3;
+   case 'gearDown':return safeNum(p.gear)>=0.85;
+   case 'approachSpeed':return safeNum(p.kt)>0&&safeNum(p.kt)<=200;
+   case 'landingSpeed':return safeNum(p.kt)>0&&safeNum(p.kt)<=185;
+   case 'sink':return safeNum(p.vs)>-1000;
+   case 'reverseOff':return p.reverseThrust===false;
+   default:return false;
+  }
+ }
+ function getItems(stageId){return stages.find(x=>x.id===stageId)?.items||[];}
+ function isDone(stageId,index,s){
+  const item=getItems(stageId)[index];return item?.[1]?autoStatus(item[1],s):manualChecked.has(stageId+':'+index);
+ }
+ function stageProgress(stageId,s){
+  const items=getItems(stageId);return {done:items.filter((_,i)=>isDone(stageId,i,s)).length,total:items.length};
+ }
+ function renderChecklist(s){
+  phaseButtons.replaceChildren();
+  for(const stage of stages){
+   const b=document.createElement('button');b.type='button';b.className='jc-checklist-phase'+(stage.id===activeStage?' active':'');
+   const p=stageProgress(stage.id,s);b.textContent=stage.label+' '+p.done+'/'+p.total;
+   b.onclick=()=>{activeStage=stage.id;renderChecklist(lastSnapshot)};phaseButtons.appendChild(b);
+  }
+  const stage=stages.find(x=>x.id===activeStage)||stages[0];
+  const p=stageProgress(activeStage,s);
+  progress.replaceChildren();
+  const l=document.createElement('span');l.textContent=stage.label+' · '+p.done+'/'+p.total+' COMPLETE';
+  const r=document.createElement('span');r.textContent=p.total===p.done?'COMPLETE ✓':'CHECK PENDING';
+  progress.append(l,r);
+  itemsBox.replaceChildren();
+  for(let i=0;i<stage.items.length;i++){
+   const [label,auto]=stage.items[i];const done=isDone(stage.id,i,s);
+   const row=document.createElement('label');row.className='jc-checklist-row'+(done?' done':'');
+   const cb=document.createElement('input');cb.type='checkbox';cb.checked=done;cb.disabled=!!auto;
+   cb.setAttribute('aria-label',label);
+   if(!auto)cb.addEventListener('change',()=>{const k=stage.id+':'+i;cb.checked?manualChecked.add(k):manualChecked.delete(k);renderChecklist(lastSnapshot)});
+   const name=document.createElement('span');name.textContent=label;
+   const type=document.createElement('small');type.textContent=auto?'AUTO':'MANUAL';
+   row.append(cb,name,type);itemsBox.appendChild(row);
+  }
+ }
+ for(const stage of stages){/* tabs are created on render */}
+ pane.querySelector('#jc-checklist-reset').addEventListener('click',()=>{manualChecked.clear();renderChecklist(lastSnapshot)});
+ function chooseStage(s){
+  if(!s||s.st!=='play')return 'PREFLIGHT';
+  const p=s.plane||{};
+  if(s.phase==='approach')return safeNum(p.alt)<1600?'LANDING':'APPROACH';
+  if(s.phase==='route')return 'CRUISE';
+  if(s.phase==='takeoff')return p.gear===0?'CLIMB':'TAKEOFF';
+  if(s.phase==='landing'||s.phase==='rollout'||(safeNum(p.kt)<55&&s.phase==='end'))return 'AFTER';
+  return 'PREFLIGHT';
+ }
+ function alertsFor(s){
+  const out=[];
+  if(!s || s.st!=='play')return out;
+  const p=s.plane||{},f=s.fuel||{};
+  const alt=safeNum(p.alt),speed=safeNum(p.kt),vs=safeNum(p.vs),phase=s.phase;
+  const airborne=alt>100 || phase==='route'||phase==='approach';
+  const arr=phase==='approach'||phase==='landing';
+  if(!p.eng1&&!p.eng2&&airborne)out.push({level:'red',text:'DUAL ENG FAILURE'});
+  else if(airborne&&!p.eng1)out.push({level:'red',text:'ENG 1 FAIL'});
+  else if(airborne&&!p.eng2)out.push({level:'red',text:'ENG 2 FAIL'});
+  if(Number.isFinite(f.remainingKg)){
+   if(f.remainingKg<=10)out.push({level:'red',text:'FUEL EMPTY'});
+   else if(f.remainingKg<=Math.max(250,(f.reserveKg||0)*.5))out.push({level:'red',text:'FUEL CRITICAL'});
+   else if(f.remainingKg<=Math.max(500,(f.reserveKg||0)))out.push({level:'amber',text:'FUEL LOW'});
+  }
+  if(arr&&Number.isFinite(alt)&&alt<1450&&safeNum(p.gear)<.85)out.push({level:'red',text:'L/G NOT DOWN'});
+  if(arr&&Number.isFinite(alt)&&alt<1250&&safeNum(p.flaps)<.7)out.push({level:'amber',text:'FLAPS NOT SET'});
+  if(arr&&Number.isFinite(speed)&&speed>210)out.push({level:'amber',text:'APPROACH SPD HIGH'});
+  if(arr&&Number.isFinite(alt)&&alt<1900&&Number.isFinite(vs)&&vs< -1400)out.push({level:'red',text:'SINK RATE'});
+  if(p.reverseThrust)out.push({level:'cyan',text:'REV THRUST ACTIVE'});
+  return out;
+ }
+ function update(){
+  const game=window.__game,ewd=ui.querySelector('.disp-ewd');
+  if(!game||!ewd){alert.style.display='none';return;}
+  let s=null;
+  try{s=game.info?.()}catch(e){console.warn('ECAM telemetry',e)}
+  if(!s){alert.style.display='none';return;}
+  lastSnapshot=s;
+  if(s.level!==prevLevel||(prevTime!=null&&Number.isFinite(s.t)&&s.t<prevTime-1)){
+   manualChecked.clear();activeStage=chooseStage(s);prevLevel=s.level;
+  }
+  prevTime=s.t;
+  const suggest=chooseStage(s);
+  const settingsPaneVisible=pane.classList.contains('show') && $('jc-settings-shade')?.classList.contains('open');
+  if(!settingsPaneVisible && activeStage!==suggest)activeStage=suggest;
+  if(settingsPaneVisible){
+   renderChecklist(s);
+   const list=pane.querySelector('.jc-fault-items');list.replaceChildren();
+   const faults=alertsFor(s);
+   const items=faults.length?faults:[{level:'green',text:'SYSTEMS NORMAL'}];
+   for(const fault of items){
+    const e=document.createElement('div');e.className='jc-fault-item '+fault.level;
+    e.textContent=fault.level.toUpperCase()+' · '+fault.text;list.appendChild(e);
+   }
+  }
+  const show=ewd.offsetWidth>80 && (s.st==='play'||s.st==='intro')&&!game.mcduIsOpen?.();
+  alert.style.display=show?'block':'none';
+  if(!show)return;
+  // position within ECAM's otherwise blank lower-right quadrant
+  const w=ewd.offsetWidth,h=ewd.offsetHeight;
+  alert.style.left=Math.round(ewd.offsetLeft+w*.54)+'px';
+  alert.style.top=Math.round(ewd.offsetTop+h*.70)+'px';
+  alert.style.width=Math.floor(w*.44)+'px';
+  alert.style.maxHeight=Math.floor(h*.27)+'px';
+  const status=stageProgress(suggest,s);
+  alert.querySelector('.jc-ecam-title').textContent=`${suggest} ${status.done}/${status.total}${alertsFor(s).length?' !'+alertsFor(s).length:''}`;
+  const msgs=alertsFor(s);
+  const nodes=[...alert.querySelectorAll('.jc-ecam-msg')];
+  // Cycle among all active faults, two at a time, without losing the full list.
+  // The checklist panel lists every active fault concurrently.
+  const first=msgs.length>2?(Math.floor(Date.now()/3800)*2)%msgs.length:0;
+  const showMsgs=msgs.length?msgs.length===1?msgs:[msgs[first],msgs[(first+1)%msgs.length]]:
+    [{level:'green',text:'SYSTEMS NORMAL'},{level:'cyan',text:'SELECT CHECKLIST'}];
+  nodes.forEach((el,i)=>{let x=showMsgs[i];el.style.display=x?'block':'none';if(x){el.className='jc-ecam-msg '+x.level;el.textContent=x.text;}});
+  alert.title=msgs.length?msgs.map(x=>x.text).join(' · '):'Checklist and simulator status';
+ }
+ setInterval(update,1200);
+ window.__jcChecklist={open:()=>window.__jcGeneralSettings?.open?.('checklist'),
+   snapshot:()=>({stage:activeStage,alerts:alertsFor(lastSnapshot),checklist:stageProgress(activeStage,lastSnapshot)}),
+   reset:()=>{manualChecked.clear();renderChecklist(lastSnapshot)}};
+ renderChecklist(null);
+ setTimeout(update,1200);
+})();
+</script>
+
 </body>
 </html>
