@@ -257,7 +257,7 @@
         <label>Airline filter<select id="radarFilter" aria-label="Airline filter">
           <option value="SIA">Singapore Airlines (SIA)</option>
           <option value="ALL">All detected aircraft</option>
-          <option value="TAXI">Changi taxiing · all airlines</option>
+          <option value="TAXI">Changi ground · taxiing + stopped (all airlines)</option>
         </select></label>
         <button id="radarRefresh" type="button">↻ REFRESH</button>
       </div>
@@ -267,6 +267,9 @@
       <div class="radarContent">
         <div class="radarRadar">
           <canvas id="radarCanvas" width="520" height="520" aria-label="Schematic radar with live aircraft. Initial range 50 kilometres."></canvas>
+          <div id="radarGroundLegend" style="display:flex;flex-wrap:wrap;gap:12px;margin:4px 2px 7px;font:600 11px system-ui,sans-serif;color:#c9e8f2">
+            <span style="color:#ffe078">▲ Moving ground aircraft</span><span style="color:#ffb064">▲ Stopped ground aircraft</span><span style="color:#97b9d3">• No ground report = no marker</span>
+          </div>
           <div class="radarZoom" role="group" aria-label="Radar range controls">
             <button id="radarZoomIn" type="button" title="Zoom in" aria-label="Zoom in radar">+</button>
             <span id="radarZoomLabel" aria-live="polite">50 km</span>
@@ -283,7 +286,7 @@
           <div id="radarDetail">Select an aircraft marker or list item to view its flight number, route, destination, aircraft type, speed, heading and detailed departure/arrival times.</div>
         </div>
       </div>
-      <p id="radarFoot">Changi taxiing mode shows <strong>reported aircraft on the ground, moving 1–35 kt and within approximately 6 km of WSSS</strong>. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
+      <p id="radarFoot">Changi ground mode shows <strong>reported aircraft on the ground within approximately 8.5 km of WSSS, including stopped and moving aircraft</strong>. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. The display cannot reliably tell whether a stopped aircraft is parked, holding short or waiting for a departure clearance. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
     </section>
   </div>
 
@@ -535,7 +538,7 @@
   const radarFlights=()=>{
     const all=(radarData?.aircraft||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon)).map(animatedPlane).filter(p=>Number.isFinite(p.km)&&p.km<=radarScale+0.05);
     const mode=$('radarFilter').value;
-    if(mode==='TAXI')return radarAirport==='WSSS'?all.filter(p=>p.taxiing===true):[];
+    if(mode==='TAXI')return radarAirport==='WSSS'?all.filter(p=>p.groundAtChangi===true&&(!Number.isFinite(p.speedKt)||p.speedKt<=45)):[];
     return mode==='SIA'?all.filter(p=>p.callsign?.startsWith('SIA')):all;
   };
   const fmtRadar=n=>Number.isFinite(n)?String(n):'—';
@@ -831,7 +834,9 @@ function animatedPlane(p){
       radarLastFetchMs=Date.now();
       const stamp=Date.parse(d.asOf||d.fetchedAt);
       const when=Number.isFinite(stamp)?new Date(stamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'unknown time';
-      radarStatus(`LIVE ADS-B · ${d.aircraft.length} reported within 100 km of ${d.airport.name} · Viewing ${radarScale} km · Feed ${when} · Refresh every 60 s`);
+      const groundReports=requested==='WSSS'?d.aircraft.filter(p=>p.groundAtChangi).length:0;
+      const stoppedReports=requested==='WSSS'?d.aircraft.filter(p=>p.stopped).length:0;
+      radarStatus(`LIVE ADS-B · ${d.aircraft.length} aircraft within 100 km · ${requested==='WSSS'?groundReports+' Changi ground reports ('+stoppedReports+' stopped) · ':''}Viewing ${radarScale} km · Feed ${when} · Refresh every 60 s`);
       const liveKeys=new Set();
       for(const p of d.aircraft){
         const key=p.hex||p.callsign;if(!key)continue;liveKeys.add(key);
@@ -973,8 +978,11 @@ function drawRadar(){
     if(trail.length>=2){ctx.strokeStyle='rgba(82,214,209,.30)';ctx.lineWidth=1.5;ctx.beginPath();trail.forEach((t,i)=>{const q=pointXY(t,g);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke();}
     const q=pointXY(p,g),h=(p.heading||0)*Math.PI/180;
     ctx.save();ctx.translate(q.x,q.y);ctx.rotate(h);
-    ctx.fillStyle=key===radarSelected?'#ffd278':p.taxiing?'#ffe078':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
-    ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();ctx.restore();
+    ctx.fillStyle=key===radarSelected?'#ffd278':p.stopped?'#ffb064':p.groundAtChangi?'#ffe078':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
+    const len=p.groundAtChangi?14:11;
+    ctx.beginPath();ctx.moveTo(0,-len);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();
+    if(p.groundAtChangi){ctx.strokeStyle='#091c27';ctx.lineWidth=1;ctx.stroke()}
+    ctx.restore();
     ctx.font='10px system-ui';ctx.fillStyle='#e3faf4';ctx.textAlign='left';
     ctx.fillText((planeFlightNo(p)).slice(0,11),q.x+8,q.y-5);
     // Keep schematic uncluttered; details and arrival estimate live in the side panel.
@@ -986,11 +994,12 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   function renderRadar(){
     const flights=radarFlights();
     const taxiMode=radarAirport==='WSSS'&&$('radarFilter').value==='TAXI';
-    $('radarListTitle').textContent=taxiMode?`CHANGI TAXIING ONLY · ${flights.length} · ALL AIRLINES`:`DETECTED AIRCRAFT · ${flights.length} · ${radarScale} KM`;
+    const legend=$('radarGroundLegend');if(legend)legend.style.display=taxiMode?'flex':'none';
+    $('radarListTitle').textContent=taxiMode?`CHANGI GROUND · ${flights.length} · MOVING + STOPPED`:`DETECTED AIRCRAFT · ${flights.length} · ${radarScale} KM`;
     const list=$('radarList');list.replaceChildren();
     if(!flights.length){
       const empty=document.createElement('p');empty.style.padding='12px';
-      empty.textContent=radarData?(taxiMode?'No aircraft currently reported moving on the ground in Changi’s approximate airport area. ADS-B ground coverage is incomplete.':('No '+($('radarFilter').value==='SIA'?'Singapore Airlines flights':'aircraft')+` currently reported in the selected ${radarScale} km range.`)):'No live aircraft positions available.';
+      empty.textContent=radarData?(taxiMode?'No live surface aircraft reported near Changi right now. Stopped aircraft are included, but ground reception is incomplete; try ALL detected aircraft to check the feed.':('No '+($('radarFilter').value==='SIA'?'Singapore Airlines flights':'aircraft')+` currently reported in the selected ${radarScale} km range.`)):'No live aircraft positions available.';
       list.appendChild(empty);
     }
     for(const p of flights){
@@ -1010,7 +1019,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
       const times=document.createElement('span');times.className='scheduleTimes';
       times.textContent=flightTimeCardLines(p);
       const surface=document.createElement('span');surface.className='surfaceTag';
-      surface.textContent=p.taxiing?'TAXIING IN CHANGI · LIVE GROUND TRACK':(p.onGround?'ON GROUND':'' );
+      surface.textContent=p.groundAtChangi ? (p.groundState||'ON GROUND AT CHANGI') : (p.onGround?'ON GROUND':'' );
       b.append(name,distance,routeLine,details,stats,surface,times,eta);
       b.onclick=()=>selectRadarPlane(p);
       list.appendChild(b);
@@ -1024,7 +1033,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
         ['Origin',planeOrigin(selected)],
         ['Destination',planeDestination(selected)],
         ['Aircraft',planeType(selected)],
-        ['Ground movement',selected.taxiing?'TAXIING at Changi':selected.onGround?'ON GROUND (taxi not verified)':'Not confirmed on ground'],
+        ['Ground movement',selected.groundAtChangi?(selected.groundState||'ON GROUND AT CHANGI'):selected.onGround?'ON GROUND (Changi not verified)':'Not confirmed on ground'],
         ['Departure latest',flightTimeStatus(selected,'departure')],
         ['Departure scheduled',flightTimeDetail(selected,'scheduledOut')],
         ['Departure actual (gate)',flightTimeDetail(selected,'actualOut')],
@@ -1047,7 +1056,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
         row.append(l,v);detail.appendChild(row);
       }
       const caution=document.createElement('div');caution.className='etaCaution';
-      caution.textContent='Flight status times (when available) are sourced separately from ADS-B and shown in Singapore time. Gate OUT/IN and runway OFF/ON are different events. Estimated time to airport is not a verified landing time.';
+      caution.textContent='Flight status times (when available) are sourced separately from ADS-B and shown in Singapore time. Surface status does not distinguish taxi-in, pushback, parking, or holding short. Gate OUT/IN and runway OFF/ON are different events. Estimated time to airport is not a verified landing time.';
       detail.appendChild(caution);
       const src=document.createElement('div');src.className='scheduleSource';
       src.textContent=flightSchedule(selected)?.status==='found'?'Flight times: FlightAware AeroAPI':flightSchedule(selected)?.status==='not_configured'?'To enable departure/arrival times, configure FLIGHTAWARE_AEROAPI_KEY on Vercel.':'Select a flight to request the available schedule and status.';
