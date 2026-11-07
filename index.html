@@ -13,6 +13,28 @@
     button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
     #bar{position:fixed;left:0;right:0;top:0;z-index:7;min-height:50px;padding:calc(env(safe-area-inset-top,0px) + 6px) 10px 7px;display:flex;align-items:center;gap:8px;justify-content:space-between;background:#07132ce8;border-bottom:1px solid #223b60}
     #bar .left,#bar .right{display:flex;align-items:center;gap:7px;min-width:0}
+    /* Unified header: account anchored left; every other action in one scrollable row */
+    #bar{flex-wrap:nowrap;justify-content:flex-start;overflow:hidden}
+    #bar .left{flex:0 1 auto;max-width:min(190px,30vw);position:relative;z-index:1}
+    #bar .left .pill{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:block}
+    #bar .left #pilotName{display:inline-block;max-width:130px;vertical-align:bottom;overflow:hidden;text-overflow:ellipsis}
+    #bar .right{flex:1 1 0;gap:5px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;white-space:nowrap;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+    #bar .right::-webkit-scrollbar{display:none}
+    #bar .right > *{flex:0 0 auto}
+    #bar .toolbutton{display:inline-flex;align-items:center;justify-content:center;gap:4px;min-width:34px;padding:0 8px}
+    #bar .toolbutton .toolicon{font-size:16px;line-height:1}
+    #bar .toolbutton .tooltext{font-size:10px}
+    #bar .toolbutton[aria-pressed="true"]{border-color:#49d8c0;color:#80f0ca;background:#16404a}
+    #bar .toolbutton:focus-visible{outline:2px solid #a0e8ff;outline-offset:-2px}
+    @media(max-width:650px){
+      #bar .left{max-width:100px;flex:0 0 auto}
+      #bar .left .pill{font-size:11px;padding:0 6px;min-height:32px}
+      #bar .left #pilotName{max-width:66px}
+      #bar .right{gap:4px}
+      #bar .toolbutton{min-width:34px;padding:0 6px}
+      #bar .toolbutton .tooltext{display:none}
+      #bar .right > .pill{min-height:32px}
+    }
     .pill{min-height:33px;border:1px solid var(--stroke);border-radius:9px;background:#122951;color:var(--ink);font-size:12px;font-weight:800;padding:0 10px;white-space:nowrap}
     .pill.primary{border-color:#1dbbe0;color:#bcf5ff}
     .pilots{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:800;max-width:210px;overflow:hidden;text-overflow:ellipsis}
@@ -160,7 +182,11 @@
       <button class="pill" id="rankingOpen" type="button">🏆 RANKING</button>
       <button class="pill" id="radarOpen" type="button">📡 RADAR</button>
       <button class="pill" id="fuelOpen" type="button" aria-label="Show simulated aircraft fuel">⛽ FUEL</button>
-      <button class="pill" id="fullscreenOpen" type="button" aria-label="Full screen">⛶</button>
+      <button class="pill toolbutton" id="settingsOpen" type="button" aria-label="General Settings" title="General Settings"><span class="toolicon">⚙</span><span class="tooltext">SETTINGS</span></button>
+      <button class="pill toolbutton" id="soundOpen" type="button" aria-label="Sound settings" title="Music and engine sound"><span class="toolicon">♫</span><span class="tooltext">SOUND</span></button>
+      <button class="pill toolbutton" id="fullscreenOpen" type="button" aria-label="Full screen" title="Toggle fullscreen"><span class="toolicon">⛶</span><span class="tooltext">FULL</span></button>
+      <button class="pill toolbutton" id="panelOpen" type="button" aria-label="Maximize cockpit panel" title="Maximize or minimize cockpit panel"><span class="toolicon">▣</span><span class="tooltext" id="panelCaption">PANEL MAX</span></button>
+      <button class="pill toolbutton" id="pauseOpen" type="button" aria-label="Pause flight" title="Pause or resume"><span class="toolicon" id="pauseSymbol">⏸</span><span class="tooltext" id="pauseCaption">PAUSE</span></button>
     </div>
   </header>
   <iframe id="gameFrame" title="Jetline Captain flight simulator" allow="fullscreen" allowfullscreen></iframe>
@@ -390,6 +416,44 @@
     if(f.requestFullscreen)f.requestFullscreen().catch(()=>msg('This browser does not allow full screen. On iPhone: Safari → Share → Add to Home Screen.',true));
     else openModal('cloud'),msg('For iPhone full-screen play: Safari → Share → Add to Home Screen, then launch from the Home Screen.',true);
   };
+
+  // All flight tools live in this header alongside Ranking, Radar and Fuel.
+  // Same-origin iframe access preserves the game's existing sound/USB settings.
+  function flightApi(){try{return frame.contentWindow?.__game||null}catch{return null}}
+  function openFlightSettings(tab){
+    try{
+      const w=frame.contentWindow;
+      if(w?.__jcGeneralSettings?.open){w.__jcGeneralSettings.open(tab);return}
+      const button=w?.document?.getElementById('jc-settings-gear');
+      if(button){button.click();return}
+    }catch(e){console.warn('Game settings unavailable',e)}
+  }
+  $('settingsOpen').onclick=()=>openFlightSettings('display');
+  $('soundOpen').onclick=()=>openFlightSettings('sound');
+  $('panelOpen').onclick=()=>{try{flightApi()?.panel?.()}catch(e){console.warn('Panel toggle',e)}};
+  $('pauseOpen').onclick=()=>{
+    try{
+      const game=flightApi(),paused=!!game?.info?.()?.paused;
+      if(!game)return;
+      if(paused)game.resume?.();else game.pause?.();
+    }catch(e){console.warn('Pause toggle',e)}
+  };
+  function reflectFlightTools(){
+    const info=gameInfo();
+    const playing=info?.st==='play';
+    const pause=$('pauseOpen');
+    pause.disabled=!playing;
+    const paused=!!info?.paused;
+    pause.setAttribute('aria-label',paused?'Resume flight':'Pause flight');
+    $('pauseCaption').textContent=paused?'RESUME':'PAUSE';
+    $('pauseSymbol').textContent=paused?'▶':'⏸';
+    $('panelOpen').setAttribute('aria-pressed',String(!!info?.panelMax));
+    $('panelCaption').textContent=info?.panelMax?'PANEL MIN':'PANEL MAX';
+    $('fullscreenOpen').setAttribute('aria-pressed',String(!!document.fullscreenElement));
+  }
+  setInterval(reflectFlightTools,700);
+  document.addEventListener('fullscreenchange',reflectFlightTools);
+  frame.addEventListener('load',reflectFlightTools);
 
   if(!configured){
     $('cloudConfigured').textContent='Cloud is not connected yet. Edit config.js with your Supabase Project URL and publishable key, then run the supplied SQL setup. Game works offline; real ranking is not available.';
