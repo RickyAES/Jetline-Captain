@@ -4715,25 +4715,6 @@ function Dp(n,t){if(E.clock+=n,Io.tick(n),gM(n),Mt.commTick(n),E.state==="end"){
   if(n){wt.unlock();wt.play("spool",.32)}
   ee("reverse_thrust",n?"on":"off");
   return{active:!!(p&&p.reverseThrust),eligible};
-,throttleInfo(){
-  const p=E.plane,eligible=!!(E.state==="play"&&p&&p.onGround&&p.landed&&(p.eng1||p.eng2)&&!p.crashed);
-  return {state:E.state,paused:!!E.userPaused,mcdu:!!je.open,lever:$t.lever,
-    reverseActive:!!(p&&p.reverseThrust),reverseEligible:eligible,onGround:!!(p&&p.onGround),landed:!!(p&&p.landed),
-    detents:{rev:-.28,idle:0,cl:.62,flx:.82,toga:1},eng1:!!(p&&p.eng1),eng2:!!(p&&p.eng2)};
-},setThrottleLever(n,opts){
-  const p=E.plane;if(!p)return this.throttleInfo();n=+n;if(!isFinite(n))return this.throttleInfo();
-  let eligible=!!(E.state==="play"&&p.onGround&&p.landed&&(p.eng1||p.eng2)&&!p.crashed);
-  let v=Me(n,-.28,1);
-  if(v>-.06&&v<0)v=0;
-  const snap=!(opts&&opts.snap===!1),d=[0,.62,.82,1];
-  if(snap) for(const x of d) if(Math.abs(v-x)<.035){v=x;break}
-  if(v<0){
-    if(!eligible){v=0;p.reverseThrust=!1;}
-    else {v=-.28;p.reverseThrust=!0;p.athrOn=!1;wt.unlock()}
-  } else if(p.reverseThrust&&v>=0){p.reverseThrust=!1}
-  $t.lever=v;
-  ee("throttle_ui",String(v));
-  return this.throttleInfo();
 },fuelLive(){
   if(!E.fuel)return null;
   return {st:E.state,startKg:E.fuel.startKg,remainingKg:E.fuel.remainingKg,
@@ -4936,94 +4917,6 @@ window.__holdHud={update};
     toggle();e.preventDefault();
   }});
   setInterval(update,180); window.addEventListener('resize',update);update();
-})();
-</script>
-
-<style id="jc-thrust-sim-style">
-#jc-reverse-button{display:none!important}
-#jc-thrust-panel{position:fixed;left:10px;bottom:12vh;z-index:42;display:none;pointer-events:auto;touch-action:none;user-select:none}
-#jc-thrust-panel .jc-thrust-wrap{position:relative;width:min(34vw,166px);height:min(60vw,305px);min-width:128px;min-height:236px;
-  border-radius:24px;padding:16px 8px 16px;background:linear-gradient(180deg,#7b88b6 0%,#6b79aa 18%,#55638f 100%);
-  border:1px solid rgba(255,255,255,.22);box-shadow:0 10px 26px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18)}
-#jc-thrust-panel .jc-title{position:absolute;top:-34px;left:50%;transform:translateX(-50%);color:#eaf4ff;font:800 clamp(10px,2.5vw,14px)/1 system-ui,sans-serif;letter-spacing:.18em;text-shadow:0 1px 3px rgba(0,0,0,.4)}
-#jc-thrust-panel .jc-track{position:absolute;top:46px;bottom:26px;width:16px;border-radius:10px;background:#101317;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04), inset 0 6px 12px rgba(0,0,0,.45)}
-#jc-thrust-panel .jc-track.left{left:28px} #jc-thrust-panel .jc-track.right{right:28px}
-#jc-thrust-panel .jc-handle{position:absolute;left:-10px;width:36px;height:20px;border-radius:8px;background:linear-gradient(180deg,#2f3744 0%,#0e1117 100%);
-  box-shadow:inset 0 1px 3px rgba(255,255,255,.14),0 2px 6px rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.08)}
-#jc-thrust-panel .jc-stick{position:absolute;left:6px;right:6px;bottom:-52px;height:66px;background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(0,0,0,.12));border-radius:0 0 10px 10px;opacity:.18}
-#jc-thrust-panel .jc-label,#jc-thrust-panel .jc-line{position:absolute;left:0;right:0}
-#jc-thrust-panel .jc-label{pointer-events:none;color:#f4fbff;text-align:center;font-family:system-ui,sans-serif;font-weight:900;text-shadow:0 1px 2px rgba(0,0,0,.35)}
-#jc-thrust-panel .jc-label.toga{top:72px;font-size:clamp(11px,2.8vw,16px);line-height:1.0}
-#jc-thrust-panel .jc-label.toga .flx{display:block;color:#ffc531}
-#jc-thrust-panel .jc-label.cl{top:142px;font-size:clamp(11px,2.8vw,16px)}
-#jc-thrust-panel .jc-label.idle{top:219px;font-size:clamp(11px,2.8vw,16px)}
-#jc-thrust-panel .jc-label.rev{top:252px;font-size:clamp(9px,2.2vw,12px);color:#ffcb80;opacity:.9}
-#jc-thrust-panel .jc-line{height:4px}
-#jc-thrust-panel .jc-line i{position:absolute;left:50%;transform:translateX(-50%);display:block;height:4px;border-radius:999px;width:38px;background:#53f6ff;box-shadow:0 0 6px rgba(83,246,255,.65)}
-#jc-thrust-panel .jc-line.toga{top:68px} #jc-thrust-panel .jc-line.toga2{top:112px} #jc-thrust-panel .jc-line.cl{top:154px} #jc-thrust-panel .jc-line.idle{top:233px} #jc-thrust-panel .jc-line.rev{top:266px}
-#jc-thrust-panel .jc-line.cl i{background:#f2a423} #jc-thrust-panel .jc-line.rev i{background:#ff9a4a;width:32px;opacity:.85}
-#jc-thrust-panel .jc-readout{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);min-width:72px;text-align:center;padding:4px 8px;border-radius:12px;
-  background:rgba(10,18,30,.5);color:#dff7ff;font:800 clamp(9px,2.1vw,12px)/1 system-ui,sans-serif;letter-spacing:.08em;border:1px solid rgba(112,170,255,.22)}
-#jc-thrust-panel .jc-readout.rev{color:#ffd3a3;border-color:rgba(255,170,88,.4)}
-#jc-thrust-panel .jc-active{filter:drop-shadow(0 0 7px rgba(255,208,91,.4))}
-#jc-thrust-panel .jc-tap{position:absolute;left:50%;transform:translateX(-50%);width:78px;height:26px;border-radius:10px;background:transparent;border:0;box-shadow:none;color:transparent;cursor:pointer;-webkit-tap-highlight-color:transparent}
-#jc-thrust-panel .tap-toga{top:69px}.tap-cl{top:141px}.tap-idle{top:218px}.tap-rev{top:249px;width:62px;height:22px}
-@media (max-width:480px){#jc-thrust-panel{left:8px;bottom:9vh}#jc-thrust-panel .jc-thrust-wrap{width:140px;height:258px}}
-</style>
-<script id="jc-thrust-sim-ui">
-(()=>{
-  if(document.getElementById('jc-thrust-panel')) return;
-  const panel=document.createElement('div');
-  panel.id='jc-thrust-panel';
-  panel.innerHTML=`<div class="jc-thrust-wrap" aria-label="Thrust levers">
-    <div class="jc-title">THRUST</div>
-    <div class="jc-track left"><div class="jc-handle" data-handle="l"></div><div class="jc-stick"></div></div>
-    <div class="jc-track right"><div class="jc-handle" data-handle="r"></div><div class="jc-stick"></div></div>
-    <div class="jc-line toga"><i></i></div><div class="jc-line toga2"><i></i></div>
-    <div class="jc-line cl"><i></i></div><div class="jc-line idle"><i></i></div><div class="jc-line rev"><i></i></div>
-    <div class="jc-label toga">TOGA<span class="flx">FLX</span></div>
-    <div class="jc-label cl">CL</div>
-    <div class="jc-label idle">IDLE</div>
-    <div class="jc-label rev">REV</div>
-    <button class="jc-tap tap-toga" data-set="1" aria-label="Set TOGA"></button>
-    <button class="jc-tap tap-cl" data-set="0.62" aria-label="Set CL"></button>
-    <button class="jc-tap tap-idle" data-set="0" aria-label="Set IDLE"></button>
-    <button class="jc-tap tap-rev" data-set="-0.28" aria-label="Set REV"></button>
-    <div class="jc-readout">IDLE</div>
-  </div>`;
-  document.body.append(panel);
-  const wrap=panel.querySelector('.jc-thrust-wrap');
-  const readout=panel.querySelector('.jc-readout');
-  const handles=[...panel.querySelectorAll('.jc-handle')];
-  const lineEls={toga:[...panel.querySelectorAll('.jc-line.toga,.jc-line.toga2')],cl:[panel.querySelector('.jc-line.cl')],idle:[panel.querySelector('.jc-line.idle')],rev:[panel.querySelector('.jc-line.rev')]};
-  const detents={rev:-0.28,idle:0,cl:0.62,flx:0.82,toga:1};
-  let dragging=false;
-  function leverToY(v){ const top=46, bottom=233; const min=-0.28,max=1; return top + (max-v)*(bottom-top)/(max-min); }
-  function yToLever(y){ const top=46, bottom=233; const min=-0.28,max=1; const clamped=Math.max(top,Math.min(bottom,y)); return max - (clamped-top)*(max-min)/(bottom-top); }
-  function labelFor(info){ if(!info) return 'IDLE'; if(info.reverseActive||info.lever<0) return 'REV'; if(info.lever>=0.93) return 'TOGA'; if(info.lever>=0.72) return 'FLX'; if(info.lever>=0.22) return 'CL'; return 'IDLE'; }
-  function setActive(kind){ ['toga','cl','idle','rev'].forEach(k=>lineEls[k].forEach(el=>el.classList.toggle('jc-active',k===kind))); }
-  function update(){
-    const api=window.__game, info=api&&api.throttleInfo?api.throttleInfo():null;
-    const visible=!!(info && info.state==='play' && !info.paused && !info.mcdu);
-    panel.style.display=visible?'block':'none';
-    if(!visible || !info) return;
-    const y=leverToY(info.reverseActive?-0.28:info.lever);
-    handles.forEach(h=>h.style.top=Math.round(y-10)+'px');
-    const lbl=labelFor(info);
-    readout.textContent=lbl;
-    readout.classList.toggle('rev', lbl==='REV');
-    setActive(lbl==='TOGA'||lbl==='FLX'?'toga':lbl.toLowerCase());
-    panel.querySelector('.jc-label.rev').style.opacity=info.reverseEligible||info.reverseActive?'1':'.38';
-  }
-  function apply(v,snap){ const api=window.__game; if(api&&api.setThrottleLever) api.setThrottleLever(v,{snap:!!snap}); update(); }
-  function startDrag(e){ dragging=true; wrap.setPointerCapture?.(e.pointerId); moveDrag(e); e.preventDefault(); }
-  function moveDrag(e){ if(!dragging) return; const r=wrap.getBoundingClientRect(); const v=yToLever(e.clientY-r.top); apply(v,false); }
-  function endDrag(e){ dragging=false; wrap.releasePointerCapture?.(e.pointerId); const api=window.__game; const info=api&&api.throttleInfo?api.throttleInfo():null; if(info) apply(info.reverseActive?-0.28:info.lever,true); }
-  wrap.addEventListener('pointerdown',e=>{ if(e.target.closest('[data-set]')) return; startDrag(e); });
-  wrap.addEventListener('pointermove',moveDrag); ['pointerup','pointercancel','pointerleave'].forEach(ev=>wrap.addEventListener(ev,endDrag));
-  panel.querySelectorAll('[data-set]').forEach(btn=>btn.addEventListener('click',e=>{ e.preventDefault(); apply(parseFloat(btn.dataset.set),true); }));
-  document.addEventListener('keydown',e=>{ if(window.__game?.mcduIsOpen?.()) return; if(e.key==='F4') {apply(1,true);e.preventDefault();} if(e.key==='F3'){apply(0.82,true);e.preventDefault();} if(e.key==='F2'){apply(0.62,true);e.preventDefault();} if(e.key==='F1'){apply(0,true);e.preventDefault();} });
-  setInterval(update,180); window.addEventListener('resize',update); update();
 })();
 </script>
 
