@@ -5607,6 +5607,12 @@ window.__holdHud={update};
  #jc-settings-modal h2{font-size:18px}
  #jc-settings-modal .jc-settings-tab{font-size:12px}
 }
+
+/* Keep Settings immediately beside the Pause chip instead of the engine switches. */
+#jc-settings-gear{position:fixed;width:34px!important;height:32px!important;min-width:34px!important;
+  border-radius:9px!important;font-size:19px!important;right:auto!important;bottom:auto!important;
+  touch-action:manipulation!important;transform:none!important}
+@media(max-width:480px){#jc-settings-gear{width:32px!important;height:30px!important;min-width:32px!important;font-size:18px!important}}
 </style>
 <script id="jc-unified-settings-script">
 (()=>{
@@ -5645,7 +5651,7 @@ window.__holdHud={update};
  const $=id=>shade.querySelector('#'+id);
  if(soundPanel){$('jc-settings-sound').appendChild(soundPanel);soundPanel.classList.add('open')}
  else $('jc-settings-sound').textContent='Sound controls are unavailable in this build.';
- let open=false,drag=null,moved=false,previousFocus=null;
+ let open=false,previousFocus=null;
  function select(tab){
   shade.querySelectorAll('.jc-settings-tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
   shade.querySelectorAll('.jc-settings-pane').forEach(p=>p.classList.toggle('show',p.id==='jc-settings-'+tab));
@@ -5666,26 +5672,7 @@ window.__holdHud={update};
   const old=previousFocus;previousFocus=null;
   if(old&&old!==document.body&&old.isConnected)old.focus();else gear.focus();
  }
- gear.addEventListener('pointerdown',e=>{
-  e.stopPropagation();const r=gear.getBoundingClientRect();drag={id:e.pointerId,x:e.clientX,y:e.clientY,
-   left:r.left,top:r.top};moved=false;try{gear.setPointerCapture(e.pointerId)}catch{}
- });
- gear.addEventListener('pointermove',e=>{
-  if(!drag||e.pointerId!==drag.id)return;
-  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-  if(Math.hypot(dx,dy)>6)moved=true;
-  if(!moved)return;
-  e.preventDefault();const left=Math.max(4,Math.min(window.innerWidth-gear.offsetWidth-4,drag.left+dx));
-  const top=Math.max(4,Math.min(window.innerHeight-gear.offsetHeight-4,drag.top+dy));
-  gear.style.left=Math.round(left)+'px';gear.style.top=Math.round(top)+'px';
-  gear.style.right='auto';gear.style.bottom='auto';
- });
- gear.addEventListener('pointerup',e=>{
-  if(!drag||e.pointerId!==drag.id)return;
-  drag=null;try{gear.releasePointerCapture(e.pointerId)}catch{}
-  if(moved){e.preventDefault();gear.dataset.suppressClick='1';}
- });
- gear.addEventListener('pointercancel',()=>{drag=null});
+ gear.addEventListener('pointerdown',e=>{e.stopPropagation()});
  gear.addEventListener('click',e=>{
   e.stopPropagation();if(gear.dataset.suppressClick==='1'){delete gear.dataset.suppressClick;return}
   open?hide():show();
@@ -5717,9 +5704,31 @@ window.__holdHud={update};
   }
  },true);
  // The single Settings icon does not cover the MCDU while entering flight data.
- setInterval(()=>{
-  gear.style.display=window.__game?.mcduIsOpen?.()&&!open?'none':'grid';
- },350);
+ function positionSettings(){
+   const mcduOpen=!!window.__game?.mcduIsOpen?.();
+   const visible=!mcduOpen||open;
+   gear.style.display=visible?'grid':'none';
+   if(!visible)return;
+   const pause=document.getElementById('btnPause');
+   const r=pause?.getBoundingClientRect();
+   const w=gear.offsetWidth||34,h=gear.offsetHeight||32;
+   // Pause lives in the upper-left cockpit toolbar on both mobile and desktop.
+   // Use its real on-screen position instead of hard-coded bottom coordinates.
+   let x=Math.max(8,innerWidth-w-12), y=12;
+   if(r&&r.width>0&&r.height>0&&getComputedStyle(pause).display!=='none'&&getComputedStyle(pause).visibility!=='hidden'){
+     x=r.right+7;
+     y=r.top+(r.height-h)/2;
+     if(x+w>innerWidth-6)x=r.left-w-7;
+   }
+   x=Math.max(6,Math.min(innerWidth-w-6,x));
+   y=Math.max(6,Math.min(innerHeight-h-6,y));
+   const left=Math.round(x)+'px',top=Math.round(y)+'px';
+   if(gear.style.left!==left)gear.style.left=left;
+   if(gear.style.top!==top)gear.style.top=top;
+ }
+ setInterval(positionSettings,250);
+ window.addEventListener('resize',positionSettings);
+ setTimeout(positionSettings,100);
  // Hide older floating controls even if another script tries to reposition them.
  if(oldSound){oldSound.tabIndex=-1;oldSound.setAttribute('aria-hidden','true')}
  if(oldUsb){oldUsb.tabIndex=-1;oldUsb.setAttribute('aria-hidden','true')}
@@ -6017,132 +6026,161 @@ window.__holdHud={update};
 
 
 <style id="jc-ecam-pulldown-style">
-/* Native EWD and MCDU now have reserved space. Hide redundant large buttons,
-   but keep their original pointerdown handlers for the two compact selectors. */
-#ui #btnGear,#ui #btnFlaps{visibility:hidden !important;pointer-events:none !important}
-#ui #btnEng1,#ui #btnEng2{font-size:calc(6px * var(--s,1)) !important;line-height:1.1 !important}
-#jc-pulldown-stack{position:absolute;z-index:18;box-sizing:border-box;display:none;flex-direction:column;align-items:stretch;
-  gap:2px;pointer-events:auto;background:linear-gradient(180deg,#2c4067,#152b4c);border:1px solid #5c9abf;border-radius:5px;
-  padding:2px;box-shadow:0 2px 6px #0008;font-family:Consolas,Menlo,monospace;color:#ddf8ff;overflow:visible}
-#jc-pulldown-stack .jc-control{display:flex;flex:1 1 0;flex-direction:column;min-height:0;align-items:center;justify-content:center;gap:1px;width:100%}
-#jc-pulldown-stack .jc-label{font-size:9px;font-weight:900;line-height:1.1;color:#9beaff;text-align:center;white-space:nowrap}
-#jc-pulldown-stack .jc-control[data-mode="spoiler"] .jc-label{font-size:.86em;color:#ffd88c}
-#jc-pulldown-stack select{appearance:none;-webkit-appearance:none;box-sizing:border-box;display:block;width:100%;min-width:0;
-  height:34%;min-height:17px;margin:0;padding:1px 0;color:#e6f8ff;background:linear-gradient(180deg,#33465c,#19283f);
-  border:1px solid #85b1d1;border-radius:4px;text-align:center;text-align-last:center;font:900 10px/1.05 Consolas,Menlo,monospace;
-  cursor:pointer;pointer-events:auto;touch-action:manipulation}
-#jc-pulldown-stack select:focus{outline:2px solid #49d1ee;outline-offset:0}
-#jc-pulldown-stack .jc-pull-mark{width:68%;height:3px;border-radius:4px;background:#ffca64;box-shadow:0 0 5px #edb24c66;flex:0 0 auto}
-#jc-pulldown-stack .jc-control[data-state="DOWN"] .jc-pull-mark,
-#jc-pulldown-stack .jc-control[data-state="3"] .jc-pull-mark,
-#jc-pulldown-stack .jc-control[data-mode="spoiler"][data-state="1"] .jc-pull-mark{background:#6eeeb2}
-#jc-pulldown-stack .jc-control[data-mode="spoiler"][data-state="2"] .jc-pull-mark{background:#ffc86b}
-#jc-pulldown-stack [disabled]{opacity:.45;cursor:not-allowed}
-#jc-ecam-fuel{animation:none !important;transition:none !important;will-change:auto !important}
+/* Compact Airbus-inspired three-position rocker switches between EWD and MCDU.
+   Original engine and spoiler physics remain authoritative. */
+#ui #btnGear,#ui #btnFlaps{visibility:hidden!important;pointer-events:none!important}
+#jc-pulldown-stack{position:absolute;z-index:18;box-sizing:border-box;display:none;
+  flex-direction:column;gap:1px;padding:2px;border:1px solid #548ca9;border-radius:6px;
+  background:linear-gradient(180deg,#263c61,#12283f);box-shadow:0 3px 8px #0008;
+  color:#d4edff;font-family:Consolas,Menlo,monospace;pointer-events:auto;overflow:hidden}
+#jc-pulldown-stack .jc-control{display:flex;flex:1 1 0;min-height:0;flex-direction:column;
+  align-items:center;justify-content:space-evenly;border-bottom:1px solid #3a5b74;gap:1px}
+#jc-pulldown-stack .jc-control:last-child{border-bottom:0}
+#jc-pulldown-stack .jc-label{font-size:9px;font-weight:900;line-height:1.05;color:#89e6fa;
+  text-align:center;white-space:nowrap;letter-spacing:-.2px}
+#jc-pulldown-stack [data-mode="spoiler"] .jc-label{color:#ffd480}
+#jc-pulldown-stack .jc-switch{display:flex;align-items:center;justify-content:center;flex:1 1 auto;min-height:22px;
+  width:100%;padding:0;border:0;background:transparent;cursor:pointer;touch-action:none;user-select:none;
+  -webkit-tap-highlight-color:transparent;position:relative}
+#jc-pulldown-stack .jc-switch:focus-visible{outline:2px solid #5ce8ff;outline-offset:0;border-radius:5px}
+#jc-pulldown-stack .jc-switch-track{position:relative;height:100%;min-height:18px;max-height:58px;
+  width:15px;border-radius:8px;border:1px solid #5888a3;background:#07192c;box-shadow:inset 0 2px 6px #000a}
+#jc-pulldown-stack .jc-switch-track::before{content:"";position:absolute;inset:2px 6px;
+  border-left:1px solid #5c7288;pointer-events:none}
+#jc-pulldown-stack .jc-switch-thumb{position:absolute;left:50%;top:0%;transform:translate(-50%,-50%);
+  width:26px;height:11px;border-radius:5px;background:linear-gradient(#a7bfd2 0%,#607891 45%,#273b50 100%);
+  border:1px solid #bfd8e8;box-shadow:0 2px 5px #000c;pointer-events:none;transition:top .1s ease-out}
+#jc-pulldown-stack .jc-value{font:900 10px/1 Consolas,Menlo,monospace;color:#92f1b3;text-align:center;
+  white-space:nowrap;min-height:11px}
+#jc-pulldown-stack .jc-control[data-mode="spoiler"][data-value="2"] .jc-value{color:#ffd480}
+#jc-pulldown-stack .jc-control[data-mode="gear"][data-value="0"] .jc-value{color:#ffd480}
+#jc-ecam-fuel{animation:none!important;transition:none!important}
 </style>
 <script id="jc-ecam-pulldown-script">
 (()=>{
-  'use strict';
-  if(window.__jcEcamPullDownInstalled) return;
-  window.__jcEcamPullDownInstalled=true;
-  const ui=document.getElementById('ui');
-  if(!ui)return;
-  const wrap=document.createElement('div');
-  wrap.id='jc-pulldown-stack';
-  wrap.setAttribute('role','group');
-  wrap.setAttribute('aria-label','Gear, flaps and spoiler selector controls');
-  wrap.innerHTML=`
-    <label class="jc-control" data-mode="gear"><span class="jc-label">GEAR</span>
-       <select id="jc-gear-pull" aria-label="Pull down landing gear"><option value="0">UP</option><option value="1">DN</option></select>
-       <span class="jc-pull-mark"></span></label>
-    <label class="jc-control" data-mode="flaps"><span class="jc-label">FLAP</span>
-       <select id="jc-flaps-pull" aria-label="Select flap extension"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
-       <span class="jc-pull-mark"></span></label>
-    <label class="jc-control" data-mode="spoiler"><span class="jc-label">SPOILER</span>
-       <select id="jc-spoiler-pull" aria-label="Select speedbrake or ground spoiler mode"><option value="0">OFF</option><option value="1">ARM</option><option value="2">DEP</option></select>
-       <span class="jc-pull-mark"></span></label>`;
-  ui.appendChild(wrap);
-  const gearSel=wrap.querySelector('#jc-gear-pull');
-  const flapsSel=wrap.querySelector('#jc-flaps-pull');
-  const spoilerSel=wrap.querySelector('#jc-spoiler-pull');
-  const gearNative=document.getElementById('btnGear');
-  const flapsNative=document.getElementById('btnFlaps');
-  function state(){
-    try{return window.__game?.info?.()||null;}catch{return null;}
-  }
-  function engage(btn){
-    if(!btn)return false;
-    // Original Jetline input uses pointerdown (not click). Dispatch the same event
-    // so that we reuse the game's onGear/onFlaps logic and safety rules.
-    btn.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerType:'mouse',isPrimary:true}));
-    return true;
-  }
-  let changing=false;
-  gearSel.addEventListener('change',()=>{
-    if(changing)return;
-    const s=state(),current=Number(s?.plane?.gear),desired=Number(gearSel.value);
-    if(s?.st==='play'&&Number.isFinite(current)&&current!==desired){engage(gearNative);}
-    update();
-  });
-  flapsSel.addEventListener('change',()=>{
-    if(changing)return;
-    const s=state(),current=Number(s?.plane?.flaps),desired=Number(flapsSel.value);
-    if(s?.st==='play'&&Number.isFinite(current)){
-      // The native flap control cycles through detents depending on flight phase.
-      // Try only the allowed transitions and never fabricate a flap value.
-      for(let i=0;i<4;i++){
-        const snap=state(),v=Number(snap?.plane?.flaps);
-        if(!Number.isFinite(v)||Math.round(v)===desired)break;
-        engage(flapsNative);
-        const next=Number(state()?.plane?.flaps);
-        if(!Number.isFinite(next)||next===v)break;
-      }
-    }
-    update();
-  });
-  spoilerSel.addEventListener('change',()=>{
-    if(changing)return;
-    const mode=Number(spoilerSel.value);
-    window.__game?.setSpoilers?.(mode);
-    update();
-  });
-  let lastGeo='';
-  function update(){
-    const ewd=ui.querySelector('.disp-ewd'),mcdu=ui.querySelector('.disp-mcdu');
-    const g=window.__game;
-    const s=state();
-    const active=!!(ewd&&mcdu&&s&&s.st==='play'&&!g?.mcduIsOpen?.());
-    if(!active){if(wrap.style.display!=='none')wrap.style.display='none';return;}
-    const left=Math.round(ewd.offsetLeft+ewd.offsetWidth+2);
-    const right=Math.round(mcdu.offsetLeft-2);
-    const width=right-left;
-    const top=Math.round(ewd.offsetTop+4);
-    const height=Math.round(Math.min(ewd.offsetHeight-8,mcdu.offsetHeight-8));
-    if(width<23||height<60){if(wrap.style.display!=='none')wrap.style.display='none';return;}
-    const geometry=`${left}:${top}:${width}:${height}`;
-    if(geometry!==lastGeo){
-      wrap.style.left=left+'px';wrap.style.top=top+'px';wrap.style.width=width+'px';wrap.style.height=height+'px';
-      const f=Math.max(8,Math.min(12,width*.25));
-      for(const el of wrap.querySelectorAll('.jc-label'))el.style.fontSize=f+'px';
-      for(const el of wrap.querySelectorAll('select'))el.style.fontSize=Math.max(9,Math.min(12,f))+'px';
-      lastGeo=geometry;
-    }
-    if(wrap.style.display!=='flex')wrap.style.display='flex';
-    const gear=Number(s.plane?.gear),flaps=Number(s.plane?.flaps);
-    changing=true;
-    if(Number.isFinite(gear))gearSel.value=gear>=.5?'1':'0';
-    if(Number.isFinite(flaps))flapsSel.value=String(Math.max(0,Math.min(3,Math.round(flaps))));
-    const spoiler=Number(s.plane?.spoilerMode);
-    if(Number.isFinite(spoiler))spoilerSel.value=String(Math.max(0,Math.min(2,Math.round(spoiler))));
-    changing=false;
-    wrap.querySelector('[data-mode="gear"]').dataset.state=gearSel.value==='1'?'DOWN':'UP';
-    wrap.querySelector('[data-mode="flaps"]').dataset.state=flapsSel.value;
-    wrap.querySelector('[data-mode="spoiler"]').dataset.state=spoilerSel.value;
-  }
-  const updateSafe=()=>{try{update()}catch(e){console.warn('Gear/flap panel update',e)}};
-  setInterval(updateSafe,250);
-  window.addEventListener('resize',()=>{lastGeo='';updateSafe()});
-  setTimeout(updateSafe,350);
+ 'use strict';
+ if(window.__jcEcamPullDownInstalled)return;
+ window.__jcEcamPullDownInstalled=true;
+ const ui=document.getElementById('ui');if(!ui)return;
+ const wrap=document.createElement('div');wrap.id='jc-pulldown-stack';
+ wrap.setAttribute('role','group');wrap.setAttribute('aria-label','Landing gear, flaps and spoilers');
+ const modes=[
+   {id:'gear',label:'GEAR',values:['UP','DN']},
+   {id:'flaps',label:'FLAP',values:['0','1','2','3']},
+   {id:'spoiler',label:'SPLR',values:['OFF','ARM','DEP']}
+ ];
+ const controls={};
+ for(const m of modes){
+   const box=document.createElement('div');box.className='jc-control';box.dataset.mode=m.id;
+   const cap=document.createElement('span');cap.className='jc-label';cap.textContent=m.label;
+   const button=document.createElement('button');button.type='button';button.className='jc-switch';
+   button.id='jc-'+m.id+'-toggle';button.setAttribute('role','slider');
+   button.setAttribute('aria-label',m.label+' position');button.setAttribute('aria-valuemin','0');
+   button.setAttribute('aria-valuemax',String(m.values.length-1));
+   button.innerHTML='<span class="jc-switch-track"><span class="jc-switch-thumb"></span></span>';
+   const value=document.createElement('span');value.className='jc-value';value.textContent=m.values[0];
+   box.append(cap,button,value);wrap.append(box);
+   controls[m.id]={...m,box,button,thumb:button.querySelector('.jc-switch-thumb'),value};
+ }
+ ui.append(wrap);
+ const nativeGear=document.getElementById('btnGear');
+ const nativeFlaps=document.getElementById('btnFlaps');
+ const state=()=>{try{return window.__game?.info?.()||null}catch{return null}};
+ function engage(el){
+   if(!el)return false;
+   el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerType:'mouse',isPrimary:true}));
+   return true;
+ }
+ function read(id,s){
+   if(id==='gear')return Math.min(1,Math.max(0,Math.round(Number(s?.plane?.gear)||0)));
+   if(id==='flaps')return Math.min(3,Math.max(0,Math.round(Number(s?.plane?.flaps)||0)));
+   return Math.min(2,Math.max(0,Math.round(Number(s?.plane?.spoilerMode)||0)));
+ }
+ function setPosition(id,desired){
+   const s=state();if(s?.st!=='play'||window.__game?.mcduIsOpen?.())return false;
+   const ctl=controls[id],target=Math.max(0,Math.min(ctl.values.length-1,Math.round(desired)));
+   let current=read(id,s);if(current===target)return true;
+   if(id==='gear')engage(nativeGear);
+   else if(id==='flaps'){
+     // The simulator's native FLAP command cycles allowed detents by flight phase.
+     // Stop as soon as the requested position is reached or the cycle repeats.
+     const seen=new Set();
+     for(let n=0;n<4;n++){
+       current=read(id,state());if(current===target||seen.has(current))break;
+       seen.add(current);engage(nativeFlaps);
+     }
+   }else if(id==='spoiler')window.__game?.setSpoilers?.(target);
+   sync();return read(id,state())===target;
+ }
+ function sync(){
+   const s=state();if(!s)return;
+   for(const c of Object.values(controls)){
+     const num=read(c.id,s),pct=c.values.length<2?0:100*num/(c.values.length-1);
+     const t=pct.toFixed(2)+'%';if(c.thumb.style.top!==t)c.thumb.style.top=t;
+     const label=c.values[num];if(c.value.textContent!==label)c.value.textContent=label;
+     c.box.dataset.value=String(num);
+     c.button.setAttribute('aria-valuenow',String(num));
+     c.button.setAttribute('aria-valuetext',label);
+   }
+ }
+ for(const c of Object.values(controls)){
+   let down=null,suppressClick=false;
+   c.button.addEventListener('pointerdown',e=>{
+     e.stopPropagation();down={id:e.pointerId,y:e.clientY};
+     try{c.button.setPointerCapture(e.pointerId)}catch{}
+   });
+   c.button.addEventListener('pointerup',e=>{
+     e.stopPropagation();if(!down||down.id!==e.pointerId)return;
+     if(Math.abs(e.clientY-down.y)>7){
+       const rect=c.button.querySelector('.jc-switch-track').getBoundingClientRect();
+       const fraction=Math.max(0,Math.min(1,(e.clientY-rect.top)/Math.max(1,rect.height)));
+       setPosition(c.id,Math.round(fraction*(c.values.length-1)));
+       suppressClick=true;
+     }
+     down=null;
+     try{c.button.releasePointerCapture(e.pointerId)}catch{}
+   });
+   c.button.addEventListener('pointercancel',()=>{down=null});
+   c.button.addEventListener('click',e=>{
+     e.stopPropagation();if(suppressClick){suppressClick=false;return}
+     setPosition(c.id,(read(c.id,state())+1)%c.values.length);
+   });
+   c.button.addEventListener('keydown',e=>{
+     let desired=read(c.id,state());
+     if(e.key==='ArrowDown'||e.key==='ArrowRight')desired++;
+     else if(e.key==='ArrowUp'||e.key==='ArrowLeft')desired--;
+     else if(e.key==='Home')desired=0;
+     else if(e.key==='End')desired=c.values.length-1;
+     else return;
+     e.preventDefault();e.stopPropagation();setPosition(c.id,desired);
+   });
+ }
+ let lastGeom='';
+ function update(){
+   const ewd=ui.querySelector('.disp-ewd'),mcdu=ui.querySelector('.disp-mcdu');
+   const s=state(),g=window.__game;
+   const active=!!(ewd&&mcdu&&s?.st==='play'&&!g?.mcduIsOpen?.()&&!window.__jcGeneralSettings?.isOpen?.());
+   if(!active){wrap.style.display='none';return}
+   const left=Math.round(ewd.offsetLeft+ewd.offsetWidth+2),right=Math.round(mcdu.offsetLeft-2);
+   const width=right-left,top=Math.round(ewd.offsetTop+3);
+   const height=Math.round(Math.min(ewd.offsetHeight-6,mcdu.offsetHeight-6));
+   if(width<22||height<105){wrap.style.display='none';return}
+   const geom=`${left},${top},${width},${height}`;
+   if(geom!==lastGeom){
+     Object.assign(wrap.style,{left:left+'px',top:top+'px',width:width+'px',height:height+'px'});
+     const font=Math.max(7,Math.min(10,width*.23));
+     for(const cap of wrap.querySelectorAll('.jc-label'))cap.style.fontSize=font+'px';
+     for(const value of wrap.querySelectorAll('.jc-value'))value.style.fontSize=font+'px';
+     lastGeom=geom;
+   }
+   if(wrap.style.display!=='flex')wrap.style.display='flex';
+   sync();
+ }
+ const safeUpdate=()=>{try{update()}catch(e){console.warn('Toggle controls',e)}};
+ setInterval(safeUpdate,250);
+ window.addEventListener('resize',()=>{lastGeom='';safeUpdate()});
+ setTimeout(safeUpdate,250);
+ window.__jcCockpitToggles={setPosition,sync,state};
 })();
 </script>
 
