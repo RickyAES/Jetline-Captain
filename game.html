@@ -5733,6 +5733,17 @@ window.__holdHud={update};
 #jc-ecam-alert .jc-ecam-msg.amber{color:#ffc875;}
 #jc-ecam-alert .jc-ecam-msg.green{color:#88eeb4;}
 #jc-ecam-alert .jc-ecam-msg.cyan{color:#7fccee;}
+
+#jc-ecam-alert{overflow:auto}
+#jc-ecam-alert .jc-ecam-msgs{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
+#jc-ecam-alert .jc-ecam-list{display:flex;flex-direction:column;gap:2px;border-top:1px solid #2f6178;padding-top:4px;margin-top:3px}
+#jc-ecam-alert .jc-ecam-step{display:grid;grid-template-columns:14px 1fr auto;gap:4px;align-items:center;line-height:1.25;padding:1px 0;white-space:normal}
+#jc-ecam-alert .jc-ecam-step .mark{font-weight:900;color:#ffc875;text-align:center}
+#jc-ecam-alert .jc-ecam-step.done .mark{color:#88eeb4}
+#jc-ecam-alert .jc-ecam-step .name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#jc-ecam-alert .jc-ecam-step .kind{font-size:8px;color:#9ccfe0}
+#ui #btnEng1,#ui #btnEng2{font-size:calc(5.5px * var(--s,1)) !important;line-height:1.05 !important;z-index:18 !important}
+
 #jc-settings-modal .jc-settings-tabs{grid-template-columns:repeat(4,minmax(0,1fr));}
 #jc-settings-modal .jc-settings-tab{font-size:clamp(9px,2.3vw,12px);padding:8px 3px;overflow-wrap:anywhere;}
 #jc-settings-checklist .jc-fault-box{border:1px solid #3c607e;background:#091d31;border-radius:9px;padding:9px;margin:10px 0;color:#abdfec;font:800 11px/1.45 system-ui,sans-serif}
@@ -5769,7 +5780,7 @@ window.__holdHud={update};
  if(!ui || !settings)return;
  const $=id=>document.getElementById(id);
  const alert=document.createElement('div');alert.id='jc-ecam-alert';
- alert.innerHTML='<div class="jc-ecam-head"><span class="jc-ecam-title">ECAM / CHECK</span><button class="jc-ecam-open" type="button">CHECKLIST</button></div><div class="jc-ecam-msg green">SYSTEMS NORMAL</div><div class="jc-ecam-msg cyan">OPEN CHECKLIST →</div>';
+ alert.innerHTML='<div class="jc-ecam-head"><span class="jc-ecam-title">ECAM / CHECK</span><button class="jc-ecam-open" type="button">FULL</button></div><div class="jc-ecam-msgs"><div class="jc-ecam-msg green">SYSTEMS NORMAL</div><div class="jc-ecam-msg cyan">CHECKLIST READY</div></div><div class="jc-ecam-list" aria-live="off"></div>';
  ui.appendChild(alert);
  const tablist=settings.querySelector('.jc-settings-tabs');
  const tab=document.createElement('button');tab.type='button';tab.className='jc-settings-tab';
@@ -5941,22 +5952,40 @@ window.__holdHud={update};
   const show=ewd.offsetWidth>80 && (s.st==='play'||s.st==='intro')&&!game.mcduIsOpen?.();
   alert.style.display=show?'block':'none';
   if(!show)return;
-  // position within ECAM's otherwise blank lower-right quadrant
+  // expanded ECAM/checklist area uses the former ENG switch footprint as well
   const w=ewd.offsetWidth,h=ewd.offsetHeight;
-  alert.style.left=Math.round(ewd.offsetLeft+w*.54)+'px';
-  alert.style.top=Math.round(ewd.offsetTop+h*.70)+'px';
-  alert.style.width=Math.floor(w*.44)+'px';
-  alert.style.maxHeight=Math.floor(h*.27)+'px';
+  const fuelHud=document.getElementById('jc-ecam-fuel');
+  const fuelBottom=(fuelHud&&fuelHud.style.display!=='none')?(fuelHud.offsetTop+fuelHud.offsetHeight):(ewd.offsetTop+h+2);
+  const top=Math.round(ewd.offsetTop+h*.58);
+  const bottom=Math.round(fuelBottom+82);
+  alert.style.left=Math.round(ewd.offsetLeft)+'px';
+  alert.style.top=top+'px';
+  alert.style.width=Math.floor(w)+'px';
+  alert.style.height=Math.max(86,bottom-top)+'px';
+  alert.style.maxHeight=Math.max(86,bottom-top)+'px';
   const status=stageProgress(suggest,s);
   alert.querySelector('.jc-ecam-title').textContent=`${suggest} ${status.done}/${status.total}${alertsFor(s).length?' !'+alertsFor(s).length:''}`;
   const msgs=alertsFor(s);
   const nodes=[...alert.querySelectorAll('.jc-ecam-msg')];
-  // Cycle among all active faults, two at a time, without losing the full list.
-  // The checklist panel lists every active fault concurrently.
   const first=msgs.length>2?(Math.floor(Date.now()/3800)*2)%msgs.length:0;
   const showMsgs=msgs.length?msgs.length===1?msgs:[msgs[first],msgs[(first+1)%msgs.length]]:
-    [{level:'green',text:'SYSTEMS NORMAL'},{level:'cyan',text:'SELECT CHECKLIST'}];
+    [{level:'green',text:'SYSTEMS NORMAL'},{level:'cyan',text:'CHECKLIST DISPLAYED'}];
   nodes.forEach((el,i)=>{let x=showMsgs[i];el.style.display=x?'block':'none';if(x){el.className='jc-ecam-msg '+x.level;el.textContent=x.text;}});
+  const listBox=alert.querySelector('.jc-ecam-list');
+  if(listBox){
+    listBox.replaceChildren();
+    const items=getItems(suggest);
+    items.forEach((item,idx)=>{
+      const [label,auto]=item;
+      const done=isDone(suggest,idx,s);
+      const row=document.createElement('div');
+      row.className='jc-ecam-step'+(done?' done':'');
+      const mark=document.createElement('span'); mark.className='mark'; mark.textContent=done?'✓':'•';
+      const name=document.createElement('span'); name.className='name'; name.textContent=label;
+      const kind=document.createElement('span'); kind.className='kind'; kind.textContent=auto?'AUTO':'MAN';
+      row.append(mark,name,kind); listBox.appendChild(row);
+    });
+  }
   alert.title=msgs.length?msgs.map(x=>x.text).join(' · '):'Checklist and simulator status';
  }
  setInterval(update,1200);
@@ -6080,6 +6109,45 @@ window.__holdHud={update};
   setInterval(updateSafe,250);
   window.addEventListener('resize',()=>{lastGeo='';updateSafe()});
   setTimeout(updateSafe,350);
+})();
+</script>
+
+
+<style id="jc-engine-relayout-style">
+#ui #btnEng1,#ui #btnEng2{min-width:64px !important;min-height:42px !important;padding:4px 5px !important;border-radius:8px !important;}
+</style>
+<script id="jc-engine-relayout-script">
+(()=>{
+  'use strict';
+  if(window.__jcEngineRelayoutInstalled) return;
+  window.__jcEngineRelayoutInstalled=true;
+  const ui=document.getElementById('ui');
+  const b1=document.getElementById('btnEng1');
+  const b2=document.getElementById('btnEng2');
+  if(!ui||!b1||!b2) return;
+  function place(btn,left,top,width,height){
+    btn.style.left=Math.round(left)+'px';
+    btn.style.top=Math.round(top)+'px';
+    btn.style.width=Math.round(width)+'px';
+    btn.style.height=Math.round(height)+'px';
+  }
+  function layout(){
+    const w=ui.clientWidth||0, h=ui.clientHeight||0;
+    if(!w||!h) return;
+    const bw=Math.max(60,Math.min(74,w*0.11));
+    const bh=Math.max(38,Math.min(50,h*0.075));
+    const gap=6;
+    const right=14;
+    const bottom=14;
+    const x=w-bw-right;
+    const y2=h-bh-bottom;
+    const y1=y2-bh-gap;
+    place(b1,x,y1,bw,bh);
+    place(b2,x,y2,bw,bh);
+  }
+  setInterval(layout,250);
+  window.addEventListener('resize',layout);
+  setTimeout(layout,300);
 })();
 </script>
 
