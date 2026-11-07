@@ -6148,239 +6148,203 @@ window.__holdHud={update};
 
 
 <style id="jc-reference-ecam-style">
-/* One consolidated E/WD; the old moving fuel and alert overlays are retired visually. */
-#jc-ecam-fuel,#jc-ecam-alert{display:none!important}
-#jc-ref-checklist{display:none!important;pointer-events:none!important}
-#jc-ref-ewd,#jc-ref-checklist{box-sizing:border-box;position:absolute;z-index:13;
-  background:#06141e;color:#a3efba;border:1px solid #46627a;border-radius:3px;
-  font-family:Consolas,"DejaVu Sans Mono",monospace;box-shadow:inset 0 0 0 1px rgba(58,190,178,.1);
-  overflow:hidden;display:none;white-space:nowrap; font-variant-numeric:tabular-nums}
-#jc-ref-ewd{pointer-events:none;display:none;flex-direction:column;font-size:calc(8px * var(--ec-k,1));}
-#jc-ref-ewd .ec-title{flex:0 0 10%;display:flex;align-items:center;justify-content:space-between;
-  padding:1px 3%;box-sizing:border-box;color:#a3ecf8;font-size:1.04em;letter-spacing:.04em;font-weight:900;
-  border-bottom:1px solid #193a4c}
-#jc-ref-ewd .ec-mode{font-size:.94em;color:#f7ce70}
-#jc-ref-ewd .ec-twins{flex:0 0 31%;display:grid;grid-template-columns:1fr .50fr 1fr;
-  min-height:0;align-items:center;text-align:center;border-bottom:1px solid #1c4753}
-#jc-ref-ewd .ec-gauge{height:93%;width:78%;max-width:100%;aspect-ratio:1.55;margin:auto;
-  border:calc(2px * var(--ec-k,1)) solid #8bced6;border-bottom-color:transparent;border-radius:55% 55% 28% 28%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;color:#c4ecf3;
-  box-sizing:border-box;position:relative}
-#jc-ref-ewd .ec-gauge:after{content:"";position:absolute;height:3px;width:45%;background:#5dea69;
-  left:25%;bottom:20%;transform:rotate(var(--gauge-needle,0deg));transform-origin:12% center;border-radius:2px;opacity:.95}
-#jc-ref-ewd .ec-gauge b{font-size:.88em;color:#eaf9ff;line-height:1.1}
-#jc-ref-ewd .ec-gauge strong{font-size:1.5em;color:#74ed78;line-height:1.05}
-#jc-ref-ewd .ec-gauge.failed strong{color:#ff7777}
-#jc-ref-ewd .ec-n1{font-size:1.5em;color:#e4f0f8;font-weight:900;}
-#jc-ref-ewd .ec-twin-row{flex:0 0 13%;display:grid;grid-template-columns:1fr .70fr 1fr;align-items:center;text-align:center;min-height:0}
-#jc-ref-ewd .ec-twin-row label{color:#9bd0e6;font-size:1em;font-weight:800}
-#jc-ref-ewd .ec-twin-row strong{color:#86eaac;font-size:1.1em;font-weight:900}
-#jc-ref-ewd .ec-mid{border-top:1px solid #1e4350;border-bottom:1px solid #1e4350;}
-#jc-ref-ewd .ec-mid strong{color:#8bdba8}
-#jc-ref-ewd .ec-fob{flex:0 0 14%;display:flex;align-items:center;gap:3%;padding:1px 3%;
-  box-sizing:border-box;border-top:1px solid #1c4753;font-weight:900;font-size:1.15em}
-#jc-ref-ewd .ec-fob .ec-fob-label{color:#a7dcea}
-#jc-ref-ewd .ec-fob b{color:#8cf09c;font-size:1.28em}
-#jc-ref-ewd .ec-fuel-track{flex:1;height:24%;border-radius:4px;background:#21424b;overflow:hidden;min-width:14px}
-#jc-ref-ewd .ec-fuel-track i{display:block;height:100%;background:#78efa1;width:100%}
-#jc-ref-ewd .ec-memo{flex:1;min-height:0;display:flex;align-items:center;gap:3px;padding:0 3%;overflow:hidden;
-  color:#90eac1;font-size:1.02em;font-weight:900;text-overflow:ellipsis;white-space:nowrap}
-#jc-ref-ewd .ec-memo.fault{color:#ffb870}
-#jc-ref-ewd .ec-memo.critical{color:#ff6565}
-#jc-ref-checklist{pointer-events:auto;display:none;flex-direction:column;gap:0;
-  font-size:calc(8px * var(--ec-k,1));}
-#jc-ref-checklist .ec-check-head{display:flex;flex:0 0 13%;align-items:center;justify-content:space-between;
- padding:1px 3%;font-size:1.03em;color:#c7f0f5;font-weight:900;border-bottom:1px solid #30505c}
-#jc-ref-checklist .ec-check-progress{color:#7fe3a6}
-#jc-ref-checklist .ec-checklist-main{display:flex;flex:1;min-height:0;}
-#jc-ref-checklist .ec-checklist-body{display:flex;flex:1;min-height:0;flex-direction:column;justify-content:space-around;
-  padding:2px 2%;gap:1px;}
-#jc-ref-checklist .ec-check-line{display:flex;align-items:center;gap:3px;min-height:0;line-height:1.18;
-  padding:1px 1%;border:0;background:transparent;color:#d2e9d9;text-align:left;
-  font:inherit;font-weight:800;cursor:pointer}
-#jc-ref-checklist .ec-check-line[disabled]{cursor:default;opacity:1}
-#jc-ref-checklist .ec-check-line .ec-c-mark{flex:0 0 1.1em;color:#ffca69}
-#jc-ref-checklist .ec-check-line.done .ec-c-mark{color:#70ebaa}
-#jc-ref-checklist .ec-check-line .ec-c-text{flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere}
-#jc-ref-checklist .ec-check-line .ec-c-type{font-size:.78em;color:#87bacd}
-#jc-ref-checklist .ec-secondary{display:none;flex:0 0 32%;flex-direction:column;border-left:1px solid #284f5b;padding:2px 2%;gap:5px;justify-content:center;box-sizing:border-box}
-#jc-ref-checklist.jc-landscape .ec-secondary{display:flex}
-#jc-ref-checklist .ec-secondary .ec-system-row{display:flex;flex-direction:column;gap:1px;font-size:.92em;color:#7dcee2}
-#jc-ref-checklist .ec-secondary .ec-system-row b{color:#8bebb2;font-size:1.1em}
-#jc-ref-checklist .ec-secondary .ec-system-row.warn b{color:#ffb775}
-#jc-ref-checklist.jc-portrait .ec-check-line .ec-c-text{white-space:nowrap;overflow:hidden;text-overflow:clip}
-#jc-ref-checklist.jc-portrait .ec-checklist-body{gap:0}
-#jc-ref-checklist .ec-status-list{flex:0 0 15%;border-top:1px solid #284f5b;padding:1px 3%;
- display:flex;gap:5px;align-items:center;justify-content:space-between;color:#8fd8e6;font-size:.88em;overflow:hidden}
-#jc-ref-checklist .ec-status-list .ec-warn{color:#ffbe71;font-weight:900}
-#ui #btnEng1,#ui #btnEng2{z-index:14!important;min-width:0!important;min-height:0!important;
-  font-size:12px!important;touch-action:manipulation!important;pointer-events:auto;}
+/* Compact reference-inspired ECAM. It NEVER grows beyond the native engine display.
+   Legacy fuel, fault and preflight-checklist overlays remain behind the new display. */
+#jc-ecam-fuel,#jc-ecam-alert,#jc-ref-checklist{display:none!important;pointer-events:none!important}
+#jc-ref-ewd{position:absolute;z-index:15;display:none;overflow:hidden;pointer-events:none;
+  box-sizing:border-box;border:1px solid #354f5b;border-radius:3px;
+  background:#020605;box-shadow:inset 0 0 0 1px #123a36;font-family:Consolas,Menlo,monospace}
+#jc-ref-ewd svg{display:block;width:100%;height:100%;overflow:hidden}
+#jc-ref-ewd text{font-family:Consolas,Menlo,"DejaVu Sans Mono",monospace;fill:#5ceb73;letter-spacing:.15px}
+#jc-ref-ewd .white{fill:#e4eced}
+#jc-ref-ewd .cyan{fill:#2ed8d8}
+#jc-ref-ewd .amber{fill:#ffc477}
+#jc-ref-ewd .red{fill:#ff6363}
+#jc-ref-ewd .mini{font-size:13px}
+#jc-ref-ewd .small{font-size:16px}
+#jc-ref-ewd .value{font-size:21px;font-weight:700}
+#jc-ref-ewd .label{font-size:18px;letter-spacing:1px}
+#jc-ref-ewd .darc{fill:none;stroke:#e0e8e8;stroke-width:2.2;stroke-linecap:round}
+#jc-ref-ewd .dred{fill:none;stroke:#d85855;stroke-width:3.3;stroke-linecap:round}
+#jc-ref-ewd .needle{stroke:#40eb75;stroke-width:3.2;stroke-linecap:round}
+#jc-ref-ewd .gauge-value-bg{fill:#050b07;stroke:#2f6d45;stroke-width:1}
+#jc-ref-ewd .rule{stroke:#627071;stroke-width:1.5}
+#ui #btnEng1,#ui #btnEng2{z-index:19!important;min-width:0!important;min-height:0!important;
+  box-sizing:border-box;touch-action:manipulation!important;pointer-events:auto}
 #ui #btnEng1 .pb-cap,#ui #btnEng2 .pb-cap{font-size:10px!important}
 #ui #btnEng1 .pb-state,#ui #btnEng2 .pb-state{font-size:10px!important}
 </style>
 <script id="jc-reference-ecam-script">
 (()=>{
  'use strict';
- if(window.__jcReferenceEcamReady)return;
+ if(window.__jcReferenceEcamReady) return;
  window.__jcReferenceEcamReady=true;
- const ui=document.getElementById('ui');if(!ui)return;
- const ewd=ui.querySelector('.disp-ewd'),mcdu=ui.querySelector('.disp-mcdu');
- const eng1=document.getElementById('btnEng1'),eng2=document.getElementById('btnEng2');
- if(!ewd||!mcdu||!eng1||!eng2)return;
- const main=document.createElement('section');main.id='jc-ref-ewd';main.setAttribute('aria-label','Jetline ECAM engine and fuel display');
- main.innerHTML=`
-   <div class="ec-title"><span>ENGINE PERFORMANCE · E/WD</span><span class="ec-mode" id="ec-ref-mode">SIM</span></div>
-   <div class="ec-twins">
-     <div class="ec-gauge" id="ec-ref-g1"><b>ENG 1</b><strong id="ec-ref-n1">—</strong></div>
-     <div class="ec-n1">N1<br>%</div>
-     <div class="ec-gauge" id="ec-ref-g2"><b>ENG 2</b><strong id="ec-ref-n2">—</strong></div>
-   </div>
-   <div class="ec-twin-row"><strong id="ec-ref-egt1">—</strong><label>EGT °C</label><strong id="ec-ref-egt2">—</strong></div>
-   <div class="ec-twin-row ec-mid"><strong id="ec-ref-n2a">—</strong><label>N2* %</label><strong id="ec-ref-n2b">—</strong></div>
-   <div class="ec-twin-row"><strong id="ec-ref-ff1">—</strong><label>FF* KG/H</label><strong id="ec-ref-ff2">—</strong></div>
-   <div class="ec-fob"><span class="ec-fob-label">FOB</span><b id="ec-ref-fob">—</b><span>KG</span><span class="ec-fuel-track"><i id="ec-ref-fuel-pct"></i></span></div>
-   <div class="ec-memo" id="ec-ref-memo">SIM ECAM · CHECKLIST</div>`;
- const extra=document.createElement('section');extra.id='jc-ref-checklist';
- extra.setAttribute('aria-label','Optional checklist, hidden from cockpit');extra.setAttribute('aria-hidden','true');
- extra.innerHTML='<div class="ec-check-head"><span id="ec-ref-stage">CHECKLIST</span><span class="ec-check-progress" id="ec-ref-progress">0/0</span></div><div class="ec-checklist-main"><div class="ec-checklist-body" id="ec-ref-items"></div><div class="ec-secondary"><div class="ec-system-row">T.O AUTO BRK<b>N/A</b></div><div class="ec-system-row">PARK BRK<b>N/A</b></div><div class="ec-system-row">PRED W/S<b>NOT MODELED</b></div><div class="ec-system-row">TCAS / TRAFFIC<b id="ec-ref-tcas2">SIM STBY</b></div></div></div><div class="ec-status-list"><span id="ec-ref-brake">BRK —</span><span id="ec-ref-tcas">TRAFFIC —</span><span id="ec-ref-flap">FLAP —</span></div>';
- ui.append(main,extra);
- const $=id=>document.getElementById(id);
- const els={n1:$('ec-ref-n1'),n1b:$('ec-ref-n2'),egt1:$('ec-ref-egt1'),egt2:$('ec-ref-egt2'),
-  n2a:$('ec-ref-n2a'),n2b:$('ec-ref-n2b'),ff1:$('ec-ref-ff1'),ff2:$('ec-ref-ff2'),
-  fob:$('ec-ref-fob'),bar:$('ec-ref-fuel-pct'),memo:$('ec-ref-memo'),mode:$('ec-ref-mode'),
-  stage:$('ec-ref-stage'),progress:$('ec-ref-progress'),items:$('ec-ref-items'),brake:$('ec-ref-brake'),
-  tcas:$('ec-ref-tcas'),tcas2:$('ec-ref-tcas2'),flap:$('ec-ref-flap'),g1:$('ec-ref-g1'),g2:$('ec-ref-g2')};
- const num=v=>Number.isFinite(Number(v))?Number(v):NaN;
- const fmt=(n,dec=0)=>Number.isFinite(n)?n.toFixed(dec):'—';
- const text=(el,value)=>{value=String(value);if(el.textContent!==value)el.textContent=value;};
- const shortLabels={
-   PREFLIGHT:['ROUTE / DEST','FUEL ONBOARD','FLT CTL CHECK','F-PLN / RWY','QNH CHECK','WX / BRIEF'],
-   START:['FUEL CHECK','PARK / AREA','CABIN / DOORS','ENG START CLR','ENG 1+2 ON'],
-   TAXI:['ENGINES ON','TAXI CLR','BRAKE / STEER','FLIGHT CTLS','T.O FLAPS','INSTRUMENTS'],
-   TAKEOFF:['ENGINES AVAIL','T.O FLAPS','FUEL CHECK','T.O RUNWAY','V-SPEEDS','T.O CLEARANCE'],
-   CLIMB:['GEAR UP','FLAPS UP','CLIMB POWER','FD / NAV'],
-   CRUISE:['ENGINES ON','FUEL RESERVE','ROUTE / ALT','WEATHER','ARRIVAL BRIEF'],
-   DESCENT:['ARRIVAL RWY','ARRIVAL FUEL','DESCENT CLR','QNH SET','APP SPEED / NAV'],
-   APPROACH:['ENGINES ON','GEAR DOWN','LDG FLAPS','APP SPEED','LDG BRIEF','LDG CLR'],
-   LANDING:['GEAR DOWN','LDG FLAPS','SPEED OK','SINK RATE','LDG CLR'],
-   AFTER:['REV STOW','FLAPS UP','RWY VACATED','AFTER LDG','PARK / STOP']
- };
- let lastGeometry='',lastItems='',lastState='';
- function placeEngineButtons(info,open){
-   const active=info?.st==='play'&&!open;
-   // Keep existing real engine switches, including pointer-down actions, but below MCDU.
-   for(const b of [eng1,eng2]){
-     const v=active?'visible':'hidden';if(b.style.visibility!==v)b.style.visibility=v;
-     b.style.pointerEvents=active?'auto':'none';
-   }
-   if(!active)return;
-   const px=Math.max(.52,ewd.offsetWidth/186);
-   const bw=Math.max(31,Math.min(56,35*px));
-   const bh=Math.max(23,Math.min(38,23*px));
-   const space=3;
-   const edge=4;
-   // Anchor to the right edge of the MCDU under its bottom edge, in the stick region.
-   const mcduRight=mcdu.offsetLeft+mcdu.offsetWidth;
-   let y=mcdu.offsetTop+mcdu.offsetHeight+Math.max(5,5*px);
-   const room=ui.clientHeight-y-edge;
-   if(room<2*bh+space){y=Math.max(mcdu.offsetTop+mcdu.offsetHeight+1,ui.clientHeight-2*bh-space-edge)}
-   const x=Math.max(ewd.offsetLeft+ewd.offsetWidth+10,Math.min(ui.clientWidth-bw-edge,mcduRight-bw-edge));
-   for(const [idx,b] of [eng1,eng2].entries()){
-     const top=Math.round(y+(bh+space)*idx);
-     const assignments={left:Math.round(x)+'px',top:top+'px',width:Math.round(bw)+'px',height:Math.round(bh)+'px',
-       padding:'2px',fontSize:Math.max(9,10*px)+'px',zIndex:'14'};
-     for(const [k,v] of Object.entries(assignments))if(b.style[k]!==v)b.style[k]=v;
-   }
+ const ui=document.getElementById('ui');
+ if(!ui)return;
+ const ewd=ui.querySelector('.disp-ewd');
+ const mcdu=ui.querySelector('.disp-mcdu');
+ const eng1=document.getElementById('btnEng1');
+ const eng2=document.getElementById('btnEng2');
+ if(!ewd||!mcdu)return;
+ const NS='http://www.w3.org/2000/svg';
+ const polar=(cx,cy,r,a)=>({x:cx+r*Math.cos(a*Math.PI/180),y:cy+r*Math.sin(a*Math.PI/180)});
+ function arc(cx,cy,r,first,last){
+   const a=polar(cx,cy,r,first),b=polar(cx,cy,r,last);
+   return `M${a.x.toFixed(2)} ${a.y.toFixed(2)} A${r} ${r} 0 ${last-first>180?1:0} 1 ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
  }
- function layout(info){
-   const game=window.__game;
-   const open=!!game?.mcduIsOpen?.();
-   const visible=!!info&&(info.st==='play'||info.st==='intro')&&!open&&ewd.offsetWidth>45;
-   main.style.display=visible?'flex':'none';extra.style.display=visible?'flex':'none';
-   placeEngineButtons(info,open);
-   if(!visible)return;
-   const x=ewd.offsetLeft,y=ewd.offsetTop,w=ewd.offsetWidth,h=ewd.offsetHeight;
-   // Mobile portrait: protect the thrust panel at lower left.
-   // Landscape: thrust lives in a separate left-side quadrant; full-width lower ECAM is safe.
-   const landscape=(ui.clientWidth/ui.clientHeight>1.15);
-   const left=landscape?x:Math.round(x+w*.55);
-   const width=landscape?w:Math.round(w*.45);
-   const top=Math.round(y+h+Math.max(2,w*.014));
-   const bottomCap=Math.min(ui.clientHeight-3,top+Math.round(w*.56));
-   const eh=Math.max(28,bottomCap-top);
-   const k=Math.max(.52,Math.min(3.2,w/186));
-   const next=[x,y,w,h,left,top,width,eh,k.toFixed(3),landscape].join(':');
-   if(next!==lastGeometry){
-     Object.assign(main.style,{left:x+'px',top:y+'px',width:w+'px',height:h+'px'});
-     Object.assign(extra.style,{left:left+'px',top:top+'px',width:width+'px',height:eh+'px'});
-     main.style.setProperty('--ec-k',k);
-     extra.style.setProperty('--ec-k',k);
-     // Narrow portrait column: reduce type a little to keep each checklist item legible.
-     extra.classList.toggle('jc-landscape',landscape);
-     extra.classList.toggle('jc-portrait',!landscape);
-     extra.style.fontSize=landscape?'calc(5.5px * var(--ec-k))':'calc(8px * var(--ec-k))';
-     lastGeometry=next;
-   }
+ function dial(id,cx,cy,r){
+   return `<g data-gauge="${id}">
+     <path class="darc" d="${arc(cx,cy,r,-210,30)}"/>
+     <path class="dred" d="${arc(cx,cy,r,10,30)}"/>
+     <circle cx="${cx}" cy="${cy}" r="2.6" fill="#37e75d"/>
+     <line class="needle" id="jce-${id}-needle" x1="${cx}" y1="${cy}" x2="${cx-24}" y2="${cy+20}"/>
+     <rect class="gauge-value-bg" x="${cx-40}" y="${cy+15}" width="80" height="26" rx="2"/>
+     <text class="value" id="jce-${id}" text-anchor="middle" x="${cx}" y="${cy+35}">—</text>
+   </g>`;
  }
+ const main=document.createElement('section');
+ main.id='jc-ref-ewd';main.setAttribute('aria-label','Live ECAM engine, fuel and aircraft systems display');
+ main.innerHTML=`<svg id="jce-svg" viewBox="0 0 600 440" preserveAspectRatio="none" aria-hidden="true">
+  <rect x="0" y="0" width="600" height="440" fill="#020605"/>
+  <text x="300" y="28" class="label white" text-anchor="middle">EPR*</text>
+  ${dial('epr1',147,71,57)}${dial('epr2',453,71,57)}
+  <text x="545" y="18" class="mini cyan" text-anchor="end">THR MODE</text>
+  <text id="jce-thrust" x="545" y="39" class="small" text-anchor="end">IDLE</text>
+  <text x="300" y="151" class="label white" text-anchor="middle">EGT</text>
+  <text x="300" y="168" class="mini cyan" text-anchor="middle">°C</text>
+  ${dial('egt1',147,171,43)}${dial('egt2',453,171,43)}
+  <text x="30" y="160" class="mini cyan">FF*</text>
+  <text x="30" y="177" class="mini cyan">KG/H</text>
+  <text id="jce-ff1" x="30" y="198" class="small">—</text>
+  <text x="570" y="160" class="mini cyan" text-anchor="end">FF*</text>
+  <text x="570" y="177" class="mini cyan" text-anchor="end">KG/H</text>
+  <text id="jce-ff2" x="570" y="198" class="small" text-anchor="end">—</text>
+  <text x="300" y="248" class="label white" text-anchor="middle">N1</text>
+  <text x="300" y="266" class="mini cyan" text-anchor="middle">%</text>
+  ${dial('n1a',147,264,37)}${dial('n1b',453,264,37)}
+  <text x="55" y="296" class="mini cyan">N2*</text>
+  <text id="jce-n2a" x="55" y="312" class="small">—</text>
+  <text x="545" y="296" class="mini cyan" text-anchor="end">N2*</text>
+  <text id="jce-n2b" x="545" y="312" class="small" text-anchor="end">—</text>
+  <path class="rule" d="M0 323H600"/>
+  <text x="12" y="346" class="small white">FOB</text>
+  <text x="68" y="346" class="small white">:</text>
+  <text id="jce-fob" x="90" y="346" class="value">—</text>
+  <text x="227" y="346" class="mini cyan">KG</text>
+  <text id="jce-plan" x="588" y="337" text-anchor="end" class="mini cyan">MCDU BLOCK —</text>
+  <text id="jce-pred" x="588" y="352" text-anchor="end" class="mini cyan">PRED EFOB —</text>
+  <path class="rule" d="M0 361H600"/>
+  <path class="rule" d="M310 361V435"/>
+  <text id="jce-spoiler" x="12" y="380" class="small">GND SPLRS OFF</text>
+  <text id="jce-gear" x="12" y="400" class="small">GEAR DOWN</text>
+  <text id="jce-engines" x="12" y="420" class="small">ENG 1+2 ON</text>
+  <text id="jce-flaps" x="326" y="380" class="small">FLAPS 0</text>
+  <text id="jce-brake" x="326" y="400" class="small">BRK OFF</text>
+  <text id="jce-traffic" x="326" y="420" class="small">TCAS SIM</text>
+  <text id="jce-fault" x="12" y="438" class="mini amber">SYSTEMS NORMAL</text>
+  <text x="587" y="438" class="mini cyan" text-anchor="end">*SIM EST.</text>
+ </svg>`;
+ ui.append(main);
+ const get=id=>document.getElementById('jce-'+id);
+ const els={};for(const id of ['epr1','epr2','egt1','egt2','n1a','n1b','ff1','ff2','n2a','n2b','thrust','fob','plan','pred','spoiler','gear','engines','flaps','brake','traffic','fault']) els[id]=get(id);
+ function safe(v){const n=Number(v);return Number.isFinite(n)?n:NaN}
+ const val=(n,d=0)=>Number.isFinite(n)?n.toFixed(d):'—';
+ function set(id,v,cls){const el=els[id];if(!el)return;v=String(v);if(el.textContent!==v)el.textContent=v;
+   if(cls){el.classList.remove('cyan','amber','red');el.classList.add(cls)} }
+ function needle(id,v,lo,hi){
+   const g=document.getElementById('jce-'+id+'-needle');if(!g)return;
+   const cx=Number(g.getAttribute('x1')),cy=Number(g.getAttribute('y1'));
+   const r=id.startsWith('epr')?46:id.startsWith('egt')?33:29;
+   const fraction=Number.isFinite(v)?Math.max(0,Math.min(1,(v-lo)/(hi-lo))):0;
+   const pos=polar(cx,cy,r,-210+240*fraction);
+   const xx=pos.x.toFixed(1),yy=pos.y.toFixed(1);
+   if(g.getAttribute('x2')!==xx)g.setAttribute('x2',xx);
+   if(g.getAttribute('y2')!==yy)g.setAttribute('y2',yy);
+ }
+ function engineControls(info,mcduOpen){
+   if(!eng1||!eng2)return;
+   const show=!!(info?.st==='play'&&!mcduOpen);
+   for(const btn of [eng1,eng2]){
+     if(btn.style.visibility!==(show?'visible':'hidden')) btn.style.visibility=show?'visible':'hidden';
+     btn.style.pointerEvents=show?'auto':'none';
+   }
+   if(!show)return;
+   const bw=Math.max(36,Math.min(58,mcdu.offsetWidth*.15));
+   const bh=Math.max(22,Math.min(36,mcdu.offsetHeight*.105));
+   const spacing=3, edge=5;
+   const x=Math.max(0,ui.clientWidth-bw-edge);
+   // Never place over the MCDU. If there is not enough space below it,
+   // use the right-side control area and always hide during expanded MCDU.
+   const mcduBottom=mcdu.offsetTop+mcdu.offsetHeight;
+   const bottomArea=Math.max(mcduBottom+3,ui.clientHeight-2*bh-spacing-6);
+   const top=Math.min(ui.clientHeight-2*bh-spacing-3,bottomArea);
+   [eng1,eng2].forEach((b,i)=>{
+     const styles={left:Math.round(x)+'px',top:Math.round(top+(bh+spacing)*i)+'px',width:Math.round(bw)+'px',height:Math.round(bh)+'px',fontSize:'10px',padding:'1px',zIndex:'19'};
+     for(const [key,value] of Object.entries(styles))if(b.style[key]!==value)b.style[key]=value;
+   });
+ }
+ let lastLayout='';
  function update(){
    const game=window.__game;
-   const info=game?.info?.()||null;
-   layout(info);
-   if(main.style.display==='none'||!info)return;
-   const p=info.plane||{},fuel=info.fuel||{}, sensors=game.ecamSensors?.()||{};
-   const n1=num(sensors.n1),n1b=num(sensors.n1b),engt1=!!p.eng1,engt2=!!p.eng2;
-   text(els.n1,engt1?fmt(n1,1):'OFF');text(els.n1b,engt2?fmt(n1b,1):'OFF');
-   text(els.egt1,fmt(num(sensors.egt1)));
-   text(els.egt2,fmt(num(sensors.egt2)));
-   // Simulator has no separate N2 model: show explicitly estimated indications.
-   text(els.n2a,engt1?fmt(Math.max(0,Math.min(100,n1*.85+14)),1):'0');
-   text(els.n2b,engt2?fmt(Math.max(0,Math.min(100,n1b*.85+14)),1):'0');
-   const flow=Math.max(0,num(fuel.burnKgH)||0),onCount=Number(engt1)+Number(engt2);
-   text(els.ff1,engt1?fmt(flow/Math.max(1,onCount)):'0');
-   text(els.ff2,engt2?fmt(flow/Math.max(1,onCount)):'0');
-   text(els.fob,Math.round(Math.max(0,num(fuel.remainingKg)||0)).toLocaleString('en-US'));
-   const pct=(num(fuel.startKg)>0)?100*Math.max(0,num(fuel.remainingKg)||0)/num(fuel.startKg):0;
-   els.bar.style.width=Math.max(0,Math.min(100,pct))+'%';
-   els.bar.style.background=pct<10?'#ff6565':pct<20?'#ffc86e':'#78efa1';
-   text(els.mode,(p.spoilerActive?'SPL DEP':p.spoilerMode===1?'SPL ARM':'SPL OFF')+' · '+(p.reverseThrust?'REV':p.lever>.9?'TOGA':p.lever>.70?'FLX':p.lever>.2?'CL':'IDLE'));
-   for(const [el,n,on] of [[els.g1,n1,engt1],[els.g2,n1b,engt2]]){
-     el.classList.toggle('failed',!on);
-     el.style.setProperty('--gauge-needle',(Number.isFinite(n)?(n/100*100-50):0)+'deg');
+   let info;try{info=game?.info?.()}catch{return;}
+   const opened=!!(game?.mcduIsOpen?.()||info?.mcdu?.open);
+   const visible=!!(info&&(info.st==='play'||info.st==='intro')&&!opened&&ewd.offsetWidth>35);
+   if(main.style.display!==(visible?'block':'none'))main.style.display=visible?'block':'none';
+   engineControls(info,opened);
+   if(!visible)return;
+   const geom=[ewd.offsetLeft,ewd.offsetTop,ewd.offsetWidth,ewd.offsetHeight].join(':');
+   if(geom!==lastLayout){
+     const style={left:ewd.offsetLeft+'px',top:ewd.offsetTop+'px',width:ewd.offsetWidth+'px',height:ewd.offsetHeight+'px'};
+     for(const [k,v] of Object.entries(style))main.style[k]=v;
+     lastLayout=geom;
    }
-   const check=window.__jcChecklist?.detail?.();
-   const alerts=check?.alerts||[];
-   const first=alerts.find(a=>a.level==='red')||alerts[0];
-   text(els.memo,first?first.text:(p.spoilerActive?(p.spoilerMode===2?'SPEEDBRAKES EXTENDED':'GROUND SPOILERS EXTENDED'):p.spoilerMode===1?'GND SPOILERS ARMED':info.phase==='takeoff'?'T.O MEMO: THR TOGA':'SYSTEMS NORMAL'));
-   els.memo.className='ec-memo'+(first?(first.level==='red'?' critical':' fault'):'');
-   const stage=check?.stage||'PREFLIGHT',items=check?.items||[],portrait=extra.classList.contains('jc-portrait');
-   text(els.stage,stage+' CHECK');
-   const done=items.filter(i=>i.done).length;
-   text(els.progress,done+'/'+items.length);
-   // Rebuild checklist only if state changes; don't flicker on every data tick.
-   const key=stage+':'+portrait+':'+items.map(i=>i.done?'1':'0').join('');
-   if(key!==lastItems){
-     els.items.replaceChildren();
-     items.forEach((item,i)=>{
-       const row=document.createElement('button');row.type='button';row.className='ec-check-line'+(item.done?' done':'');
-       const mark=document.createElement('span');mark.className='ec-c-mark';mark.textContent=item.done?'☑':'☐';
-       const label=document.createElement('span');label.className='ec-c-text';label.textContent=(portrait?shortLabels[stage]?.[i]:null)||item.label;
-       const kind=document.createElement('span');kind.className='ec-c-type';kind.textContent=item.auto?'A':'M';
-       row.append(mark,label,kind);row.disabled=item.auto;
-       row.setAttribute('aria-label',item.label+(item.done?' checked':' unchecked'));row.title=item.label;
-       if(!item.auto)row.addEventListener('click',()=>window.__jcChecklist?.toggleItem?.(i));
-       els.items.appendChild(row);
-     });
-     lastItems=key;
-   }
-   text(els.brake,'BRK '+((num(sensors.brake)||0)>0.1?'APPLIED':'OFF'));
+   const plane=info.plane||{}, fuel=info.fuel||{}, fms=info.fms||{},sensor=game?.ecamSensors?.()||{};
+   const on1=!!plane.eng1,on2=!!plane.eng2;
+   const n1=safe(sensor.n1),n2=safe(sensor.n1b);
+   const egt1=safe(sensor.egt1),egt2=safe(sensor.egt2);
+   const approxEpr=v=>Number.isFinite(v)?1.005+Math.max(0,Math.min(1,(v-22)/78))*.392:NaN;
+   const approxN2=v=>Number.isFinite(v)?Math.max(0,Math.min(100,48+v*.55)):NaN;
+   const epr1=on1?approxEpr(n1):NaN,epr2=on2?approxEpr(n2):NaN;
+   set('epr1',on1?'~'+val(epr1,3):'OFF');set('epr2',on2?'~'+val(epr2,3):'OFF');
+   set('egt1',on1?val(egt1):'OFF');set('egt2',on2?val(egt2):'OFF');
+   set('n1a',on1?val(n1,1):'OFF');set('n1b',on2?val(n2,1):'OFF');
+   set('n2a',on1?'~'+val(approxN2(n1),1):'—');set('n2b',on2?'~'+val(approxN2(n2),1):'—');
+   const totalFlow=Math.max(0,safe(fuel.burnKgH)||0);
+   const mass1=on1?Math.max(0,n1||0):0,mass2=on2?Math.max(0,n2||0):0;
+   const weightTotal=mass1+mass2;
+   const ff1=on1?(weightTotal>0?totalFlow*mass1/weightTotal:totalFlow):0;
+   const ff2=on2?(weightTotal>0?totalFlow*mass2/weightTotal:totalFlow):0;
+   set('ff1','~'+Math.round(ff1));set('ff2','~'+Math.round(ff2));
+   needle('epr1',epr1,1,1.42);needle('epr2',epr2,1,1.42);
+   needle('egt1',egt1,0,1000);needle('egt2',egt2,0,1000);
+   needle('n1a',n1,0,100);needle('n1b',n2,0,100);
+   const remaining=safe(fuel.remainingKg);
+   set('fob',Number.isFinite(remaining)?Math.max(0,Math.round(remaining)).toLocaleString('en-SG'):'—');
+   const block=safe(fms.fob),pred=safe(fuel.predictedEFOBKg);
+   set('plan','MCDU BLOCK '+(Number.isFinite(block)?block.toFixed(2)+' T':'—'));
+   set('pred','PRED EFOB '+(Number.isFinite(pred)?(pred/1000).toFixed(2)+' T':'—'));
+   const mode=safe(plane.lever);
+   const thrust=plane.reverseThrust?'REV':!on1&&!on2?'ENG OFF':mode>=.95?'TOGA':mode>=.74?'FLX':mode>=.4?'CL':'IDLE';
+   set('thrust',thrust);
+   const sp=safe(plane.spoilerMode),fl=safe(plane.flaps),gp=safe(plane.gear);
+   const spoiler=plane.spoilerActive?'GND SPLRS DEPLOYED':sp===1?'GND SPLRS ARMED':sp===2?'SPEED BRK EXT':'GND SPLRS OFF';
+   set('spoiler',spoiler,plane.spoilerActive?'amber':'cyan');
+   set('gear',Number.isFinite(gp)?(gp>=.85?'GEAR DN':gp<=.15?'GEAR UP':'GEAR TRANSIT'):'GEAR —',gp>.15&&gp<.85?'amber':'cyan');
+   set('flaps','FLAPS '+(Number.isFinite(fl)?Math.round(fl):'—'));
+   set('engines','ENG 1 '+(on1?'ON':'OFF')+' · 2 '+(on2?'ON':'OFF'),!on1||!on2?'amber':'cyan');
+   const braking=Math.max(0,safe(sensor.brake)||0);
+   set('brake',braking>.10?'BRAKE APPLIED':'BRAKE OFF');
    const threats=(info.traffic||[]).filter(t=>t.ta).length;
-   text(els.tcas,threats?'TRAFFIC '+threats:'TCAS* SIM');text(els.tcas2,threats?'TA '+threats:'SIM STBY');
-   text(els.flap,'FLAP '+Math.round(num(p.flaps)||0));
+   set('traffic',threats?`TCAS TA ${threats}`:'TCAS SIM STBY',threats?'amber':'cyan');
+   const faults=window.__jcChecklist?.detail?.()?.alerts||[];
+   const fault=faults.find(f=>f.level==='red')||faults[0];
+   set('fault',fault?fault.text:'SYSTEMS NORMAL',fault?.level==='red'?'red':fault?'amber':'cyan');
  }
- function safeUpdate(){try{update()}catch(e){console.warn('ECAM display',e)}}
- setInterval(safeUpdate,350);
- window.addEventListener('resize',()=>{lastGeometry='';safeUpdate()});
- setTimeout(safeUpdate,900);
+ const tick=()=>{try{update()}catch(e){console.warn('ECAM systems display',e)}};
+ const timer=setInterval(tick,320);
+ window.addEventListener('resize',()=>{lastLayout='';tick()});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
+ setTimeout(tick,500);
 })();
 </script>
 
