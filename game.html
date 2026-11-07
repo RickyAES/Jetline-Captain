@@ -5286,7 +5286,7 @@ window.__holdHud={update};
  'use strict';
  if(window.__jcFlightAudio)return;
  const SETTINGS='jetline-flight-audio-v1';
- let prefs={music:true,engine:true,musicVolume:55,engineVolume:60};
+ let prefs={music:true,engine:true,musicVolume:65,engineVolume:60};
  try{const saved=JSON.parse(localStorage.getItem(SETTINGS)||'null');if(saved&&typeof saved==='object'){
   for(const k of ['music','engine'])if(typeof saved[k]==='boolean')prefs[k]=saved[k];
   for(const k of ['musicVolume','engineVolume'])if(Number.isFinite(saved[k]))prefs[k]=Math.max(0,Math.min(100,saved[k]));
@@ -5300,7 +5300,7 @@ window.__holdHud={update};
  const panel=document.createElement('div');panel.id='jc-audio-panel';
  panel.setAttribute('role','group');panel.setAttribute('aria-label','Jetline sound settings');
  panel.innerHTML=`<div class="split"><div class="title">🎵 FLIGHT SOUND</div><button type="button" id="jc-audio-close">CLOSE</button></div>
-   <div class="small">Original looping soundtrack · Airborne engine sound</div>
+   <div class="small">Original aviation action soundtrack · Driving electronic drums · Airborne engine sound</div>
    <div class="split"><span class="vlabel">Background / Challenge music</span><button type="button" id="jc-music-on">ON</button></div>
    <label class="small" for="jc-music-volume">Music volume</label><input id="jc-music-volume" type="range" min="0" max="100" step="5">
    <div class="split"><span class="vlabel">Airborne engine</span><button type="button" id="jc-engine-on">ON</button></div>
@@ -5363,40 +5363,128 @@ window.__holdHud={update};
  // First game interaction is the browser-approved trigger; we never force autoplay.
  window.addEventListener('pointerdown',activate,{capture:true,once:true});
  window.addEventListener('keydown',activate,{capture:true,once:true});
- const midiChords=[50,46,53,48]; // Original D minor / Bb / F / C motif.
- const ambMotif=[0,7,12,7,3,7,10,7];
- const challengeMotif=[0,12,7,15,12,7,19,15,0,12,7,17,12,7,15,10];
- function note(c,bus,when,midi,duration,level,kind='triangle'){
-   if(!c||!bus||when<c.currentTime-.06)return;
+ // Original high-energy cinematic / electronic score for Jetline Captain.
+ // Two concurrent loop engines are crossfaded by the flight situation:
+ // pulsing 116 BPM cruise rhythm and a hard-driving 148 BPM challenge theme.
+ // All sounds are synthesized locally; no licensed music or network assets.
+ const cruiseBpm=116, challengeBpm=148;
+ const progressions=[50,46,43,45]; // Dm • Bb • Gm • A (MIDI roots)
+ const midiScale=[0,3,5,7,10,12,15,17,19];
+ const cruiseBass=[0,-1,-1,0,-1,0,-1,-1,0,-1,0,-1,0,-1,-1,-1];
+ const rushBass=[0,-1,0,-1,0,0,-1,0,0,-1,0,-1,0,0,0,-1];
+ const cruiseArp=[0,7,12,3,7,15,10,7,0,7,12,5,7,15,12,7];
+ const rushLead=[12,-1,15,12,19,-1,17,15,12,-1,10,12,15,-1,17,19];
+ let currentIntense=false,challengeStartAt=0;
+ // Lightweight voice with a filtered saw/triangle hybrid and short synth envelope.
+ function voice(c,bus,when,midi,duration,level,timbre='pluck'){
+   if(!c||!bus||when<c.currentTime-.05||!Number.isFinite(midi))return;
    try{
-    const o=c.createOscillator(),g=c.createGain();o.type=kind;o.frequency.value=hz(midi);
-    const start=Math.max(when,c.currentTime+.001);g.gain.setValueAtTime(.0001,start);
-    g.gain.exponentialRampToValueAtTime(Math.max(.0002,level),start+.018);
-    g.gain.exponentialRampToValueAtTime(.0001,start+duration);
-    o.connect(g);g.connect(bus);o.start(start);o.stop(start+duration+.05);
+     const st=Math.max(when,c.currentTime+.002),stop=st+Math.max(.055,duration);
+     const o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();
+     const harsh=timbre==='bass'||timbre==='lead';
+     o.type=timbre==='pad'?'sine':harsh?'sawtooth':'triangle';
+     o.frequency.setValueAtTime(hz(midi),st);
+     f.type='lowpass';f.frequency.setValueAtTime(timbre==='bass'?390:timbre==='lead'?1600:2600,st);
+     f.Q.value=timbre==='bass'?.75:.32;
+     const attack=timbre==='pad'?.10:.009,decay=timbre==='pad'?.42:Math.min(.14,duration*.37);
+     g.gain.setValueAtTime(.00001,st);
+     g.gain.exponentialRampToValueAtTime(Math.max(.00002,level),st+attack);
+     g.gain.exponentialRampToValueAtTime(Math.max(.00002,level*(timbre==='pad'?.38:.2)),Math.min(stop-.02,st+attack+decay));
+     g.gain.exponentialRampToValueAtTime(.00001,stop);
+     o.connect(f);f.connect(g);g.connect(bus);
+     o.start(st);o.stop(stop+.025);
    }catch{}
+ }
+ // Original punchy electronic percussion: all generated with Web Audio nodes.
+ function percussion(c,bus,when,type,level=1){
+   if(!c||!bus||when<c.currentTime-.05)return;
+   try{
+     const st=Math.max(when,c.currentTime+.002);
+     if(type==='kick'){
+       const o=c.createOscillator(),g=c.createGain();o.type='sine';
+       o.frequency.setValueAtTime(150,st);o.frequency.exponentialRampToValueAtTime(46,st+.12);
+       g.gain.setValueAtTime(Math.max(.0001,.48*level),st);
+       g.gain.exponentialRampToValueAtTime(.00001,st+.20);
+       o.connect(g);g.connect(bus);o.start(st);o.stop(st+.22);
+     }else{
+       // A tiny portion of the cached noise buffer is used for snare and hi-hat.
+       const source=c.createBufferSource(),filter=c.createBiquadFilter(),g=c.createGain();
+       source.buffer=api.noiseBuffer;
+       const isSnare=type==='snare';
+       filter.type=isSnare?'bandpass':'highpass';
+       filter.frequency.value=isSnare?1600:7100;
+       filter.Q.value=isSnare?.7:.5;
+       const length=isSnare?.13:.058;
+       g.gain.setValueAtTime(Math.max(.0001,(isSnare?.16:.037)*level),st);
+       g.gain.exponentialRampToValueAtTime(.00001,st+length);
+       source.connect(filter);filter.connect(g);g.connect(bus);
+       source.start(st,Math.max(0,(st*13)%1.6));source.stop(st+length+.015);
+     }
+   }catch{}
+ }
+ function musicStep(c,bus,kind,n,when,dur){
+   const isRush=kind==='rush';
+   const bar=Math.floor(n/16),step=n%16,root=progressions[bar%4];
+   const section=Math.floor(bar/4)%4;
+   const beat=step%4===0;
+   const variation=(bar%8)>=4;
+   const accent=step===0||step===8;
+   // Steady cinematic drums even while cruising; challenge adds four-on-the-floor,
+   // 16th hi-hats and syncopated fills during the last bar of a phrase.
+   if((isRush&&beat)||(!isRush&&(step===0||step===8))){
+     percussion(c,bus,when,'kick',isRush?.90:.57);
+   }
+   if(step===4||step===12)percussion(c,bus,when,'snare',isRush?.83:.50);
+   if(step%2===0 || (isRush && ((section+bar)%2===0||step>=12))){
+     percussion(c,bus,when,'hat',(isRush?.65:.37)*(step%4===2?1.12:.8));
+   }
+   if(isRush && step>=13 && bar%4===3 && step%2===1){
+     percussion(c,bus,when,'snare',.28);
+   }
+   // Bass ostinato; harmonic shift every four beats helps avoid short repetitive loops.
+   const b=isRush?rushBass[step]:cruiseBass[step];
+   if(b>=0)voice(c,bus,when,root-12+(step===10&&variation?7:0),
+     dur*(isRush?.87:1.1),isRush?.19:.14,'bass');
+   if(!isRush){
+     if(step%2===0)voice(c,bus,when,root+12+cruiseArp[(step+bar*3)%16],dur*1.1,.11,'pluck');
+     if(step===0){
+       voice(c,bus,when,root+12,dur*14,.052,'pad');
+       voice(c,bus,when,root+19,dur*13,.045,'pad');
+     }
+     if(step===7||step===15)voice(c,bus,when,root+24+(variation?3:0),dur*1.55,.048,'pluck');
+   }else{
+     // Syncopated urgent melody; the second half of the phrase rises an octave.
+     const pitch=rushLead[(step+((bar%2)?4:0))%16];
+     if(pitch>=0)voice(c,bus,when,root+12+pitch+(variation&&step>=8?12:0),
+       dur*(accent?2.2:1.25),.155,'lead');
+     if(step===0){
+       voice(c,bus,when,root+12,dur*14,.075,'pad');
+       voice(c,bus,when,root+19,dur*13,.05,'pad');
+     }
+     if(step%4===2)voice(c,bus,when,root+24+(midiScale[(bar+step)%midiScale.length]),dur*1.5,.055,'pluck');
+     // Additional impact and rising alarm on dramatic final bars.
+     if(bar%4===3 && step>=12 && step%2===0){
+       voice(c,bus,when,root+24+step-12,dur*1.2,.065,'lead');
+     }
+   }
  }
  function schedule(){
    const c=api.ctx;if(!c||c.state!=='running')return;
-   const horizon=c.currentTime+.43;
-   const ambDur=60/88/2,chaDur=60/132/2;
-   for(let count=0;nextAmbient<horizon&&count<5;count++){
-      const k=ambientStep,chord=Math.floor(k/8)%4;
-      if(prefs.music){
-        note(c,api.ambientBus,nextAmbient,midiChords[chord]+ambMotif[k%8]+12,ambDur*.88,.13,'sine');
-        if(k%8===0){note(c,api.ambientBus,nextAmbient,midiChords[chord]-12,ambDur*6,.065,'triangle');}
-      }
-      nextAmbient+=ambDur;ambientStep++;
+   const horizon=c.currentTime+.32;
+   const ambientTick=60/cruiseBpm/4,challengeTick=60/challengeBpm/4;
+   // Catch up after a suspended audio context without stacking stale notes.
+   if(nextAmbient<c.currentTime-.55)nextAmbient=c.currentTime+.012;
+   if(nextChallenge<c.currentTime-.55)nextChallenge=c.currentTime+.012;
+   for(let count=0;nextAmbient<horizon&&count<6;count++){
+     if(prefs.music)musicStep(c,api.ambientBus,'cruise',ambientStep,nextAmbient,ambientTick);
+     nextAmbient+=ambientTick;ambientStep++;
    }
-   for(let count=0;nextChallenge<horizon&&count<6;count++){
-      const k=challengeStep,chord=Math.floor(k/16)%4;
-      if(prefs.music){
-        note(c,api.challengeBus,nextChallenge,midiChords[chord]+challengeMotif[k%16]+12,chaDur*.73,.16,'triangle');
-        if(k%4===0)note(c,api.challengeBus,nextChallenge,midiChords[chord]-12,chaDur*2.3,.1,'sine');
-      }
-      nextChallenge+=chaDur;challengeStep++;
+   for(let count=0;nextChallenge<horizon&&count<7;count++){
+     if(prefs.music)musicStep(c,api.challengeBus,'rush',challengeStep,nextChallenge,challengeTick);
+     nextChallenge+=challengeTick;challengeStep++;
    }
  }
+
  function update(){
    // Stack the SOUND button above the existing USB THRUST button to avoid overlap.
    const tca=document.getElementById('jc-tca-toggle');
@@ -5417,13 +5505,21 @@ window.__holdHud={update};
    const mute=!!info.muted, hidden=document.hidden, paused=!!info.paused;
    const active=info.state==='play'&&!paused;
    const danger=active&&(info.holding||info.emergency||info.danger>.27||info.phase==='takeoff'||info.phase==='approach');
-   api.currentMode=active?(danger?'CHALLENGE':'CRUISE'):'BACKGROUND';
-   const masterLevel=(mute||hidden)?0:.82;
+   api.currentMode=active?(danger?'CHALLENGE · 148 BPM':'CRUISE · 116 BPM'):'BACKGROUND · 116 BPM';
+   const masterLevel=(mute||hidden)?0:.75;
    api.master.gain.setTargetAtTime(masterLevel,now,.16);
    const musicOn=prefs.music?prefs.musicVolume/100:0;
-   api.musicGain.gain.setTargetAtTime(musicOn*.7,now,.2);
-   api.ambientBus.gain.setTargetAtTime(musicOn>0?(danger?.11:.30):0,now,.4);
-   api.challengeBus.gain.setTargetAtTime(musicOn>0&&danger?.40:0,now,.25);
+   // Keep music present and rhythmic in cruise; intensify sharply for challenges,
+   // but maintain headroom for cockpit alerts and engine indications.
+   api.musicGain.gain.setTargetAtTime(musicOn*.88,now,.22);
+   api.ambientBus.gain.setTargetAtTime(musicOn>0?(danger?.09:.51):0,now,.50);
+   api.challengeBus.gain.setTargetAtTime(musicOn>0&&danger?.64:0,now,.28);
+   if(danger&&!currentIntense){
+     currentIntense=true;challengeStartAt=now;
+     // A brief distinctive two-note synthesized signal when the scenario intensifies.
+     voice(c,api.challengeBus,now+.015,74,.24,.09,'lead');
+     voice(c,api.challengeBus,now+.22,77,.33,.10,'lead');
+   }else if(!danger){currentIntense=false;}
    const enginesOn=!!(info.engine1||info.engine2);
    const airborne=active&&info.airborne&&!info.onGround&&enginesOn;
    const n1=clamp((Number(info.n1)||22)/100,0,1);
@@ -5435,7 +5531,7 @@ window.__holdHud={update};
    $('jc-audio-mode').textContent=api.currentMode;
    const hint=panel.querySelector('#jc-audio-info');
    if(mute)hint.textContent='Game is muted. Unmute it to hear the soundtrack and engine.';
-   else hint.textContent='Background music loops continuously; the challenge layer fades in during takeoff, approach, ATC holding, and emergencies.';
+   else hint.textContent='116 BPM rhythmic cruise mix; 148 BPM high-energy challenge mix during takeoff, approach, ATC holds and emergencies. Engine and cockpit alerts remain audible.';
  }
  setInterval(update,350);
  document.addEventListener('visibilitychange',()=>{if(!api.ctx)return;if(document.hidden)api.ctx.suspend().catch(()=>{});else if(api.unlocked)api.ctx.resume().catch(()=>{})});
