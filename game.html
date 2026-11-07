@@ -5344,5 +5344,176 @@ window.__holdHud={update};
 })();
 </script>
 
+
+<style id="jc-unified-settings-style">
+/* One small movable Settings control replaces the floating SOUND and USB THRUST controls. */
+#jc-tca-toggle,#jc-audio-toggle{display:none!important}
+#jc-settings-gear{
+ position:fixed;right:max(10px,env(safe-area-inset-right));bottom:calc(10px + env(safe-area-inset-bottom));
+ width:43px;height:43px;z-index:89;padding:0;display:grid;place-items:center;
+ border:1.5px solid #73dafa;border-radius:13px;background:#0d294ade;
+ color:#ecfbff;font:900 24px/1 system-ui,sans-serif;cursor:pointer;
+ box-shadow:0 5px 17px #0009;pointer-events:auto;touch-action:none;user-select:none;
+ -webkit-tap-highlight-color:transparent;
+}
+#jc-settings-gear:focus-visible{outline:3px solid #b4eaf8;outline-offset:2px}
+#jc-settings-gear.active{background:#235d78;border-color:#c9fbff}
+#jc-settings-shade{
+ position:fixed;inset:0;z-index:290;display:none;align-items:center;justify-content:center;
+ padding:calc(12px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+ box-sizing:border-box;background:#010b1fdc;backdrop-filter:blur(5px);pointer-events:auto;
+}
+#jc-settings-shade.open{display:flex}
+#jc-settings-modal{box-sizing:border-box;width:min(495px,100%);max-height:100%;overflow:auto;
+ border:1px solid #6ccee8;border-radius:17px;background:linear-gradient(145deg,#143558,#09182f);
+ padding:15px;color:#e9f6ff;font:13px/1.5 system-ui,sans-serif;box-shadow:0 18px 54px #000c;
+ overscroll-behavior:contain;touch-action:pan-y}
+#jc-settings-modal .jc-settings-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#jc-settings-modal h2{font:900 20px/1.15 system-ui;margin:0;color:#a4ecff}
+#jc-settings-modal button{font:800 13px/1.2 system-ui;cursor:pointer}
+#jc-settings-close{background:#264667;border:1px solid #5b9bb5;border-radius:8px;color:#e5f7ff;padding:9px 12px;min-height:40px}
+#jc-settings-modal .jc-settings-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:14px 0}
+#jc-settings-modal .jc-settings-tab{background:#122d48;border:1px solid #456d91;color:#e1edfa;
+ padding:10px 5px;border-radius:9px;min-height:44px}
+#jc-settings-modal .jc-settings-tab[aria-selected="true"]{background:#155676;border-color:#79e5fa;color:#ffffff}
+#jc-settings-modal .jc-settings-pane{display:none}
+#jc-settings-modal .jc-settings-pane.show{display:block}
+#jc-settings-modal .jc-settings-info{color:#accfe3;font-size:12px;margin:6px 0 13px}
+#jc-settings-modal .jc-settings-action{width:100%;border:1px solid #61c8dc;border-radius:9px;background:#194a67;color:#e8fbff;padding:11px;min-height:46px;margin:6px 0}
+#jc-settings-modal .jc-settings-readout{margin:8px 0;padding:10px;border:1px solid #385779;border-radius:9px;background:#091b30;color:#b6dcec}
+/* Move the ACTUAL existing audio panel into the unified modal so its inputs remain functional. */
+#jc-settings-sound #jc-audio-panel,
+#jc-settings-sound #jc-audio-panel.open{display:flex!important;position:static!important;width:100%!important;
+ right:auto!important;bottom:auto!important;max-height:none!important;overflow:visible!important;
+ box-shadow:none!important;margin:0!important;padding:12px!important;background:#0a233bdc!important;
+ border:1px solid #376781!important;}
+#jc-settings-sound #jc-audio-close{display:none!important}
+#jc-settings-modal input[type="range"]{touch-action:pan-x}
+@media(max-width:480px){
+ #jc-settings-gear{width:41px;height:41px;font-size:23px;right:max(7px,env(safe-area-inset-right));bottom:calc(7px + env(safe-area-inset-bottom))}
+ #jc-settings-modal{padding:12px}
+ #jc-settings-modal h2{font-size:18px}
+ #jc-settings-modal .jc-settings-tab{font-size:12px}
+}
+</style>
+<script id="jc-unified-settings-script">
+(()=>{
+ 'use strict';
+ if(document.getElementById('jc-settings-gear'))return;
+ const soundPanel=document.getElementById('jc-audio-panel');
+ const oldUsb=document.getElementById('jc-tca-toggle');
+ const oldSound=document.getElementById('jc-audio-toggle');
+ const gear=document.createElement('button');gear.type='button';gear.id='jc-settings-gear';
+ gear.textContent='⚙';gear.title='Game settings · Sound, USB thrust and display';
+ gear.setAttribute('aria-label','Open general game settings');
+ gear.setAttribute('aria-expanded','false');
+ const shade=document.createElement('div');shade.id='jc-settings-shade';shade.setAttribute('aria-hidden','true');
+ shade.innerHTML=`<section id="jc-settings-modal" role="dialog" aria-modal="true" aria-label="General game settings">
+  <div class="jc-settings-head"><h2>⚙ GENERAL SETTINGS</h2><button id="jc-settings-close" type="button">✕ CLOSE</button></div>
+  <div class="jc-settings-tabs" role="tablist" aria-label="Settings categories">
+   <button type="button" class="jc-settings-tab" data-tab="sound" role="tab" aria-selected="true" aria-controls="jc-settings-sound">🎵 SOUND</button>
+   <button type="button" class="jc-settings-tab" data-tab="usb" role="tab" aria-selected="false" aria-controls="jc-settings-usb">🎮 USB THRUST</button>
+   <button type="button" class="jc-settings-tab" data-tab="display" role="tab" aria-selected="false" aria-controls="jc-settings-display">🖥 DISPLAY</button>
+  </div>
+  <div id="jc-settings-sound" class="jc-settings-pane show" role="tabpanel"></div>
+  <div id="jc-settings-usb" class="jc-settings-pane" role="tabpanel">
+   <p class="jc-settings-info">Connect the physical Airbus throttle quadrant to your Windows PC, then calibrate both levers. This setup remains available on laptops; mobile browsers may not expose USB gamepads.</p>
+   <button type="button" id="jc-settings-open-usb" class="jc-settings-action">🎮 OPEN USB THROTTLE CALIBRATION</button>
+   <div id="jc-settings-usb-state" class="jc-settings-readout" role="status">USB throttle not linked</div>
+   <p class="jc-settings-info">Calibrate IDLE, TOGA and optional REVERSE, then select LINK & ENABLE THRUST in the controller panel.</p>
+  </div>
+  <div id="jc-settings-display" class="jc-settings-pane" role="tabpanel">
+   <p class="jc-settings-info">Adjust the cockpit view without opening extra floating buttons.</p>
+   <button type="button" id="jc-settings-fullscreen" class="jc-settings-action">⛶ TOGGLE FULLSCREEN</button>
+   <button type="button" id="jc-settings-panel" class="jc-settings-action">▣ CHANGE COCKPIT PANEL VIEW</button>
+   <div class="jc-settings-readout">Your sound volumes and USB axis calibration are saved on this device. Other flight controls, MCDU and radar remain unchanged.</div>
+  </div>
+ </section>`;
+ document.body.append(gear,shade);
+ const $=id=>shade.querySelector('#'+id);
+ if(soundPanel){$('jc-settings-sound').appendChild(soundPanel);soundPanel.classList.add('open')}
+ else $('jc-settings-sound').textContent='Sound controls are unavailable in this build.';
+ let open=false,drag=null,moved=false,previousFocus=null;
+ function select(tab){
+  shade.querySelectorAll('.jc-settings-tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
+  shade.querySelectorAll('.jc-settings-pane').forEach(p=>p.classList.toggle('show',p.id==='jc-settings-'+tab));
+  if(tab==='usb'){
+   const hw=window.__jcHardwareThrottle;
+   $('jc-settings-usb-state').textContent=hw?.active?'USB THRUST LINKED · Controller index '+hw.gamepadIndex:'USB throttle not linked';
+  }
+ }
+ function show(tab='sound'){
+  if(open)return select(tab);
+  previousFocus=document.activeElement;open=true;shade.classList.add('open');
+  shade.setAttribute('aria-hidden','false');gear.classList.add('active');gear.setAttribute('aria-expanded','true');
+  select(tab);$('jc-settings-close').focus();
+ }
+ function hide(){
+  if(!open)return;open=false;shade.classList.remove('open');shade.setAttribute('aria-hidden','true');
+  gear.classList.remove('active');gear.setAttribute('aria-expanded','false');
+  const old=previousFocus;previousFocus=null;
+  if(old&&old!==document.body&&old.isConnected)old.focus();else gear.focus();
+ }
+ gear.addEventListener('pointerdown',e=>{
+  e.stopPropagation();const r=gear.getBoundingClientRect();drag={id:e.pointerId,x:e.clientX,y:e.clientY,
+   left:r.left,top:r.top};moved=false;try{gear.setPointerCapture(e.pointerId)}catch{}
+ });
+ gear.addEventListener('pointermove',e=>{
+  if(!drag||e.pointerId!==drag.id)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(Math.hypot(dx,dy)>6)moved=true;
+  if(!moved)return;
+  e.preventDefault();const left=Math.max(4,Math.min(window.innerWidth-gear.offsetWidth-4,drag.left+dx));
+  const top=Math.max(4,Math.min(window.innerHeight-gear.offsetHeight-4,drag.top+dy));
+  gear.style.left=Math.round(left)+'px';gear.style.top=Math.round(top)+'px';
+  gear.style.right='auto';gear.style.bottom='auto';
+ });
+ gear.addEventListener('pointerup',e=>{
+  if(!drag||e.pointerId!==drag.id)return;
+  drag=null;try{gear.releasePointerCapture(e.pointerId)}catch{}
+  if(moved){e.preventDefault();gear.dataset.suppressClick='1';}
+ });
+ gear.addEventListener('pointercancel',()=>{drag=null});
+ gear.addEventListener('click',e=>{
+  e.stopPropagation();if(gear.dataset.suppressClick==='1'){delete gear.dataset.suppressClick;return}
+  open?hide():show();
+ });
+ $('jc-settings-close').addEventListener('click',hide);
+ shade.addEventListener('pointerdown',e=>{e.stopPropagation();if(e.target===shade)hide()});
+ shade.addEventListener('click',e=>{e.stopPropagation();if(e.target===shade)hide()});
+ shade.querySelectorAll('[data-tab]').forEach(btn=>btn.addEventListener('click',()=>select(btn.dataset.tab)));
+ $('jc-settings-open-usb').addEventListener('click',()=>{
+  hide();
+  if(oldUsb)oldUsb.click();
+ });
+ $('jc-settings-fullscreen').addEventListener('click',()=>{
+  try{window.__game?.fullscreen?.()}catch(err){console.warn('Fullscreen',err)}
+ });
+ $('jc-settings-panel').addEventListener('click',()=>{
+  try{window.__game?.panel?.()}catch(err){console.warn('Panel display',err)}
+ });
+ document.addEventListener('keydown',e=>{
+  if(!open)return;
+  if(e.key==='Escape'){hide();e.stopPropagation();e.preventDefault()}
+  if(e.key==='Tab'){
+   const focusable=[...shade.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled])')]
+     .filter(el=>el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden');
+   if(!focusable.length)return;
+   const first=focusable[0],last=focusable[focusable.length-1];
+   if(e.shiftKey&&document.activeElement===first){last.focus();e.preventDefault()}
+   else if(!e.shiftKey&&document.activeElement===last){first.focus();e.preventDefault()}
+  }
+ },true);
+ // The single Settings icon does not cover the MCDU while entering flight data.
+ setInterval(()=>{
+  gear.style.display=window.__game?.mcduIsOpen?.()&&!open?'none':'grid';
+ },350);
+ // Hide older floating controls even if another script tries to reposition them.
+ if(oldSound){oldSound.tabIndex=-1;oldSound.setAttribute('aria-hidden','true')}
+ if(oldUsb){oldUsb.tabIndex=-1;oldUsb.setAttribute('aria-hidden','true')}
+ window.__jcGeneralSettings={open:show,close:hide,select,isOpen:()=>open};
+})();
+</script>
+
 </body>
 </html>
