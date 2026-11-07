@@ -3,6 +3,14 @@
 'use strict';
 const AIRPORTS = require('../airports.json');
 const SOURCE='https://api.adsb.lol';
+// Runway geometry: CAAS AIP. This is a display-only synthetic grouping,
+// not an operational airport or a source of ATC clearances.
+const SG_AIRFIELDS={
+ WSSS:{name:'Changi',lat:1.3501,lon:103.9947,groundRadiusKm:8.5,nearRadiusKm:24},
+ WSSL:{name:'Seletar',lat:1.4169,lon:103.8677,groundRadiusKm:2.8,nearRadiusKm:12},
+ WSAP:{name:'Paya Lebar',lat:1.3604,lon:103.9095,groundRadiusKm:4.3,nearRadiusKm:14}
+};
+const SG_OVERVIEW={name:'Singapore Airports',lat:1.3600,lon:103.9300};
 function distanceKm(lat1,lon1,lat2,lon2){
   const radians=Math.PI/180;
   const a=Math.sin((lat2-lat1)*radians/2)**2+
@@ -14,7 +22,7 @@ module.exports=async function handler(req,res){
   res.setHeader('X-Content-Type-Options','nosniff');
   if(req.method!=='GET')return res.status(405).json({error:'GET only'});
   const icao=String(req.query?.airport||'WSSS').trim().toUpperCase();
-  const known=Object.prototype.hasOwnProperty.call(AIRPORTS,icao)?AIRPORTS[icao]:null;
+  const known=icao==='SGALL'?SG_OVERVIEW:(SG_AIRFIELDS[icao]||null)|| (Object.prototype.hasOwnProperty.call(AIRPORTS,icao)?AIRPORTS[icao]:null);
   let airport=known;
   if(!known){
     // Extra regional airfields supplied by the server's OurAirports catalogue.
@@ -45,7 +53,7 @@ module.exports=async function handler(req,res){
     const aircraft=[];
     const coverage={reportedAircraft:payload.ac.length,withPosition:0,freshPosition:0,
       groundSignal:0,groundWithPosition:0,groundNearChangi:0,taxiing:0,stopped:0,
-      nearbyAirborne:0,groundNoPosition:0};
+      nearbyAirborne:0,groundNoPosition:0,sgGround:0,sgTaxiing:0,sgStopped:0,sgClimbing:0,sgDescending:0};
     // ADS-B v2 feeds can report `now` in milliseconds; normalize before constructing ISO dates.
     const rawNow=Number(payload.now);
     const nowMs=Number.isFinite(rawNow)&&rawNow>0?(rawNow>1e11?rawNow:rawNow*1000):Date.now();
@@ -71,24 +79,44 @@ module.exports=async function handler(req,res){
       // aircraft holding short or stopped on the apron. Include all recent on-ground
       // observations near WSSS; do not imply that 'stopped' means ready to depart.
       // This radius is an APPROXIMATE airport area, not a surveyed taxiway polygon.
-      const groundAtChangi=icao==='WSSS'&&onGround&&dist<=8.5&&(!Number.isFinite(age)||age<=100);
-      const taxiing=groundAtChangi&&Number.isFinite(speedKt)&&speedKt>2&&speedKt<=45;
-      const stopped=groundAtChangi&&Number.isFinite(speedKt)&&speedKt<=2;
-      const groundUnknown=groundAtChangi&&!Number.isFinite(speedKt);
-      if(groundAtChangi)coverage.groundNearChangi++;
-      if(taxiing)coverage.taxiing++;
-      if(stopped)coverage.stopped++;
-      if(icao==='WSSS'&&!onGround&&dist<=10)coverage.nearbyAirborne++;
-      const groundState=groundAtChangi
-        ? (taxiing?'TAXIING':stopped?'STOPPED / HOLDING POSSIBLE':groundUnknown?'ON GROUND · SPEED UNKNOWN':'GROUND ROLL')
+      const altFt=a.alt_baro!=null&&Number.isFinite(Number(a.alt_baro))?Math.round(Number(a.alt_baro)):null;
+      const rawRate=a.baro_rate??a.geom_rate;
+      const verticalRateFpm=rawRate!=null&&Number.isFinite(Number(rawRate))?Math.round(Number(rawRate)):null;
+      // Nearest Singapore airfield is approximate association, not verified
+      // departure/arrival destination. Do NOT infer taxiway or clearance status.
+      const nearAirfields=Object.entries(SG_AIRFIELDS).map(([code,field])=>({code,field,km:distanceKm(field.lat,field.lon,a.lat,a.lon)})).sort((x,y)=>x.km-y.km);
+      const near=nearAirfields[0],nearAirport=near?.code||null;
+      const groundAtAirport=!!(onGround&&near&&near.km<=near.field.groundRadiusKm&&Number.isFinite(age)&&age<=100);
+      const groundAtChangi=groundAtAirport&&nearAirport==='WSSS';
+      const taxiing=groundAtAirport&&Number.isFinite(speedKt)&&speedKt>2&&speedKt<=45;
+      const stopped=groundAtAirport&&Number.isFinite(speedKt)&&speedKt<=2;
+      const groundUnknown=groundAtAirport&&!Number.isFinite(speedKt);
+      const nearbyAirfield=!!(near&&near.km<=near.field.nearRadiusKm&&altFt!==null&&altFt<=8000);
+      let trafficPhase='AIRBORNE';
+      if(groundAtAirport){
+        trafficPhase=taxiing?'TAXIING':stopped?'STOPPED':groundUnknown?'ON GROUND':'GROUND ROLL';
+      }else if(!onGround&&nearbyAirfield&&verticalRateFpm!==null){
+        trafficPhase=verticalRateFpm<=-250?'DESCENDING':verticalRateFpm>=250?'CLIMBING':'AIRBORNE';
+      }else if(onGround){trafficPhase='GROUND POSITION UNASSOCIATED';}
+      const groundState=groundAtAirport
+        ? (taxiing?'TAXIING (REPORTED MOVEMENT)':stopped?'STOPPED (PARKED / HOLDING UNKNOWN)':groundUnknown?'ON GROUND · SPEED UNKNOWN':'GROUND ROLL')
         : '';
-
+      if(groundAtChangi)coverage.groundNearChangi++;
+      if(taxiing&&groundAtChangi)coverage.taxiing++;
+      if(stopped&&groundAtChangi)coverage.stopped++;
+      if(icao==='WSSS'&&!onGround&&dist<=10)coverage.nearbyAirborne++;
+      if(groundAtAirport){coverage.sgGround++;if(taxiing)coverage.sgTaxiing++;if(stopped)coverage.sgStopped++;}
+      if(trafficPhase==='CLIMBING')coverage.sgClimbing++;
+      if(trafficPhase==='DESCENDING')coverage.sgDescending++;
       aircraft.push({
         hex:String(a.hex||'').slice(0,14),callsign,
         lat:a.lat,lon:a.lon,km:Math.round(dist*10)/10,
         heading:Number.isFinite(Number(a.track))?Math.round(Number(a.track)):null,
-        altFt:a.alt_baro!=null&&Number.isFinite(Number(a.alt_baro))?Math.round(Number(a.alt_baro)):null,
+        altFt,verticalRateFpm,
         speedKt,onGround,taxiing,groundAtChangi,stopped,groundUnknown,groundState,
+        groundAtAirport,nearAirport,nearAirportName:near?.field.name||null,
+        nearAirportKm:near?Math.round(near.km*10)/10:null,
+        trafficPhase,phaseEstimated:trafficPhase==='CLIMBING'||trafficPhase==='DESCENDING',
         ageSec:Number.isFinite(age)?Math.max(0,Math.round(age)):null,
         type:String(a.t||'').trim().slice(0,16),
         registration:String(a.r||'').trim().slice(0,16),
@@ -102,7 +130,7 @@ module.exports=async function handler(req,res){
       radiusKm:100,asOf:new Date(nowMs).toISOString(),
       fetchedAt:new Date().toISOString(),provider:'adsb.lol',license:'ODbL-1.0',
       aircraft,groundCoverage:coverage,
-      coverage:'Volunteer ADS-B coverage. Ground reports can lack geographic positions and cannot always be drawn.'
+      coverage:'Volunteer ADS-B coverage: only positioned reports displayed. Climbing/descending near airports suggests possible departure/arrival, not confirmed itinerary or runway clearance.'
     });
   }catch(err){
     res.setHeader('Cache-Control','no-store');
