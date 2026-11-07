@@ -43,18 +43,29 @@ module.exports=async function handler(req,res){
     const payload=await response.json();
     if(!Array.isArray(payload.ac))throw new Error('Unexpected aircraft feed response');
     const aircraft=[];
+    const coverage={reportedAircraft:payload.ac.length,withPosition:0,freshPosition:0,
+      groundSignal:0,groundWithPosition:0,groundNearChangi:0,taxiing:0,stopped:0,
+      nearbyAirborne:0,groundNoPosition:0};
     // ADS-B v2 feeds can report `now` in milliseconds; normalize before constructing ISO dates.
     const rawNow=Number(payload.now);
     const nowMs=Number.isFinite(rawNow)&&rawNow>0?(rawNow>1e11?rawNow:rawNow*1000):Date.now();
     if(Date.now()-nowMs>180000)throw new Error('Stale aircraft feed');
     for(const a of payload.ac){
-      if(!Number.isFinite(a.lat)||!Number.isFinite(a.lon))continue;
+      const groundSignal=a.alt_baro==='ground';
+      if(groundSignal)coverage.groundSignal++;
+      if(!Number.isFinite(a.lat)||!Number.isFinite(a.lon)){
+        if(groundSignal)coverage.groundNoPosition++;
+        continue;
+      }
+      coverage.withPosition++;
       const dist=distanceKm(airport.lat,airport.lon,a.lat,a.lon);
       if(dist>100.0001)continue;
       const age=Number(a.seen_pos??a.seen??0);
       if(Number.isFinite(age)&&age>120)continue; // do not show stale positions as live
+      coverage.freshPosition++;
       const callsign=String(a.flight||'').trim().toUpperCase().slice(0,14);
-      const onGround=a.alt_baro==='ground';
+      const onGround=groundSignal;
+      if(onGround)coverage.groundWithPosition++;
       const speedKt=a.gs!=null&&Number.isFinite(Number(a.gs))?Math.round(Number(a.gs)):null;
       // Surface ADS-B includes stationary aircraft. Previous 1-35kt condition hid
       // aircraft holding short or stopped on the apron. Include all recent on-ground
@@ -64,6 +75,10 @@ module.exports=async function handler(req,res){
       const taxiing=groundAtChangi&&Number.isFinite(speedKt)&&speedKt>2&&speedKt<=45;
       const stopped=groundAtChangi&&Number.isFinite(speedKt)&&speedKt<=2;
       const groundUnknown=groundAtChangi&&!Number.isFinite(speedKt);
+      if(groundAtChangi)coverage.groundNearChangi++;
+      if(taxiing)coverage.taxiing++;
+      if(stopped)coverage.stopped++;
+      if(icao==='WSSS'&&!onGround&&dist<=10)coverage.nearbyAirborne++;
       const groundState=groundAtChangi
         ? (taxiing?'TAXIING':stopped?'STOPPED / HOLDING POSSIBLE':groundUnknown?'ON GROUND · SPEED UNKNOWN':'GROUND ROLL')
         : '';
@@ -86,7 +101,8 @@ module.exports=async function handler(req,res){
       airport:{icao,name:airport.name,lat:airport.lat,lon:airport.lon},
       radiusKm:100,asOf:new Date(nowMs).toISOString(),
       fetchedAt:new Date().toISOString(),provider:'adsb.lol',license:'ODbL-1.0',
-      aircraft,coverage:'Volunteer ADS-B coverage; some flights may be missing or delayed.'
+      aircraft,groundCoverage:coverage,
+      coverage:'Volunteer ADS-B coverage. Ground reports can lack geographic positions and cannot always be drawn.'
     });
   }catch(err){
     res.setHeader('Cache-Control','no-store');
