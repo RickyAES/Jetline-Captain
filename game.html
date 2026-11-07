@@ -5967,5 +5967,117 @@ window.__holdHud={update};
 })();
 </script>
 
+
+
+<style id="jc-engine-screen-layout-tune">
+#jc-mini-gear{position:absolute;z-index:16;display:none;flex-direction:column;gap:4px;padding:5px 4px;border-radius:10px;
+  background:rgba(7,20,67,.88);border:1px solid rgba(51,224,255,.48);box-shadow:0 6px 16px rgba(0,0,0,.35)}
+#jc-mini-gear button{min-width:36px;height:24px;padding:0 8px;border-radius:7px;border:1px solid rgba(141,170,211,.55);
+  background:linear-gradient(#45536c,#2d3748);color:#d9e7ff;font:900 10px/1 system-ui,sans-serif;letter-spacing:.08em;cursor:pointer}
+#jc-mini-gear button.active{border-color:#79ecb1;background:linear-gradient(#30553b,#21412d);color:#cffff1;box-shadow:0 0 0 1px rgba(121,236,177,.2) inset}
+#jc-mini-gear .jc-mini-cap{font:800 9px/1 system-ui,sans-serif;color:#87dff5;text-align:center;letter-spacing:.12em;margin-bottom:1px}
+.jc-small-engine-btn{transform-origin:center top !important;}
+@media (max-width: 520px){
+  #jc-mini-gear button{min-width:32px;height:22px;font-size:9px}
+}
+</style>
+<script id="jc-engine-screen-layout-script">
+(() => {
+  if(window.__jcEngineScreenLayoutApplied)return; window.__jcEngineScreenLayoutApplied=true;
+  const norm = s => (s||'').replace(/\s+/g,' ').trim().toUpperCase();
+  const qsAll = () => [...document.querySelectorAll('button,.pb,[role="button"]')];
+  function findByRegex(re){ return qsAll().find(el => re.test(norm(el.innerText||el.textContent||''))); }
+  function findAllByRegex(re){ return qsAll().filter(el => re.test(norm(el.innerText||el.textContent||''))); }
+  function ensureGearWidget(ui){
+    let box=document.getElementById('jc-mini-gear');
+    if(box) return box;
+    box=document.createElement('div'); box.id='jc-mini-gear';
+    box.innerHTML='<div class="jc-mini-cap">GEAR</div><button type="button" data-dir="up">UP</button><button type="button" data-dir="dn">DN</button>';
+    ui.appendChild(box);
+    box.addEventListener('click', e=>{
+      const btn=e.target.closest('button[data-dir]'); if(!btn) return;
+      const dir=btn.getAttribute('data-dir');
+      const info = window.__game?.info?.();
+      const g = Number(info?.plane?.gear);
+      const isDown = Number.isFinite(g) ? g >= 0.75 : null;
+      const gearBtn = findByRegex(/\b(GEAR|TREN)\b|起落架/);
+      if(!gearBtn) return;
+      if(dir==='up'){
+        if(isDown===null || isDown) gearBtn.click();
+      } else {
+        if(isDown===null || !isDown) gearBtn.click();
+      }
+    });
+    return box;
+  }
+  function shrinkEngineButtons(){
+    const engBtns=findAllByRegex(/\b(ENG|MOT)\s*[12]\b|发动机\s*[12]/);
+    engBtns.forEach(btn=>{
+      btn.classList.add('jc-small-engine-btn');
+      btn.style.minWidth='84px';
+      btn.style.width='84px';
+      btn.style.height='48px';
+      btn.style.maxHeight='48px';
+      btn.style.padding='4px 6px';
+      btn.style.fontSize='12px';
+      btn.style.lineHeight='1.05';
+      btn.style.borderRadius='10px';
+      btn.style.whiteSpace='normal';
+      btn.style.overflow='hidden';
+    });
+  }
+  function hideBigGearButton(){
+    const gearBtn=findByRegex(/\b(GEAR|TREN)\b|起落架/);
+    if(!gearBtn) return;
+    if(gearBtn.dataset.jcMiniGear==='1') return;
+    gearBtn.dataset.jcMiniGear='1';
+    gearBtn.style.opacity='0.03';
+    gearBtn.style.pointerEvents='none';
+    gearBtn.style.filter='grayscale(1)';
+  }
+  function expandScreen(ui){
+    const ewd=ui.querySelector('.disp-ewd');
+    if(!ewd) return;
+    ewd.style.transformOrigin='top left';
+    ewd.style.transform='scale(1.12,1.16)';
+    ewd.style.zIndex='2';
+    const r=ewd.getBoundingClientRect(), ur=ui.getBoundingClientRect();
+    const fuel=document.getElementById('jc-ecam-fuel');
+    if(fuel && fuel.style.display!=='none'){
+      fuel.style.left=(r.left-ur.left)+'px';
+      fuel.style.top=(r.bottom-ur.top+4)+'px';
+      fuel.style.width=r.width+'px';
+      fuel.style.height=Math.max(13,Math.min(22,r.width*.07))+'px';
+    }
+    const alert=document.getElementById('jc-ecam-alert');
+    if(alert && alert.style.display!=='none'){
+      alert.style.left=Math.round(r.left-ur.left+r.width*.54)+'px';
+      alert.style.top=Math.round(r.top-ur.top+r.height*.70)+'px';
+      alert.style.width=Math.floor(r.width*.42)+'px';
+      alert.style.maxHeight=Math.floor(r.height*.25)+'px';
+    }
+    const gearBox=ensureGearWidget(ui);
+    gearBox.style.display='flex';
+    gearBox.style.left=Math.round(r.right-ur.left+8)+'px';
+    gearBox.style.top=Math.round(r.top-ur.top+r.height*.50-34)+'px';
+    const info=window.__game?.info?.();
+    const g=Number(info?.plane?.gear);
+    const isDown=Number.isFinite(g) ? g>=0.75 : null;
+    gearBox.querySelector('[data-dir="up"]').classList.toggle('active', isDown===false);
+    gearBox.querySelector('[data-dir="dn"]').classList.toggle('active', isDown===true);
+  }
+  function tick(){
+    const ui=document.getElementById('ui');
+    if(!ui) return;
+    shrinkEngineButtons();
+    hideBigGearButton();
+    expandScreen(ui);
+  }
+  document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(tick, 400); setInterval(tick, 350); });
+  setTimeout(()=>{ setInterval(tick, 350); }, 700);
+  window.addEventListener('resize', tick);
+})();
+</script>
+
 </body>
 </html>
