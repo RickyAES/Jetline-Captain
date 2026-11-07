@@ -129,6 +129,16 @@
     #fuelWarning{font-weight:800;color:#ffc56c;min-height:18px}
     #fuelFoot{color:#9fbad0;font-size:11px;line-height:1.5;margin-top:8px}
     @media(max-width:740px){#fuelOpen{font-size:11px;padding:0 7px;min-width:62px}#fuelPanel{top:calc(55px + env(safe-area-inset-top,0px));right:6px}}
+
+    .radarScheduleActions{padding:8px 9px 10px;display:flex;flex-direction:column;gap:5px;border-bottom:1px solid #24516b;background:#0c2942}
+    #radarSchedulesAll{border:1px solid #39bbdf;border-radius:8px;background:#16486c;color:#dff8ff;padding:8px;font-size:12px;font-weight:850;cursor:pointer;text-align:center}
+    #radarSchedulesAll:disabled{opacity:.5}
+    #radarScheduleInfo{font-size:10px;line-height:1.35;color:#9cc8d5}
+    .radarPlane .scheduleTimes{grid-column:1/-1;font-size:11px;color:#e4def8;line-height:1.5;white-space:pre-line}
+    .radarPlane .surfaceTag{grid-column:1/-1;color:#ffce73;font-size:11px;font-weight:900;letter-spacing:.03em}
+    #radarDetail .scheduleSource{font-size:11px;color:#9ec9dd;margin-top:6px;line-height:1.4}
+    @media(max-width:650px){.radarSide{max-height:min(37dvh,320px)}.radarScheduleActions{padding:7px}}
+
   </style>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -247,6 +257,7 @@
         <label>Airline filter<select id="radarFilter" aria-label="Airline filter">
           <option value="SIA">Singapore Airlines (SIA)</option>
           <option value="ALL">All detected aircraft</option>
+          <option value="TAXI">Changi taxiing · all airlines</option>
         </select></label>
         <button id="radarRefresh" type="button">↻ REFRESH</button>
       </div>
@@ -264,11 +275,15 @@
         </div>
         <div class="radarSide">
           <h3 id="radarListTitle">AIRCRAFT · 50 KM</h3>
+          <div class="radarScheduleActions">
+            <button id="radarSchedulesAll" type="button" title="Request available flight schedule data for visible flights. The external flight-status provider may bill for requests.">⏱ LOAD MORE FLIGHT TIMES</button>
+            <small id="radarScheduleInfo">Visible flights are auto-enriched when possible. Verified times require a configured flight-status API and are never inferred from ADS-B.</small>
+          </div>
           <div id="radarList"></div>
-          <div id="radarDetail">Select an aircraft marker or list item to view its flight number, destination, aircraft type, speed and heading.</div>
+          <div id="radarDetail">Select an aircraft marker or list item to view its flight number, route, destination, aircraft type, speed, heading and detailed departure/arrival times.</div>
         </div>
       </div>
-      <p id="radarFoot">Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
+      <p id="radarFoot">Changi taxiing mode shows <strong>reported aircraft on the ground, moving 1–35 kt and within approximately 6 km of WSSS</strong>. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
     </section>
   </div>
 
@@ -374,13 +389,95 @@
   // Route data is separate from live ADS-B: callsigns do not broadcast scheduled origins/destinations.
   const flightRouteCache=new Map(), flightRoutePending=new Set(), flightRouteQueue=[];
   let flightRouteActive=0;
+
+  // Official schedule/status data requires a separate subscription. It is not part of ADS-B.
+  // For this radar view we automatically request schedule data for the visible aircraft
+  // (limited batch size and cached per callsign) so departure/arrival details can appear
+  // directly in the nearby-flight list. Additional visible flights can still be requested
+  // with the LOAD FLIGHT TIMES button.
+  const flightScheduleCache=new Map(),flightSchedulePending=new Set(),flightScheduleQueue=[];
+  let flightScheduleActive=0;
+  const scheduleKey=p=>String(p?.callsign||'').trim().toUpperCase();
+  const flightSchedule=p=>flightScheduleCache.get(scheduleKey(p))||null;
+  const pad2=n=>String(n).padStart(2,'0');
+  function sgTime(value){
+    if(!value||typeof value!=='string')return '—';
+    const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
+    return new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(d)+' SGT';
+  }
+  function flightTimeStatus(p,mode){
+    const data=flightSchedule(p);
+    const k=scheduleKey(p);
+    if(!data){return flightSchedulePending.has(k)?'Looking up…':'Not loaded';}
+    if(data.status==='not_configured')return 'Schedule API not configured';
+    if(data.status==='not_found')return 'No verified schedule';
+    if(data.status==='unavailable')return 'Schedule service unavailable';
+    if(data.status!=='found')return 'Unavailable';
+    const dep=mode==='departure';
+    const actual=dep?(data.actualOut||data.actualOff):(data.actualIn||data.actualOn);
+    const estimated=dep?(data.estimatedOut||data.estimatedOff):(data.estimatedIn||data.estimatedOn);
+    const scheduled=dep?(data.scheduledOut||data.scheduledOff):(data.scheduledIn||data.scheduledOn);
+    return actual?sgTime(actual)+' · ACTUAL':estimated?sgTime(estimated)+' · EST':scheduled?sgTime(scheduled)+' · SCHED':'Time unavailable';
+  }
+  function flightTimeDetail(p,key){
+    const d=flightSchedule(p);
+    return d?.status==='found'?sgTime(d[key]):'—';
+  }
+  function flightTimeCardLines(p){
+    const d=flightSchedule(p);
+    const k=scheduleKey(p);
+    if(!d)return flightSchedulePending.has(k)?'DEPARTURE  Looking up…\nARRIVAL  Looking up…':'DEPARTURE  Not loaded\nARRIVAL  Not loaded';
+    if(d.status==='not_configured')return 'DEPARTURE  Flight-status API not configured\nARRIVAL  Flight-status API not configured';
+    if(d.status==='not_found')return 'DEPARTURE  No verified schedule\nARRIVAL  No verified schedule';
+    if(d.status==='unavailable')return 'DEPARTURE  Schedule service unavailable\nARRIVAL  Schedule service unavailable';
+    return [
+      `DEPARTURE latest  ${flightTimeStatus(p,'departure')}`,
+      `DEPARTURE sched   ${flightTimeDetail(p,'scheduledOut')}`,
+      `ARRIVAL latest    ${flightTimeStatus(p,'arrival')}`,
+      `ARRIVAL sched     ${flightTimeDetail(p,'scheduledIn')}`
+    ].join('\n');
+  }
+  function pumpFlightSchedules(){
+    while(flightScheduleActive<2&&flightScheduleQueue.length){
+      const callsign=flightScheduleQueue.shift();
+      flightScheduleActive++;
+      fetch(`/api/flight-details?callsign=${encodeURIComponent(callsign)}`,{cache:'default'})
+        .then(async res=>{
+          const data=await res.json().catch(()=>null);
+          if(!res.ok)throw new Error(data?.error||'Schedule lookup failed');
+          flightScheduleCache.set(callsign,data||{status:'unavailable'});
+        })
+        .catch(e=>{
+          console.warn('Schedule lookup',callsign,e);
+          flightScheduleCache.set(callsign,{status:'unavailable'});
+        })
+        .finally(()=>{
+          flightScheduleActive--;flightSchedulePending.delete(callsign);
+          if(radarOpenState)renderRadar();
+          pumpFlightSchedules();
+        });
+    }
+  }
+  function queueFlightSchedules(flights){
+    let added=0;
+    for(const p of flights){
+      const k=scheduleKey(p);
+      if(!/^[A-Z]{2,4}[0-9][A-Z0-9]{0,5}$/.test(k))continue;
+      if(flightSchedulePending.has(k)||flightScheduleCache.has(k))continue;
+      flightSchedulePending.add(k);flightScheduleQueue.push(k);added++;
+    }
+    if(added)pumpFlightSchedules();
+    return added;
+  }
+
   const radarCanvas=$('radarCanvas');
   function flightRouteKey(p){return String(p?.callsign||'').trim().toUpperCase();}
   function routeSource(p){return flightRouteCache.get(flightRouteKey(p))||null;}
   function planeOrigin(p){
     const fromFeed=String(p?.origin||p?.originIata||p?.originIcao||'').trim();
+    const fromSchedule=flightSchedule(p)?.status==='found'?(flightSchedule(p)?.origin||''):'';
     const fromLookup=routeSource(p)?.origin||'';
-    return fromFeed||fromLookup||'Not available';
+    return fromSchedule||fromFeed||fromLookup||'Not available';
   }
   function planeRoute(p){
     const from=planeOrigin(p),to=planeDestination(p);
@@ -437,7 +534,9 @@
   };
   const radarFlights=()=>{
     const all=(radarData?.aircraft||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon)).map(animatedPlane).filter(p=>Number.isFinite(p.km)&&p.km<=radarScale+0.05);
-    return $('radarFilter').value==='SIA'?all.filter(p=>p.callsign?.startsWith('SIA')):all;
+    const mode=$('radarFilter').value;
+    if(mode==='TAXI')return radarAirport==='WSSS'?all.filter(p=>p.taxiing===true):[];
+    return mode==='SIA'?all.filter(p=>p.callsign?.startsWith('SIA')):all;
   };
   const fmtRadar=n=>Number.isFinite(n)?String(n):'—';
   function setRadarRange(range){
@@ -533,6 +632,8 @@
   function chooseRadarAirport(code, manual=false){
     if(!airports[code]||!$('radarAirport'))return;
     radarAirport=code;radarManualAirport=manual||radarManualAirport;
+    $('radarFilter').querySelector('option[value="TAXI"]').disabled=code!=='WSSS';
+    if(code!=='WSSS'&&$('radarFilter').value==='TAXI')$('radarFilter').value='ALL';
     rebuildAirportOptions();showAirportRunway();
     if(radarOpenState)loadRadar();
   }
@@ -590,8 +691,9 @@ function movePoint(lat,lon,heading,km){
 }
 function planeDestination(p){
   const fromFeed=String(p?.destination||p?.destinationIcao||p?.destinationIata||p?.routeTo||'').trim();
+  const fromSchedule=flightSchedule(p)?.status==='found'?(flightSchedule(p)?.destination||''):'';
   const fromLookup=routeSource(p)?.destination||'';
-  return fromFeed||fromLookup||'Not available';
+  return fromSchedule||fromFeed||fromLookup||'Not available';
 }
 function planeType(p){
   const code=String(p?.type||'').trim().toUpperCase();
@@ -667,6 +769,7 @@ function animatedPlane(p){
     closeModal();radarOpenState=true;
     $('radarShade').classList.add('show');
     $('radarShade').setAttribute('aria-hidden','false');
+    if(radarAirport==='WSSS'){ $('radarFilter').value='TAXI'; if(radarScale===50)setRadarRange(10); }
     if(!Object.keys(airports).length){loadRadarAirports().then(loadRadar);}else {loadRadarAirports();loadRadar();}
     cancelAnimationFrame(radarAnim);
     radarLastPaint=0;
@@ -690,11 +793,22 @@ function animatedPlane(p){
     radarManualAirport=true;radarTrails.clear();radarData=null;radarSelected=null;
     radarAirport=e.target.value;
     showAirportRunway();
-    if(radarAirport==='WSSS')$('radarFilter').value='SIA';
+    if(radarAirport==='WSSS')$('radarFilter').value='TAXI';
     else $('radarFilter').value='ALL';
+    $('radarFilter').querySelector('option[value="TAXI"]').disabled=radarAirport!=='WSSS';
+    if(radarScale===10)setRadarRange(50);
     loadRadar();
   };
-  $('radarFilter').onchange=()=>{radarSelected=null;renderRadar();};
+  $('radarFilter').onchange=()=>{
+    radarSelected=null;
+    if($('radarFilter').value==='TAXI'&&radarAirport==='WSSS')setRadarRange(10);
+    renderRadar();
+  };
+  $('radarSchedulesAll').onclick=()=>{
+    const flights=radarFlights().slice(0,25);
+    const added=queueFlightSchedules(flights);
+    $('radarScheduleInfo').textContent=added?`Looking up flight times for ${added} aircraft (maximum 25 per click). The provider may charge for requests.`:'No additional flight schedules to request. Select an aircraft to see its available times.';
+  };
   $('radarRefresh').onclick=()=>loadRadar();
   window.addEventListener('keydown',e=>{if(e.key==='Escape'&&radarOpenState)closeRadar();});
   document.addEventListener('visibilitychange',()=>{if(radarOpenState&&document.visibilityState==='visible')loadRadar();});
@@ -723,7 +837,7 @@ function animatedPlane(p){
         const key=p.hex||p.callsign;if(!key)continue;liveKeys.add(key);
         const tr=radarTrails.get(key)||[];
         if(!tr.length||Math.abs(tr[tr.length-1].lat-p.lat)>1e-5||Math.abs(tr[tr.length-1].lon-p.lon)>1e-5){
-          tr.push({lat:p.lat,lon:p.lon});if(tr.length>8)tr.shift();
+          tr.push({lat:p.lat,lon:p.lon});if(tr.length>16)tr.shift();
         }
         radarTrails.set(key,tr);
       }
@@ -859,7 +973,7 @@ function drawRadar(){
     if(trail.length>=2){ctx.strokeStyle='rgba(82,214,209,.30)';ctx.lineWidth=1.5;ctx.beginPath();trail.forEach((t,i)=>{const q=pointXY(t,g);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke();}
     const q=pointXY(p,g),h=(p.heading||0)*Math.PI/180;
     ctx.save();ctx.translate(q.x,q.y);ctx.rotate(h);
-    ctx.fillStyle=key===radarSelected?'#ffd278':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
+    ctx.fillStyle=key===radarSelected?'#ffd278':p.taxiing?'#ffe078':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
     ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();ctx.restore();
     ctx.font='10px system-ui';ctx.fillStyle='#e3faf4';ctx.textAlign='left';
     ctx.fillText((planeFlightNo(p)).slice(0,11),q.x+8,q.y-5);
@@ -868,14 +982,15 @@ function drawRadar(){
   ctx.restore();
   if(!radarData){ctx.textAlign='center';ctx.fillStyle='#b5d4e4';ctx.font='13px system-ui';ctx.fillText('NO VERIFIED LIVE POSITIONS',g.cx,g.cy+g.R*.58)}
 }
-function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;renderRadar()}
+function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueFlightSchedules([p]);renderRadar()}
   function renderRadar(){
     const flights=radarFlights();
-    $('radarListTitle').textContent=`DETECTED AIRCRAFT · ${flights.length} · ${radarScale} KM`;
+    const taxiMode=radarAirport==='WSSS'&&$('radarFilter').value==='TAXI';
+    $('radarListTitle').textContent=taxiMode?`CHANGI TAXIING ONLY · ${flights.length} · ALL AIRLINES`:`DETECTED AIRCRAFT · ${flights.length} · ${radarScale} KM`;
     const list=$('radarList');list.replaceChildren();
     if(!flights.length){
       const empty=document.createElement('p');empty.style.padding='12px';
-      empty.textContent=radarData?('No '+($('radarFilter').value==='SIA'?'Singapore Airlines flights':'aircraft')+` currently reported in the selected ${radarScale} km range.`):'No live aircraft positions available.';
+      empty.textContent=radarData?(taxiMode?'No aircraft currently reported moving on the ground in Changi’s approximate airport area. ADS-B ground coverage is incomplete.':('No '+($('radarFilter').value==='SIA'?'Singapore Airlines flights':'aircraft')+` currently reported in the selected ${radarScale} km range.`)):'No live aircraft positions available.';
       list.appendChild(empty);
     }
     for(const p of flights){
@@ -892,7 +1007,11 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;renderRadar
       stats.textContent=`ALT ${fmtRadar(p.altFt)} ft · GS ${fmtRadar(p.speedKt)} kt · TRACK ${fmtRadar(p.heading)}°`;
       const eta=document.createElement('span');eta.className='eta';
       eta.textContent=`EST. TO ${radarAirport}: ${airportETA(p).short}`;
-      b.append(name,distance,routeLine,details,stats,eta);
+      const times=document.createElement('span');times.className='scheduleTimes';
+      times.textContent=flightTimeCardLines(p);
+      const surface=document.createElement('span');surface.className='surfaceTag';
+      surface.textContent=p.taxiing?'TAXIING IN CHANGI · LIVE GROUND TRACK':(p.onGround?'ON GROUND':'' );
+      b.append(name,distance,routeLine,details,stats,surface,times,eta);
       b.onclick=()=>selectRadarPlane(p);
       list.appendChild(b);
     }
@@ -905,6 +1024,15 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;renderRadar
         ['Origin',planeOrigin(selected)],
         ['Destination',planeDestination(selected)],
         ['Aircraft',planeType(selected)],
+        ['Ground movement',selected.taxiing?'TAXIING at Changi':selected.onGround?'ON GROUND (taxi not verified)':'Not confirmed on ground'],
+        ['Departure latest',flightTimeStatus(selected,'departure')],
+        ['Departure scheduled',flightTimeDetail(selected,'scheduledOut')],
+        ['Departure actual (gate)',flightTimeDetail(selected,'actualOut')],
+        ['Departure actual (runway)',flightTimeDetail(selected,'actualOff')],
+        ['Arrival latest',flightTimeStatus(selected,'arrival')],
+        ['Arrival scheduled',flightTimeDetail(selected,'scheduledIn')],
+        ['Arrival actual (runway)',flightTimeDetail(selected,'actualOn')],
+        ['Arrival actual (gate)',flightTimeDetail(selected,'actualIn')],
         ['Range',selected.km+' km'],
         ['Altitude',fmtRadar(selected.altFt)+' ft'],
         ['Ground speed',fmtRadar(selected.speedKt)+' kt'],
@@ -919,11 +1047,18 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;renderRadar
         row.append(l,v);detail.appendChild(row);
       }
       const caution=document.createElement('div');caution.className='etaCaution';
-      caution.textContent='Estimate to the selected airport only, assuming straight-line flight at present speed and track. It is not a confirmed destination or landing time.';
+      caution.textContent='Flight status times (when available) are sourced separately from ADS-B and shown in Singapore time. Gate OUT/IN and runway OFF/ON are different events. Estimated time to airport is not a verified landing time.';
       detail.appendChild(caution);
+      const src=document.createElement('div');src.className='scheduleSource';
+      src.textContent=flightSchedule(selected)?.status==='found'?'Flight times: FlightAware AeroAPI':flightSchedule(selected)?.status==='not_configured'?'To enable departure/arrival times, configure FLIGHTAWARE_AEROAPI_KEY on Vercel.':'Select a flight to request the available schedule and status.';
+      detail.appendChild(src);
     }else{
-      detail.textContent='Select a flight to see its published airport route (when found), aircraft model and estimated time to this airport. The estimate is not a landing time.';
+      detail.textContent='Select a flight to retrieve available departure/arrival times. A flight-status API key is needed for verified schedule data; ADS-B by itself does not broadcast airport times.';
     }
+    // Automatically enrich the currently visible aircraft so the nearby-flight list can
+    // show departure/arrival details without requiring one-by-one clicks. Cached results
+    // prevent duplicate requests during the same session.
+    queueFlightSchedules(flights.slice(0,12));
     drawRadar();
     queueFlightRoutes(flights);
   }
