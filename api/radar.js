@@ -56,13 +56,24 @@ module.exports=async function handler(req,res){
       const callsign=String(a.flight||'').trim().toUpperCase().slice(0,14);
       const onGround=a.alt_baro==='ground';
       const speedKt=a.gs!=null&&Number.isFinite(Number(a.gs))?Math.round(Number(a.gs)):null;
-      const taxiing=icao==='WSSS'&&onGround&&Number.isFinite(speedKt)&&speedKt>=1&&speedKt<=35&&dist<=6&&(!Number.isFinite(age)||age<=40);
+      // Surface ADS-B includes stationary aircraft. Previous 1-35kt condition hid
+      // aircraft holding short or stopped on the apron. Include all recent on-ground
+      // observations near WSSS; do not imply that 'stopped' means ready to depart.
+      // This radius is an APPROXIMATE airport area, not a surveyed taxiway polygon.
+      const groundAtChangi=icao==='WSSS'&&onGround&&dist<=8.5&&(!Number.isFinite(age)||age<=100);
+      const taxiing=groundAtChangi&&Number.isFinite(speedKt)&&speedKt>2&&speedKt<=45;
+      const stopped=groundAtChangi&&Number.isFinite(speedKt)&&speedKt<=2;
+      const groundUnknown=groundAtChangi&&!Number.isFinite(speedKt);
+      const groundState=groundAtChangi
+        ? (taxiing?'TAXIING':stopped?'STOPPED / HOLDING POSSIBLE':groundUnknown?'ON GROUND · SPEED UNKNOWN':'GROUND ROLL')
+        : '';
+
       aircraft.push({
         hex:String(a.hex||'').slice(0,14),callsign,
         lat:a.lat,lon:a.lon,km:Math.round(dist*10)/10,
         heading:Number.isFinite(Number(a.track))?Math.round(Number(a.track)):null,
         altFt:a.alt_baro!=null&&Number.isFinite(Number(a.alt_baro))?Math.round(Number(a.alt_baro)):null,
-        speedKt,onGround,taxiing,
+        speedKt,onGround,taxiing,groundAtChangi,stopped,groundUnknown,groundState,
         ageSec:Number.isFinite(age)?Math.max(0,Math.round(age)):null,
         type:String(a.t||'').trim().slice(0,16),
         registration:String(a.r||'').trim().slice(0,16),
