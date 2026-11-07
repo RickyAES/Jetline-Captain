@@ -54,12 +54,15 @@ module.exports=async function handler(req,res){
       const age=Number(a.seen_pos??a.seen??0);
       if(Number.isFinite(age)&&age>120)continue; // do not show stale positions as live
       const callsign=String(a.flight||'').trim().toUpperCase().slice(0,14);
+      const onGround=a.alt_baro==='ground';
+      const speedKt=a.gs!=null&&Number.isFinite(Number(a.gs))?Math.round(Number(a.gs)):null;
+      const taxiing=icao==='WSSS'&&onGround&&Number.isFinite(speedKt)&&speedKt>=1&&speedKt<=35&&dist<=6&&(!Number.isFinite(age)||age<=40);
       aircraft.push({
         hex:String(a.hex||'').slice(0,14),callsign,
         lat:a.lat,lon:a.lon,km:Math.round(dist*10)/10,
         heading:Number.isFinite(Number(a.track))?Math.round(Number(a.track)):null,
         altFt:a.alt_baro!=null&&Number.isFinite(Number(a.alt_baro))?Math.round(Number(a.alt_baro)):null,
-        speedKt:a.gs!=null&&Number.isFinite(Number(a.gs))?Math.round(Number(a.gs)):null,
+        speedKt,onGround,taxiing,
         ageSec:Number.isFinite(age)?Math.max(0,Math.round(age)):null,
         type:String(a.t||'').trim().slice(0,16),
         registration:String(a.r||'').trim().slice(0,16),
