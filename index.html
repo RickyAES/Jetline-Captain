@@ -89,6 +89,13 @@
     .radarContent{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr);gap:12px}
     .radarRadar{position:relative;overflow:hidden;border-radius:14px;border:1px solid #235d67;background:#061f2d;aspect-ratio:1/1;min-height:260px;max-height:480px}
     #radarCanvas{display:block;width:100%;height:100%;touch-action:manipulation}
+    /* A single unobtrusive in-map legend; does not cover the cockpit when closed. */
+    #radarGroundLegend{position:absolute;left:7px;bottom:7px;z-index:3;display:flex;flex-wrap:wrap;gap:4px 9px;
+      max-width:calc(100% - 14px);padding:5px 7px;background:#071c2bcc;border:1px solid #2b566b;
+      border-radius:8px;color:#cdeefa;font:800 9px/1.3 system-ui,sans-serif;pointer-events:none}
+    #radarGroundLegend span{white-space:nowrap}
+    @media(max-width:650px){#radarGroundLegend{font-size:8px;gap:3px 7px;padding:4px 5px}}
+
     .radarZoom{position:absolute;z-index:4;right:10px;top:10px;display:flex;align-items:center;gap:5px;padding:5px;background:#07182ee8;border:1px solid #3a7898;border-radius:11px;box-shadow:0 3px 16px #0008}
     .radarZoom button{font-size:19px;font-weight:900;border:1px solid #4a87a7;border-radius:8px;background:#0e4b70;color:#effdff;width:37px;height:35px;touch-action:manipulation}
     .radarZoom button:disabled{opacity:.3}
@@ -248,7 +255,7 @@
   <div id="radarShade" aria-hidden="true">
     <section id="radarPanel" role="dialog" aria-modal="true" aria-labelledby="radarTitle">
       <div class="radarHeader">
-        <h2 id="radarTitle">📡 Synthetic Airport Radar · <span id="radarViewRangeTitle">50 km</span></h2>
+        <h2 id="radarTitle">✈ Live Aircraft Trails Radar · <span id="radarViewRangeTitle">50 km</span></h2>
         <button class="close" type="button" id="radarClose" aria-label="Close live radar">×</button>
       </div>
       <div class="radarToolbar">
@@ -267,8 +274,11 @@
       <div class="radarContent">
         <div class="radarRadar">
           <canvas id="radarCanvas" width="520" height="520" aria-label="Schematic radar with live aircraft. Initial range 50 kilometres."></canvas>
-          <div id="radarGroundLegend" style="display:flex;flex-wrap:wrap;gap:12px;margin:4px 2px 7px;font:600 11px system-ui,sans-serif;color:#c9e8f2">
-            <span style="color:#ffe078">▲ Moving ground aircraft</span><span style="color:#ffb064">▲ Stopped ground aircraft</span><span style="color:#97b9d3">• No ground report = no marker</span>
+          <div id="radarGroundLegend" aria-label="Radar aircraft status legend">
+            <span style="color:#ffe078">✈ TAXIING</span>
+            <span style="color:#ffb064">✈ STOPPED</span>
+            <span style="color:#65f5b5">✈ SIA</span>
+            <span style="color:#65e2fb">✈ AIRBORNE</span>
           </div>
           <div class="radarZoom" role="group" aria-label="Radar range controls">
             <button id="radarZoomIn" type="button" title="Zoom in" aria-label="Zoom in radar">+</button>
@@ -286,7 +296,7 @@
           <div id="radarDetail">Select an aircraft marker or list item to view its flight number, route, destination, aircraft type, speed, heading and detailed departure/arrival times.</div>
         </div>
       </div>
-      <p id="radarFoot">Changi ground mode shows <strong>reported aircraft on the ground within approximately 8.5 km of WSSS, including stopped and moving aircraft</strong>. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. The display cannot reliably tell whether a stopped aircraft is parked, holding short or waiting for a departure clearance. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
+      <p id="radarFoot">Changi ground mode shows <strong>reported aircraft on the ground within approximately 8.5 km of WSSS, including stopped and moving aircraft</strong>. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. The display cannot reliably tell whether a stopped aircraft is parked, holding short or waiting for a departure clearance. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Aircraft markers animate between ADS-B reports using reported groundspeed and track; their short animated trails between updates are estimates, not verified historical positions. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
     </section>
   </div>
 
@@ -389,6 +399,9 @@
   let radarData=null, radarSelected=null, radarBusy=false, radarPoll=null, radarRequestId=0, radarAnim=0, radarLastFetchMs=0;
   let radarScale=50;
   const radarZoomSteps=[10,25,50,75,100], radarTrails=new Map();
+  // Verified points are stored in radarTrails. The following animated trail is
+  // explicitly visual/predicted between ADS-B refreshes, not additional live reports.
+  const radarDisplayStates=new Map(), radarAnimatedTrails=new Map();
   // Route data is separate from live ADS-B: callsigns do not broadcast scheduled origins/destinations.
   const flightRouteCache=new Map(), flightRoutePending=new Set(), flightRouteQueue=[];
   let flightRouteActive=0;
@@ -735,16 +748,127 @@ function airportETA(p){
   return {short:`≈ ${Math.max(1,Math.ceil(minutes))} min`,reason:'Straight-line time to airport at current closing speed; not landing ETA'};
 }
 function animatedPlane(p){
-  if(!p || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) return p;
-  const elapsed=Math.min(55, Math.max(0,(Date.now()-radarLastFetchMs)/1000));
-  if(!Number.isFinite(Number(p.speedKt)) || !Number.isFinite(Number(p.heading)) || elapsed<=0) return {...p};
-  const km=Number(p.speedKt)*1.852*(elapsed/3600);
-  const pos=movePoint(Number(p.lat),Number(p.lon),Number(p.heading),km);
+  if(!p||!Number.isFinite(Number(p.lat))||!Number.isFinite(Number(p.lon)))return p;
+  const now=Date.now();
+  const elapsed=Math.min(55,Math.max(0,(now-radarLastFetchMs)/1000));
+  const speed=Number(p.speedKt),heading=Number(p.heading);
+  const hasMovement=Number.isFinite(speed)&&speed>0.5&&Number.isFinite(heading);
+  // Actual knot-derived movement; no artificial time acceleration or slowdown.
+  const projected=hasMovement?movePoint(Number(p.lat),Number(p.lon),heading,
+    speed*1.852*(elapsed/3600)):{lat:Number(p.lat),lon:Number(p.lon)};
+  const key=p.hex||p.callsign;
+  let state=key?radarDisplayStates.get(key):null;
+  if(!state||!Number.isFinite(state.lat)||!Number.isFinite(state.lon)){
+    state={lat:projected.lat,lon:projected.lon,lastMs:now};
+    if(key)radarDisplayStates.set(key,state);
+  }else{
+    // Catch up smoothly when a fresh ground station report adjusts the position.
+    const dt=Math.min(700,Math.max(0,now-state.lastMs));
+    const ease=1-Math.exp(-dt/1800);
+    const offset=radKm(projected.lat,projected.lon,state.lat,state.lon);
+    const discrepancy=Math.hypot(offset.north,offset.east);
+    if(discrepancy>20){ // An inconsistent report must not draw a huge false trail.
+      state.lat=projected.lat;state.lon=projected.lon;
+      if(key)radarAnimatedTrails.delete(key);
+    }else{
+      state.lat+=(projected.lat-state.lat)*ease;
+      state.lon+=(projected.lon-state.lon)*ease;
+    }
+    state.lastMs=now;
+  }
   const center=airports[radarAirport]||{lat:1.3501,lon:103.9947};
-  const offset=radKm(pos.lat,pos.lon,center.lat,center.lon);
+  const offset=radKm(state.lat,state.lon,center.lat,center.lon);
   const dist=Math.hypot(offset.north,offset.east);
-  return {...p, lat:pos.lat, lon:pos.lon, km:Math.round(dist*10)/10};
+  return {...p,lat:state.lat,lon:state.lon,km:Math.round(dist*10)/10,estimatedMotion:elapsed>0};
 }
+function saveAnimatedTrailPoint(p,now){
+  const key=p.hex||p.callsign;
+  if(!key||!Number.isFinite(p.lat)||!Number.isFinite(p.lon))return;
+  // Keep 120 seconds of movement on the screen, sampled every ~2 seconds.
+  let trail=radarAnimatedTrails.get(key);
+  if(!trail){trail=[];radarAnimatedTrails.set(key,trail)}
+  const last=trail[trail.length-1];
+  if(!last){trail.push({lat:p.lat,lon:p.lon,ms:now});return}
+  if(now-last.ms<2100)return;
+  const km=Math.hypot(...Object.values(radKm(p.lat,p.lon,last.lat,last.lon)));
+  if(km<0.003)return; // Stationary planes do not draw false moving trails.
+  trail.push({lat:p.lat,lon:p.lon,ms:now});
+  while(trail.length>68 || (trail.length && now-trail[0].ms>125000))trail.shift();
+}
+function aircraftPaintColor(p){
+  if(p.stopped)return '#ffac65';
+  if(p.groundAtChangi)return '#ffdc65';
+  if(String(p.callsign||'').startsWith('SIA'))return '#61ffa2';
+  return '#63dafa';
+}
+function drawMiniPlane(ctx,p,position,selected){
+  const scale=p.groundAtChangi?0.81:1.05;
+  const hdg=Number.isFinite(Number(p.heading))?Number(p.heading):0;
+  ctx.save();
+  ctx.translate(position.x,position.y);
+  ctx.rotate(hdg*Math.PI/180);
+  ctx.scale(scale,scale);
+  ctx.fillStyle=selected?'#fff3a2':aircraftPaintColor(p);
+  ctx.strokeStyle='#051924';ctx.lineWidth=1.1;
+  ctx.shadowBlur=selected?12:5;ctx.shadowColor=ctx.fillStyle;
+  // Top-down twin-wing aircraft silhouette. The nose always points in track direction.
+  ctx.beginPath();
+  ctx.moveTo(0,-14);ctx.lineTo(2.1,-10);ctx.lineTo(2.3,-3.5);
+  ctx.lineTo(11.5,3);ctx.lineTo(11.5,5.1);ctx.lineTo(2.3,2.2);
+  ctx.lineTo(2.0,9);ctx.lineTo(5.5,11);ctx.lineTo(5.5,12.5);
+  ctx.lineTo(0,11);ctx.lineTo(-5.5,12.5);ctx.lineTo(-5.5,11);
+  ctx.lineTo(-2.0,9);ctx.lineTo(-2.3,2.2);ctx.lineTo(-11.5,5.1);
+  ctx.lineTo(-11.5,3);ctx.lineTo(-2.3,-3.5);ctx.lineTo(-2.1,-10);
+  ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.restore();
+  if(selected){
+    ctx.save();ctx.strokeStyle='#ffda72';ctx.lineWidth=1.2;
+    ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(position.x,position.y,17,0,2*Math.PI);ctx.stroke();ctx.restore();
+  }
+}
+function drawAircraftTrail(ctx,p,g,now){
+  const key=p.hex||p.callsign;
+  if(!key)return;
+  const history=radarAnimatedTrails.get(key)||[];
+  const color=aircraftPaintColor(p);
+  // Verified ADS-B reporting points provide the faint historical track.
+  const observed=radarTrails.get(key)||[];
+  if(observed.length>1){
+    ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=.25;ctx.lineWidth=1.6;
+    ctx.beginPath();observed.forEach((pos,i)=>{const q=pointXY(pos,g);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});
+    ctx.stroke();ctx.restore();
+  }
+  // Dashed, backward-facing heading guide provides immediate visual movement
+  // even while only one live position has been received. It is not a measured trail.
+  if(Number.isFinite(p.heading)&&Number.isFinite(p.speedKt)&&p.speedKt>2){
+    const speed=Number(p.speedKt);
+    const length=p.groundAtChangi
+      ? Math.min(18,Math.max(9,10+speed*.22))
+      : Math.min(28,Math.max(14,13+speed*.035));
+    const h=p.heading*Math.PI/180,cur=pointXY(p,g);
+    ctx.save();ctx.strokeStyle=color;ctx.globalAlpha=.32;ctx.lineWidth=1.7;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(cur.x,cur.y);
+    ctx.lineTo(cur.x-Math.sin(h)*length,cur.y+Math.cos(h)*length);
+    ctx.stroke();ctx.restore();
+  }
+  // Stronger motion trail is visibly estimated between real ADS-B reports.
+  if(history.length>1){
+    ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=p.groundAtChangi?2.1:2.5;
+    for(let i=1;i<history.length;i++){
+      const a=history[i-1],b=history[i];
+      const age=now-b.ms;if(age>125000)continue;
+      const opacity=Math.max(.08,Math.pow(1-age/125000,1.25)*.72);
+      const q1=pointXY(a,g),q2=pointXY(b,g);
+      ctx.strokeStyle=color;ctx.globalAlpha=opacity;
+      ctx.beginPath();ctx.moveTo(q1.x,q1.y);ctx.lineTo(q2.x,q2.y);ctx.stroke();
+    }
+    const tail=history[history.length-1],q=pointXY(tail,g),end=pointXY(p,g);
+    ctx.strokeStyle=color;ctx.globalAlpha=.65;ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(end.x,end.y);ctx.stroke();
+    ctx.restore();
+  }
+}
+
   let radarLastPaint=0,radarLastEtaUpdate=0;
   function updateRadarArrivalEstimates(){
     if(!radarData)return;
@@ -793,7 +917,7 @@ function animatedPlane(p){
   $('radarClose').onclick=closeRadar;
   $('radarShade').addEventListener('pointerdown',e=>{if(e.target===$('radarShade'))closeRadar();});
   $('radarAirport').onchange=e=>{
-    radarManualAirport=true;radarTrails.clear();radarData=null;radarSelected=null;
+    radarManualAirport=true;radarTrails.clear();radarAnimatedTrails.clear();radarDisplayStates.clear();radarData=null;radarSelected=null;
     radarAirport=e.target.value;
     showAirportRunway();
     if(radarAirport==='WSSS')$('radarFilter').value='TAXI';
@@ -847,10 +971,12 @@ function animatedPlane(p){
         radarTrails.set(key,tr);
       }
       for(const key of radarTrails.keys())if(!liveKeys.has(key))radarTrails.delete(key);
+      for(const key of radarDisplayStates.keys())if(!liveKeys.has(key))radarDisplayStates.delete(key);
+      for(const key of radarAnimatedTrails.keys())if(!liveKeys.has(key))radarAnimatedTrails.delete(key);
       renderRadar();
     }catch(e){
       if(id===radarRequestId){
-        radarData=null;radarTrails.clear();
+        radarData=null;radarTrails.clear();radarAnimatedTrails.clear();radarDisplayStates.clear();
         radarStatus(`NO LIVE DATA — ${e.message}. Check /api/radar?airport=${requested} if this continues. No simulated aircraft are shown.`,true);
         renderRadar();
       }
@@ -957,8 +1083,7 @@ function drawRadar(){
     ctx.save();ctx.strokeStyle='#ffdb88';ctx.lineWidth=4;ctx.lineCap='round';ctx.shadowColor='#f6b746';ctx.shadowBlur=7;
     ctx.beginPath();ctx.moveTo(mx-dx,my-dy);ctx.lineTo(mx+dx,my+dy);ctx.stroke();
     ctx.restore();
-    if(i<3){ctx.font='10px ui-monospace,monospace';ctx.textAlign='left';ctx.fillStyle='#ffe8a8';
-      ctx.fillText((rw.id||'RWY')+' '+Math.round(rw.heading)+'°T',mx+5,my-12-i*9);}
+    // Runway designation and bearings are available in the header above the radar.
   });
   ctx.restore();
   ctx.fillStyle='#70a8bb';ctx.font='12px ui-monospace,monospace';ctx.fillText('N',g.cx,g.cy-g.R-10);ctx.fillText('S',g.cx,g.cy+g.R+17);ctx.fillText('W',g.cx-g.R-14,g.cy+4);ctx.fillText('E',g.cx+g.R+14,g.cy+4);
@@ -971,22 +1096,34 @@ function drawRadar(){
   ctx.fillStyle='#ffbe75';ctx.beginPath();ctx.arc(g.cx,g.cy,5,0,2*Math.PI);ctx.fill();
   ctx.font='12px system-ui';ctx.textAlign='left';ctx.fillStyle='#d8f6ff';
   ctx.fillText(radarAirport+' · '+(airports[radarAirport]?.name||''),10,18);
-  ctx.fillStyle='#8ecddd';ctx.fillText('Synthetic airport map · live aircraft positions',10,35);
+  ctx.fillStyle='#8ecddd';ctx.fillText('ADS-B reports · estimated motion',10,35);
   ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,2*Math.PI);ctx.clip();
-  for(const p of radarFlights()){
-    const key=p.hex||p.callsign,trail=radarTrails.get(key)||[];
-    if(trail.length>=2){ctx.strokeStyle='rgba(82,214,209,.30)';ctx.lineWidth=1.5;ctx.beginPath();trail.forEach((t,i)=>{const q=pointXY(t,g);i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y)});ctx.stroke();}
-    const q=pointXY(p,g),h=(p.heading||0)*Math.PI/180;
-    ctx.save();ctx.translate(q.x,q.y);ctx.rotate(h);
-    ctx.fillStyle=key===radarSelected?'#ffd278':p.stopped?'#ffb064':p.groundAtChangi?'#ffe078':p.callsign?.startsWith('SIA')?'#7cf8cc':'#b5d3ff';
-    const len=p.groundAtChangi?14:11;
-    ctx.beginPath();ctx.moveTo(0,-len);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();
-    if(p.groundAtChangi){ctx.strokeStyle='#091c27';ctx.lineWidth=1;ctx.stroke()}
-    ctx.restore();
-    ctx.font='10px system-ui';ctx.fillStyle='#e3faf4';ctx.textAlign='left';
-    ctx.fillText((planeFlightNo(p)).slice(0,11),q.x+8,q.y-5);
-    // Keep schematic uncluttered; details and arrival estimate live in the side panel.
+  const visiblePlanes=radarFlights();
+  const now=Date.now();
+  // Draw trails before icons so wings and callsigns stay visible.
+  for(const p of visiblePlanes){
+    saveAnimatedTrailPoint(p,now);
+    drawAircraftTrail(ctx,p,g,now);
   }
+  const labelBoxes=[];
+  visiblePlanes.forEach((p,i)=>{
+    const q=pointXY(p,g), key=p.hex||p.callsign;
+    const selected=key===radarSelected;
+    drawMiniPlane(ctx,p,q,selected);
+    if(selected||visiblePlanes.length<9||i<6){
+      const txt=planeFlightNo(p).slice(0,13);
+      ctx.save();ctx.font='bold 10px system-ui';ctx.textAlign='left';
+      const width=ctx.measureText(txt).width;
+      const bounds={left:q.x+11,right:q.x+14+width,top:q.y-21,bottom:q.y-4};
+      const overlapping=labelBoxes.some(b=>bounds.left<b.right&&bounds.right>b.left&&bounds.top<b.bottom&&bounds.bottom>b.top);
+      if(selected||(!overlapping&&bounds.right<g.width-7&&bounds.left>7&&bounds.top>45)){
+        ctx.lineWidth=3;ctx.strokeStyle='#03111cd9';ctx.strokeText(txt,q.x+11,q.y-8);
+        ctx.fillStyle=selected?'#ffe5a1':'#dbf7ff';ctx.fillText(txt,q.x+11,q.y-8);
+        labelBoxes.push(bounds);
+      }
+      ctx.restore();
+    }
+  });
   ctx.restore();
   if(!radarData){ctx.textAlign='center';ctx.fillStyle='#b5d4e4';ctx.font='13px system-ui';ctx.fillText('NO VERIFIED LIVE POSITIONS',g.cx,g.cy+g.R*.58)}
 }
@@ -1082,7 +1219,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     const r=safeRouteInfo();const dest=r?.arr,dep=r?.dep;
     const chosen=airports[dest]?dest:airports[dep]?dep:null;
     if(chosen&&chosen!==radarAirport){
-      radarTrails.clear();radarData=null;radarSelected=null;
+      radarTrails.clear();radarAnimatedTrails.clear();radarDisplayStates.clear();radarData=null;radarSelected=null;
       chooseRadarAirport(chosen,false);
       $('radarFilter').value=chosen==='WSSS'?'SIA':'ALL';
     }
