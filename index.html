@@ -109,6 +109,18 @@
     #radarStatus{font-size:12px;color:#b0cce4;line-height:1.5;margin:5px 0 9px;min-height:18px}
     #radarStatus.error{color:#ffca9b}
     .radarContent{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr);gap:12px}
+
+    /* True coastlines for every airport. The selected style is informational. */
+    .radarMapStyle{position:absolute;top:47px;left:8px;z-index:5;display:flex;gap:3px;background:#031426d9;
+      padding:3px;border:1px solid #3a7898;border-radius:9px;box-shadow:0 2px 8px #0009}
+    .radarMapStyle button{border:1px solid #326181;border-radius:6px;padding:5px 8px;background:#092e47;
+      color:#b7d5e5;font:800 10px system-ui;touch-action:manipulation}
+    .radarMapStyle button[aria-pressed="true"]{background:#157d99;border-color:#56dcf5;color:#fff}
+    #radarMapAttribution{position:absolute;right:8px;bottom:51px;z-index:4;color:#aed8e4;
+      background:#051c2bdf;border:1px solid #25475b;border-radius:5px;font:10px/1.25 system-ui;padding:3px 5px}
+    #radarMapAttribution a{color:#c1f7ff}
+    @media(max-width:650px){.radarMapStyle{top:44px;left:5px}.radarMapStyle button{padding:4px 6px;font-size:9px}
+      #radarMapAttribution{bottom:45px;font-size:9px}}
     .radarRadar{position:relative;overflow:hidden;border-radius:14px;border:1px solid #235d67;background:#061f2d;aspect-ratio:1/1;min-height:260px;max-height:480px}
     #radarCanvas{display:block;width:100%;height:100%;touch-action:manipulation}
     /* A single unobtrusive in-map legend; does not cover the cockpit when closed. */
@@ -305,7 +317,12 @@
       <div id="radarGroundDiagnostic" role="status" style="font-size:12px;color:#ffd18b;margin:3px 0 10px;line-height:1.5;display:none"></div>
       <div class="radarContent">
         <div class="radarRadar">
-          <canvas id="radarCanvas" width="520" height="520" aria-label="Schematic radar with live aircraft. Initial range 25 kilometres."></canvas>
+          <canvas id="radarCanvas" width="520" height="520" aria-label="Geographically aligned airport radar with live aircraft and real coastlines."></canvas>
+          <div class="radarMapStyle" role="group" aria-label="Map appearance">
+            <button id="radarCoastMode" type="button" aria-pressed="true" title="Accurate luminous geographic coastlines">COAST</button>
+            <button id="radarStreetMode" type="button" aria-pressed="false" title="Detailed OpenStreetMap map where online">STREETS</button>
+          </div>
+          <div id="radarMapAttribution"><span id="radarMapAttributionText">Coastlines: GSHHG</span> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" title="Map data licence">© OSM</a></div>
           <div id="radarGroundLegend" aria-label="Radar aircraft status legend">
             <span style="color:#ffe078">✈ TAXIING</span>
             <span style="color:#ffb064">✈ STOPPED</span>
@@ -328,7 +345,7 @@
           <div id="radarDetail">Select an aircraft marker or list item to view its flight number, route, destination, aircraft type, speed, heading and detailed departure/arrival times.</div>
         </div>
       </div>
-      <p id="radarFoot">Changi activity mode shows <strong>confirmed ground aircraft and nearby low-altitude flights separately</strong>; airborne aircraft are never labeled taxiing. Changi ground mode shows only reported aircraft on the ground within approximately 8.5 km of WSSS, including stopped and moving aircraft. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. Runway strips are plotted from published CAAS coordinates, while surrounding coastlines are schematic. Runway 02R/20L at Changi is not available for civil use until at least 24 Dec 2026 under the published notice. The display cannot reliably tell whether a stopped aircraft is parked, holding short or waiting for a departure clearance. Climbing and descending aircraft near airports are labelled possible departures/arrivals only, because ADS-B does not prove which airport or runway they are using. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Singapore airport overlay shows Changi (WSSS), Seletar (WSSL) and Paya Lebar (WSAP); it is not a verified airport surface movement chart. Ground positions may be absent, and reported aircraft are NOT guaranteed to include all aircraft at the airport. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). The map is a synthetic schematic display, not a real chart. Aircraft markers animate between ADS-B reports using reported groundspeed and track; their short animated trails between updates are estimates, not verified historical positions. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
+      <p id="radarFoot">Changi activity mode shows <strong>confirmed ground aircraft and nearby low-altitude flights separately</strong>; airborne aircraft are never labeled taxiing. Changi ground mode shows only reported aircraft on the ground within approximately 8.5 km of WSSS, including stopped and moving aircraft. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. International coastlines use GSHHG shoreline geography; Singapore's bright neon silhouette is an illustrative tracing of the supplied reference, approximately georeferenced rather than an official coast survey. Street-map tiles, when selected, are © OpenStreetMap contributors. Runway strips for Singapore use published CAAS coordinates; international runway ends, when available, use OurAirports public-domain data. Runway 02R/20L at Changi is not available for civil use until at least 24 Dec 2026 under the published notice. The display cannot reliably tell whether a stopped aircraft is parked, holding short or waiting for a departure clearance. Climbing and descending aircraft near airports are labelled possible departures/arrivals only, because ADS-B does not prove which airport or runway they are using. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Singapore airport overlay shows Changi (WSSS), Seletar (WSSL) and Paya Lebar (WSAP); it is not a verified airport surface movement chart. Ground positions may be absent, and reported aircraft are NOT guaranteed to include all aircraft at the airport. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). This is a geographic visualization, not an official aeronautical chart; coastline and airport data may be simplified or outdated. Aircraft markers animate between ADS-B reports using reported groundspeed and track; their short animated trails between updates are estimates, not verified historical positions. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
     </section>
   </div>
 
@@ -560,6 +577,123 @@
   }
 
   const radarCanvas=$('radarCanvas');
+  let geoSegments=null,geoSingapore=null,geoRequested=false,geoFailed=false;
+  let radarMapMode='coast';
+  const streetTileCache=new Map();
+  const coastAttribution='Coastlines: GSHHG geographic data';
+  function loadRadarCoastlines(){
+    if(geoRequested)return;
+    geoRequested=true;
+    fetch('radar-coastlines.json',{cache:'force-cache'})
+      .then(async response=>{if(!response.ok)throw new Error('No coastline data');return response.json()})
+      .then(data=>{if(!Array.isArray(data?.segments))throw new Error('Invalid coastline map');
+        geoSegments=data.segments;geoSingapore=data.singaporeReference||null;
+        geoFailed=false;if(radarOpenState)drawRadar();})
+      .catch(error=>{geoFailed=true;console.warn('Jetline geographic coastlines:',error);if(radarOpenState)drawRadar();});
+  }
+  function setRadarMapMode(mode){
+    radarMapMode=mode==='streets'?'streets':'coast';
+    $('radarCoastMode').setAttribute('aria-pressed',String(radarMapMode==='coast'));
+    $('radarStreetMode').setAttribute('aria-pressed',String(radarMapMode==='streets'));
+    const credit=$('radarMapAttributionText');
+    if(credit){
+      credit.textContent=radarMapMode==='streets'?'© OpenStreetMap contributors · coastlines GSHHG':coastAttribution;
+    }
+    if(radarOpenState)drawRadar();
+  }
+  $('radarCoastMode').onclick=()=>setRadarMapMode('coast');
+  $('radarStreetMode').onclick=()=>setRadarMapMode('streets');
+  // Web Mercator projection shared by coastlines, OSM tiles, runway ends and ADS-B markers.
+  function mercY(lat){
+    const r=Math.max(-85.05112878,Math.min(85.05112878,lat))*Math.PI/180;
+    return (1-Math.asinh(Math.tan(r))/Math.PI)/2;
+  }
+  function geoPoint(lat,lon,g){
+    const c=airports[radarAirport]||{lat:1.3501,lon:103.9947};
+    const globeWidthKm=40075.016686*Math.max(.03,Math.cos(c.lat*Math.PI/180));
+    const scale=globeWidthKm*g.R/radarScale;
+    const dlon=(((lon-c.lon+540)%360)+360)%360-180;
+    return {x:g.cx+(dlon/360)*scale,y:g.cy+(mercY(lat)-mercY(c.lat))*scale};
+  }
+  function loadStreetTile(z,x,y){
+    const max=2**z;if(y<0||y>=max)return null;
+    const px=((x%max)+max)%max;
+    const key=z+'/'+px+'/'+y;
+    let record=streetTileCache.get(key);
+    if(record)return record;
+    record={status:'loading',image:new Image()};streetTileCache.set(key,record);
+    record.image.crossOrigin='anonymous';
+    record.image.onload=()=>{record.status='ready';if(radarOpenState)drawRadar();};
+    record.image.onerror=()=>{record.status='failed';};
+    // Standard OSM tiles, requested only in STREETS mode for the actively visible viewport.
+    record.image.src='https://tile.openstreetmap.org/'+key+'.png';
+    // Avoid long-term retaining every airport's tiles in memory. Browser HTTP cache is separate.
+    if(streetTileCache.size>90){for(const k of streetTileCache.keys()){if(k!==key){streetTileCache.delete(k);break;}}}
+    return record;
+  }
+  function drawStreetMap(ctx,g){
+    const c=airports[radarAirport];if(!c)return;
+    const globeKm=40075.016686*Math.max(.03,Math.cos(c.lat*Math.PI/180));
+    const screenWorldPixels=globeKm*g.R/radarScale;
+    const zoom=Math.max(2,Math.min(15,Math.round(Math.log2(screenWorldPixels/256))));
+    const n=2**zoom,tilePx=screenWorldPixels/n;
+    const cx=((c.lon+180)/360)*n,cy=mercY(c.lat)*n;
+    const left=Math.floor(cx-g.R/tilePx)-1,right=Math.ceil(cx+g.R/tilePx)+1;
+    const top=Math.max(0,Math.floor(cy-g.R/tilePx)-1);
+    const bottom=Math.min(n-1,Math.ceil(cy+g.R/tilePx)+1);
+    ctx.save();ctx.globalAlpha=.78;ctx.filter='saturate(0.45) brightness(0.58) contrast(1.18)';
+    for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+      const tile=loadStreetTile(zoom,x,y);
+      if(tile?.status!=='ready')continue;
+      ctx.drawImage(tile.image,g.cx+(x-cx)*tilePx,g.cy+(y-cy)*tilePx,tilePx+0.6,tilePx+0.6);
+    }
+    ctx.restore();
+  }
+  function drawGeoCoastlines(ctx,g){
+    if(!geoSegments)return;
+    const c=airports[radarAirport];if(!c)return;
+    const latRange=Math.max(.04,radarScale/111.195*1.25);
+    const lonRange=Math.min(180,Math.max(.05,radarScale/(111.195*Math.max(.03,Math.cos(c.lat*Math.PI/180)))*1.25));
+    const lo=c.lon-lonRange,hi=c.lon+lonRange,low=c.lat-latRange,high=c.lat+latRange;
+    ctx.save();ctx.strokeStyle=radarMapMode==='streets'?'#8ed8e1':'#4ce4ff';
+    ctx.lineWidth=radarMapMode==='streets'?1.0:1.65;ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.shadowColor='#2fc9fa';ctx.shadowBlur=radarMapMode==='streets'?2:6;
+    for(const item of geoSegments){
+      const b=item[0];if(b[3]<low||b[1]>high)continue;
+      // Date-line wrapping is handled by geoPoint; these bbox checks are quick.
+      if(c.lon>-178&&c.lon<178&&(b[2]<lo||b[0]>hi))continue;
+      const pts=item[1];if(!pts||pts.length<2)continue;
+      ctx.beginPath();let last=null,valid=false;
+      for(const pt of pts){
+        const q=geoPoint(pt[1],pt[0],g);
+        if(!last||Math.abs(q.x-last.x)>g.width*1.5){ctx.moveTo(q.x,q.y)}else{ctx.lineTo(q.x,q.y);valid=true;}
+        last=q;
+      }
+      if(valid)ctx.stroke();
+    }
+    ctx.restore();
+    // A separate high-contrast Singapore silhouette follows the provided visual
+    // reference. It is anchored approximately to geographic coordinates and is
+    // decorative, not a precise official coastline or airport movement chart.
+    if(geoSingapore?.length>2&&radarMapMode==='coast'&&
+       ['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport)){
+      ctx.save();
+      ctx.beginPath();
+      geoSingapore.forEach(([lon,lat],i)=>{
+        const q=geoPoint(lat,lon,g);
+        if(i===0)ctx.moveTo(q.x,q.y);else ctx.lineTo(q.x,q.y);
+      });
+      ctx.closePath();
+      ctx.fillStyle='rgba(19,105,141,.13)';ctx.fill();
+      ctx.lineWidth=2.0;ctx.strokeStyle='#b8f3ff';
+      ctx.shadowColor='#3caeff';ctx.shadowBlur=11;ctx.stroke();
+      ctx.restore();
+    }
+  }
+  window.__jetlineGeographicMapInfo=()=>({mode:radarMapMode,coastlineReady:!!geoSegments,
+    coastlineSegments:geoSegments?.length||0,singaporeReferenceReady:!!geoSingapore,
+    coastlineError:geoFailed,
+    worldDirectoryStatus:worldAirportsStatus,airport:radarAirport,zoomKm:radarScale});
   function flightRouteKey(p){return String(p?.callsign||'').trim().toUpperCase();}
   function routeSource(p){return flightRouteCache.get(flightRouteKey(p))||null;}
   function planeOrigin(p){
@@ -639,7 +773,7 @@
     radarScale=closest;
     $('radarZoomLabel').textContent=closest+' km';
     $('radarViewRangeTitle').textContent=closest+' km';
-    $('radarCanvas').setAttribute('aria-label',`Schematic airport radar, range ${closest} kilometres`);
+    $('radarCanvas').setAttribute('aria-label',`Geographic airport radar, range ${closest} kilometres`);
     if(radarData)radarStatus(`LIVE ADS-B · ${radarData.aircraft.length} reported within 100 km of ${radarData.airport.name} · Viewing ${closest} km · Refresh every 60 s`);
     $('radarZoomIn').disabled=closest===radarZoomSteps[0];
     $('radarZoomOut').disabled=closest===radarZoomSteps[radarZoomSteps.length-1];
@@ -667,7 +801,7 @@
   // The original international airports are always kept in the unfiltered dropdown.
   // The extended country catalogue must ADD choices, never push out the 200+ original destinations.
   const originalAirportCodes=new Set();
-  const regionLabels={WORLD:'International & original airports',SG:'Singapore regional',ID:'Indonesia regional',TH:'Thailand regional',OTHER:'Other regional airports'};
+  const regionLabels={WORLD:'International & original airports',SG:'Singapore regional',ID:'Indonesia regional',TH:'Thailand regional',OTHER:'Worldwide additional airports'};
   function regionForAirport(a,code){
     if(code==='SGALL')return 'SG';
     if(originalAirportCodes.has(code))return 'WORLD';
@@ -718,7 +852,7 @@
     const extraCount=Math.max(0,Object.keys(airports).length-originalAirportCodes.size);
     $('radarCatalogStatus').textContent=search
       ? `${matching.length} matching airports · ${shown.length} displayed. Search by name, country or airport code.`
-      : `${originalAirportCodes.size} original airports preserved · ${extraCount} additional regional airports available · search all airports.`;
+      : `${originalAirportCodes.size} original airports preserved · ${extraCount} additional international / regional airports · ${worldAirportsStatus} · search by ICAO, city or country.`;
   }
   function showAirportRunway(){
     const codes=radarAirport==='SGALL'?Object.keys(SG_AIRFIELDS):[radarAirport];
@@ -728,10 +862,13 @@
       $('radarRunwayStatus').textContent='CAAS RUNWAYS · '+all.join(' | ')+(known.includes('WSSS')?' · WSSS 02R/20L NOT FOR CIVIL USE (6 Aug–24 Dec 2026)':'');
       return;
     }
-    const a=airports[radarAirport]||{};const runways=Array.isArray(a.runways)?a.runways:[];
+    const a=airports[radarAirport]||{};
+    const runways=runwayLookup.get(radarAirport)||(Array.isArray(a.runways)?a.runways:[]);
     $('radarRunwayStatus').textContent=runways.length ?
-      'RUNWAY · '+runways.slice(0,4).map(r=>`${r.id||'RWY'} · HDG ${String(Math.round(r.heading)).padStart(3,'0')}°T`).join('  |  '):
-      'RUNWAY · No verified orientation in the published data';
+      'RUNWAY · '+runways.slice(0,6).map(r=>r.id||'RWY').join('  |  ')+' · geometry informational only' :
+      runwayPending.has(radarAirport)?'RUNWAY · loading international runway geometry…':
+      'RUNWAY · No reported threshold geometry (not invented)';
+    ensureAirportRunways(radarAirport);
   }
   const sgFilterModes=['SGACT','SGGND','SGARR','SGDEP'];
   function enableRadarModes(code){
@@ -747,6 +884,44 @@
     enableRadarModes(code);
     rebuildAirportOptions();showAirportRunway();
     if(radarOpenState)loadRadar();
+  }
+  let worldAirportsStarted=false,worldAirportsStatus='not requested';
+  async function loadWorldAirports(){
+    if(worldAirportsStarted)return;
+    worldAirportsStarted=true;worldAirportsStatus='loading worldwide directory';
+    try{
+      const response=await fetch('/api/world-airports',{cache:'default'});
+      if(!response.ok)throw new Error('Global airport service offline');
+      const data=await response.json();
+      if(!data?.airports||typeof data.airports!=='object')throw new Error('Invalid global directory');
+      let added=0;
+      for(const [code,a] of Object.entries(data.airports)){
+        if(!Number.isFinite(Number(a?.lat))||!Number.isFinite(Number(a?.lon)))continue;
+        if(!airports[code]){airports[code]=a;added++;}
+        else airports[code]={...a,...airports[code]};
+      }
+      worldAirportsStatus=`${added} international airports added`;
+      rebuildAirportOptions();
+    }catch(e){
+      worldAirportsStatus='Worldwide directory unavailable; original airports retained';
+      console.warn('Jetline international airports:',e);
+      const note=$('radarCatalogStatus');
+      if(note){note.title=worldAirportsStatus;rebuildAirportOptions();}
+    }
+  }
+  const runwayLookup=new Map(),runwayPending=new Set();
+  function ensureAirportRunways(code){
+    if(!code||code==='SGALL'||SG_AIRFIELDS[code]||runwayLookup.has(code)||runwayPending.has(code))return;
+    runwayPending.add(code);
+    fetch('/api/airport-runways?airport='+encodeURIComponent(code),{cache:'default'})
+      .then(async r=>{if(!r.ok)throw new Error('No runway data');return r.json()})
+      .then(d=>{
+        const runways=(d.runways||[]).filter(r=>Array.isArray(r.a)&&Array.isArray(r.b)&&
+          r.a.length===2&&r.b.length===2&&[...r.a,...r.b].every(Number.isFinite));
+        runwayLookup.set(code,runways);
+      })
+      .catch(()=>runwayLookup.set(code,[]))
+      .finally(()=>{runwayPending.delete(code);if(code===radarAirport){showAirportRunway();drawRadar()}});
   }
   function loadRadarAirports(){
     // One shared in-flight request: opening RADAR during startup must not overwrite
@@ -769,8 +944,10 @@
         originalAirportCodes.clear();
         for(const code of Object.keys(base))originalAirportCodes.add(code);
         rebuildAirportOptions();showAirportRunway();
+        loadWorldAirports();
       }catch(e){$('radarCatalogStatus').textContent='Base airport database could not be loaded.';console.warn(e);}
     }
+    if(Object.keys(airports).length)loadWorldAirports();
     if(airportCatalogueLoaded||airportCatalogueLoading)return;
     airportCatalogueLoading=true;
     try{
@@ -996,10 +1173,11 @@ function drawAircraftTrail(ctx,p,g,now){
   }
   function openRadar(){
     closeModal();radarOpenState=true;
+    loadRadarCoastlines();
     $('radarShade').classList.add('show');
     $('radarShade').setAttribute('aria-hidden','false');
     enableRadarModes(radarAirport);
-    if(radarAirport==='SGALL'){ $('radarFilter').value='SGACT';if(radarScale===50)setRadarRange(25); }
+    if(radarAirport==='SGALL'){ $('radarFilter').value='SGACT';if(radarScale===25)setRadarRange(50); }
     else if(radarAirport==='WSSS'){ $('radarFilter').value='CHANGI';if(radarScale===50)setRadarRange(10); }
     if(!Object.keys(airports).length){loadRadarAirports().then(loadRadar);}else {loadRadarAirports();loadRadar();}
     cancelAnimationFrame(radarAnim);
@@ -1026,7 +1204,7 @@ function drawAircraftTrail(ctx,p,g,now){
     showAirportRunway();
     $('radarFilter').value=radarAirport==='SGALL'?'SGACT':radarAirport==='WSSS'?'CHANGI':SG_AIRFIELDS[radarAirport]?'SGACT':'ALL';
     enableRadarModes(radarAirport);
-    setRadarRange(radarAirport==='SGALL'?25:radarAirport==='WSSS'?10:SG_AIRFIELDS[radarAirport]?15:50);
+    setRadarRange(radarAirport==='SGALL'?50:radarAirport==='WSSS'?10:SG_AIRFIELDS[radarAirport]?15:50);
     loadRadar();
   };
   $('radarFilter').onchange=()=>{
@@ -1097,9 +1275,7 @@ function drawAircraftTrail(ctx,p,g,now){
     return {width,height,cx,cy,R,dpr};
   }
   function pointXY(p,g){
-    const center=airports[radarAirport]||{lat:1.3501,lon:103.9947};
-    const km=radKm(p.lat,p.lon,center.lat,center.lon);
-    return {x:g.cx+km.east/radarScale*g.R,y:g.cy-km.north/radarScale*g.R};
+    return geoPoint(Number(p.lat),Number(p.lon),g);
   }
 
 function drawLineSet(ctx,g,lines,color,width=1.2,dash=[]){
@@ -1115,24 +1291,6 @@ function drawLineSet(ctx,g,lines,color,width=1.2,dash=[]){
   }
   ctx.restore();
 }
-function airportSchematic(centerCode){
-  if(['WSSS','WSSL','WSAP','SGALL'].includes(centerCode)){
-    return {
-      country:[
-        // Stylized geographic orientation: Changi is on Singapore's east coast.
-        [[7,0],[5,5],[-1,8],[-8,8],[-13,10],[-20,11],[-25,10],[-31,13],[-37,12],[-42,9],[-45,5],[-44,0],[-40,-3],[-34,-5],[-29,-8],[-22,-8],[-16,-11],[-9,-9],[-3,-7],[3,-4],[7,0]],
-        // Southern coast of Johor, to the north.
-        [[-65,24],[-56,29],[-47,26],[-38,27],[-29,25],[-18,26],[-8,22],[4,20],[17,22],[29,19],[40,15],[53,12],[67,10]],
-        // Batam and Bintan island outlines to the south.
-        [[-31,-27],[-22,-24],[-13,-26],[-4,-23],[7,-26],[15,-30],[6,-34],[-12,-32],[-26,-31],[-31,-27]],
-        [[24,-30],[37,-26],[50,-28],[61,-38],[59,-48],[50,-53],[36,-48],[25,-37],[24,-30]]
-      ],
-      runways:[ [[-3,-6],[0,5]], [[1,-7],[4,4]] ],
-      labels:[ ['SINGAPORE',-22,0], ['JOHOR',-10,34], ['BATAM',-15,-39], ['BINTAN',45,-48], ['CHANGI',8,-8] ]
-    };
-  }
-  return {country:[],runways:[],labels:[]};
-}
 function drawRadar(){
   const g=radarGeometry(),ctx=radarCanvas.getContext('2d');if(!ctx)return;
   ctx.setTransform(g.dpr,0,0,g.dpr,0,0);
@@ -1141,6 +1299,10 @@ function drawRadar(){
   const grad=ctx.createRadialGradient(g.cx,g.cy,g.R*.1,g.cx,g.cy,g.R*1.05);
   grad.addColorStop(0,'#0a2a39');grad.addColorStop(1,'#041119');
   ctx.fillStyle=grad;ctx.fillRect(0,0,g.width,g.height);
+  // Real geographic map aligned to airport coordinates — no invented Singapore outline.
+  ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,Math.PI*2);ctx.clip();
+  if(radarMapMode==='streets')drawStreetMap(ctx,g);
+  drawGeoCoastlines(ctx,g);
   // background grid
   ctx.strokeStyle='rgba(57,103,120,.22)';ctx.lineWidth=1;
   for(let i=0;i<=10;i++){
@@ -1151,20 +1313,16 @@ function drawRadar(){
   ctx.strokeStyle='#1f5461';ctx.lineWidth=1;
   for(let i=1;i<=4;i++){ctx.beginPath();ctx.arc(g.cx,g.cy,g.R*i/4,0,Math.PI*2);ctx.stroke();}
   ctx.beginPath();ctx.moveTo(g.cx-g.R,g.cy);ctx.lineTo(g.cx+g.R,g.cy);ctx.moveTo(g.cx,g.cy-g.R);ctx.lineTo(g.cx,g.cy+g.R);ctx.stroke();
-  const schematic=airportSchematic(radarAirport);
-  // Changi schematic is positioned relative to airport centre; for Seletar shift it
-  // by the distance between the two airport reference points.
-  if((radarAirport==='WSSL'||radarAirport==='SGALL'||radarAirport==='WSAP') && airports.WSSS && airports[radarAirport]){
-    const d=radKm(airports.WSSS.lat,airports.WSSS.lon,airports[radarAirport].lat,airports[radarAirport].lon);
-    schematic.country=schematic.country.map(line=>line.map(([x,y])=>[x+d.east,y+d.north]));
-    schematic.labels=schematic.labels.map(([txt,e,n])=>[txt,e+d.east,n+d.north]);
-  }
-  ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,Math.PI*2);ctx.clip();
-  drawLineSet(ctx,g,schematic.country,'rgba(103,220,228,.8)',1.4);
-  // Runways are drawn below from published true bearings, not a static fake diagonal.
-  ctx.fillStyle='#7fcddb';ctx.font='11px ui-monospace,monospace';ctx.textAlign='center';
-  for(const [txt,e,n] of schematic.labels){
-    if(Math.hypot(e,n)<radarScale*.86)ctx.fillText(txt, g.cx+e/radarScale*g.R, g.cy-n/radarScale*g.R);
+  // Labels are geographic points, not hand-positioned schematic geometry.
+  if(SG_AIRFIELDS[radarAirport]||radarAirport==='SGALL'){
+    const sgLabels=[['SINGAPORE',1.282,103.818],['JOHOR',1.515,103.815],
+      ['BATAM',1.045,104.015],['BINTAN',1.02,104.46]];
+    ctx.save();ctx.font='11px ui-monospace,monospace';ctx.fillStyle='#7eb7c7';ctx.textAlign='center';
+    for(const [name,lat,lon] of sgLabels){
+      const q=geoPoint(lat,lon,g);
+      if(Math.hypot(q.x-g.cx,q.y-g.cy)<g.R*.9)ctx.fillText(name,q.x,q.y);
+    }
+    ctx.restore();
   }
   // Singapore airport runways: CAAS AIP threshold endpoints in real geo coordinates.
   // This is a non-navigational synthetic schematic, not a taxiway chart.
@@ -1189,28 +1347,22 @@ function drawRadar(){
     ctx.fillStyle='#ffcc7c';ctx.font='bold 11px system-ui';ctx.textAlign='center';
     ctx.fillText(code+' '+airfield.name,centre.x,centre.y+18);
   }
-  // Else, for international airports, use the existing heading-based runway drawing.
-  const field=airports[radarAirport]||{};
-  const runwayList=singaporeCodes.length?[]:(Array.isArray(field.runways)?field.runways:[]);
-  runwayList.slice(0,6).forEach((rw,i)=>{
-    if(!Number.isFinite(Number(rw.heading)))return;
-    const hdg=Number(rw.heading)*Math.PI/180;
-    const visibleLenKm=Math.max(2.6,Math.min(6.0,(Number(rw.lengthFt)||0)*0.0003048*1.75));
-    // Offset parallel runway strips for legibility when threshold coordinates absent.
-    let baseEast=(i-(Math.min(runwayList.length,6)-1)/2)*1.7,baseNorth=0;
-    if(Number.isFinite(rw.leLat)&&Number.isFinite(rw.leLon)&&Number.isFinite(rw.heLat)&&Number.isFinite(rw.heLon)){
-      const centreLat=(rw.leLat+rw.heLat)/2,centreLon=(rw.leLon+rw.heLon)/2;
-      const off=radKm(centreLat,centreLon,field.lat,field.lon);
-      baseEast=off.east;baseNorth=off.north;
+  // International runway endpoints from OurAirports: no invented line placement.
+  if(!singaporeCodes.length){
+    const field=airports[radarAirport]||{};
+    const rwList=runwayLookup.get(radarAirport)||[];
+    for(const runway of rwList){
+      const a=pointXY({lat:runway.a[0],lon:runway.a[1]},g);
+      const b=pointXY({lat:runway.b[0],lon:runway.b[1]},g);
+      if([a.x,a.y,b.x,b.y].some(v=>!Number.isFinite(v)))continue;
+      ctx.save();ctx.lineWidth=radarScale<=15?5:3;ctx.lineCap='round';
+      ctx.strokeStyle='#ffd891';ctx.shadowColor='#ffc45b';ctx.shadowBlur=5;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+      ctx.fillStyle='#ffeab6';ctx.shadowBlur=0;ctx.font='bold 9px system-ui';
+      ctx.fillText(runway.id||'RWY',(a.x+b.x)/2+10,(a.y+b.y)/2-5);
+      ctx.restore();
     }
-    const mx=g.cx+baseEast/radarScale*g.R,my=g.cy-baseNorth/radarScale*g.R;
-    const radius=Math.max(13,visibleLenKm/radarScale*g.R/2);
-    const dx=Math.sin(hdg)*radius,dy=-Math.cos(hdg)*radius;
-    ctx.save();ctx.strokeStyle='#ffdb88';ctx.lineWidth=4;ctx.lineCap='round';ctx.shadowColor='#f6b746';ctx.shadowBlur=7;
-    ctx.beginPath();ctx.moveTo(mx-dx,my-dy);ctx.lineTo(mx+dx,my+dy);ctx.stroke();
-    ctx.restore();
-    // Runway designation and bearings are available in the header above the radar.
-  });
+  }
   ctx.restore();
   ctx.fillStyle='#70a8bb';ctx.font='12px ui-monospace,monospace';ctx.fillText('N',g.cx,g.cy-g.R-10);ctx.fillText('S',g.cx,g.cy+g.R+17);ctx.fillText('W',g.cx-g.R-14,g.cy+4);ctx.fillText('E',g.cx+g.R+14,g.cy+4);
   for(let i=1;i<=4;i++){
@@ -1251,6 +1403,7 @@ function drawRadar(){
     }
   });
   ctx.restore();
+  if(geoFailed){ctx.textAlign='center';ctx.fillStyle='#ffcd8c';ctx.font='11px system-ui';ctx.fillText('COASTLINE DATA MISSING · upload radar-coastlines.json',g.cx,g.cy+g.R*.43)}
   if(!radarData){ctx.textAlign='center';ctx.fillStyle='#b5d4e4';ctx.font='13px system-ui';ctx.fillText('NO VERIFIED LIVE POSITIONS',g.cx,g.cy+g.R*.58)}
 }
 function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueFlightSchedules([p]);renderRadar()}
@@ -1473,7 +1626,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     const fix=String(f?.name||'ARRIVAL FIX').replace(/[^A-Z0-9 ]/gi,'').slice(0,12)||'ARRIVAL FIX';
     const offsets=[-155,-115,-45,25,90,145];
     const inbound=angle(Math.round((r.heading+offsets[Math.floor(Math.random()*offsets.length)])/5)*5);
-    const turn='right';
+    const turn=Math.random()<0.5?'right':'left';
     const entry=entryFor(r.heading,inbound,turn);
     const outbound=angle(inbound+180);
     const alt=Math.max(1500,Math.round(r.alt/100)*100);
@@ -1484,7 +1637,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     const bypass=gameHoldingExempt(true);
     if(!bypass?.active)console.warn('Native missed-fix protection is not active; ensure updated game.html is deployed.');
     updateHoldHud(r);
-    const clearance=`Jetline ${r.info.level||1}, due arrival congestion at ${r.arr}, hold at ${fix}. Inbound course ${padHdg(inbound)}, right-hand turns. Maintain ${alt} feet. Speed not above ${maxKt} knots. Expect further clearance.`;
+    const clearance=`Jetline ${r.info.level||1}, for traffic sequencing into ${r.arr}, hold at ${fix}. Inbound course ${padHdg(inbound)}, ${turn}-hand turns. Maintain ${alt} feet. Speed not above ${maxKt} knots. Expect further clearance.`;
     $('holdClearance').textContent='ATC: '+clearance;
     $('holdFeedback').textContent='New clearance — read back and act now.';
     $('holdFeedback').style.color='#ffd48a';
@@ -1541,11 +1694,36 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     previousGameT=r.t;
     const key=`${r.dep}|${r.arr}|${r.info.level||1}`;
     if(key!==atcHoldFlight){resetHold();atcHoldFlight=key;
-      atcHoldSchedule={at:r.t+21+Math.random()*17,congested:r.busy||Math.random()<0.35};
+      // Every level receives ONE surprise ATC hold if the pilot reaches the enroute
+      // portion. The waypoint/trigger time is randomized independently of airport.
+      // In particular, smaller airports are no longer excluded by a 35% roll.
+      const n=Math.max(1,r.info.route?.wps?.length||1);
+      atcHoldSchedule={
+        waypoint:Math.floor(Math.random()*n),
+        routeDelay:10+Math.random()*24,
+        routeDeadline:48+Math.random()*26,
+        approachDelay:3+Math.random()*7,
+        routeStart:null,approachStart:null
+      };
     }
     if(!atcHold){
-      if(!atcHoldDone&&atcHoldSchedule?.congested&&r.t>=atcHoldSchedule.at&&['route','approach'].includes(r.phase)&&!r.info.paused){
-        issueHold(r);
+      const plan=atcHoldSchedule;
+      if(!atcHoldDone&&plan&&!r.info.paused){
+        if(r.phase==='route'){
+          if(plan.routeStart==null)plan.routeStart=r.t;
+          const enrouteSec=Math.max(0,r.t-plan.routeStart);
+          const passed=Number(r.info.wpIdx)||0;
+          // Use a randomly picked enroute fix. The deadline prevents missions with
+          // difficult waypoint navigation from waiting forever for a hold.
+          if((enrouteSec>=plan.routeDelay&&passed>=plan.waypoint)||enrouteSec>=plan.routeDeadline){
+            issueHold(r);
+          }
+        }else if(r.phase==='approach'){
+          // Fallback for unusually short routes. Do not begin a new holding exercise
+          // below 1,800 feet, when the pilot should be completing the landing.
+          if(plan.approachStart==null)plan.approachStart=r.t;
+          if(r.t-plan.approachStart>=plan.approachDelay&&r.alt>=1800)issueHold(r);
+        }
       }
       return;
     }
@@ -1564,7 +1742,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     }else if(h.stage==='outbound'){
       if(r.t-h.stageAt>=13){setHoldStage('turn-in',r.t);
         $('holdFeedback').textContent=`ATC: Turn ${h.turn} to intercept inbound ${padHdg(h.inbound)}.`;
-        speech(`Jetline, turn right to intercept inbound course ${angle(h.inbound)}.`);
+        speech(`Jetline, turn ${h.turn} to intercept inbound course ${angle(h.inbound)}.`);
       }
     }else if(h.stage==='turn-in'){
       h.steady=hdgErr(h.inbound)<20&&altOk&&speedOk?h.steady+dt:0;
