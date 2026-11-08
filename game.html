@@ -4848,195 +4848,6 @@ function jetTaxiBuildScene(){
  }
  jetTaxiDrawLine([{x:155,z:t-690},{x:170,z:t-780}],24,'PARKING');
 }
-
-/* JETLINE AIRPORT TRAFFIC v23 --------------------------------------------------
- * REAL: ADS-B positions from same-origin /api/traffic (Vercel function).
- * SIM: scripted landing / runway stop bar / interlock: game-only ATC.
- * Ground and airborne positions depend on receiver coverage, NOT ATC clearance.
- * Geometry in the game is schematic, not an airport movement chart.
- */
-const jetTower={airport:'',rwy:'',state:'INBOUND',triggered:false,timer:0,
- green:false,scene:null,arrival:null,lamps:[],live:[],models:new Map(),
- feed:'SIM',feedError:'',lastPoll:0,polling:false,feedUpdated:0,seq:0,displayAirport:'',lastSnapshot:0};
-function jetTowerRemove3D(){
- for(const m of jetTower.models.values())if(m.parent)m.parent.remove(m);
- jetTower.models.clear();
- if(jetTower.arrival?.parent)jetTower.arrival.parent.remove(jetTower.arrival);
- jetTower.arrival=null;
- for(const m of jetTower.lamps)if(m.parent)m.parent.remove(m);
- jetTower.lamps.length=0;
-}
-function jetTowerAirport(){
- return E.phase==='taxi'||E.phase==='takeoff'?pt.from:pt.dest;
-}
-function jetTowerRunway(icao){
- const airport=ro[icao],id=icao===pt.from?pt.depRwy:pt.ils.rwy;
- const r=airport?.rwys?.find(x=>x.id===id)||airport?.rwys?.[0];
- return {airport,r,course:(r?.ht??r?.crs??(icao===pt.from?pt.depCrs:pt.arrCrs)??0)};
-}
-function jetTowerLocalPoint(lon,lat,alt,icao){
- const d=jetTowerRunway(icao),origin=d.r;
- const base=d.airport?.arp;
- if(!base||!Number.isFinite(lat)||!Number.isFinite(lon))return null;
- const alat=Number(origin?.lat??base[0]),alon=Number(origin?.lon??base[1]);
- const east=(lon-alon)*111195*Math.cos(alat*Math.PI/180);
- const north=(lat-alat)*111195;
- const heading=d.course*Math.PI/180;
- const x=east*Math.cos(heading)-north*Math.sin(heading);
- const z=-east*Math.sin(heading)-north*Math.cos(heading);
- const arrival=icao!==pt.from;
- const shift=arrival?(_t?.thrB||0):0;
- const point=qi(_t,x,z+shift);
- return {x:point[0],z:point[1],y:Math.max(3,Math.min(3000,alt)),r:Math.hypot(east,north),course:d.course};
-}
-function jetTowerMakeScene(){
- if(!It?.scene||!_t)return;
- jetTowerRemove3D();
- jetTower.scene=It.scene;
- const obj=Z5('airliner');obj.visible=true;obj.userData.jetSimArrival=true;
- It.scene.add(obj);jetTower.arrival=obj;
- const poleMat=new be({color:0x596b7f,roughness:.7});
- for(const offs of [-13,13]){
-   const p=qi(_t,-38,34+offs);
-   const pole=new Tt(new Ae(1.1,5,1.1),poleMat);
-   pole.position.set(p[0],2.7,p[1]);It.scene.add(pole);jetTower.lamps.push(pole);
-   const red=new Tt(new Ae(2.7,2.7,2.7),new be({color:0xff3322,emissive:0xff3322,emissiveIntensity:1}));
-   const green=new Tt(new Ae(2.7,2.7,2.7),new be({color:0x083020,emissive:0x000000,emissiveIntensity:0}));
-   red.position.set(p[0],6.4,p[1]-1.1);
-   green.position.set(p[0],6.4,p[1]+1.1);
-   It.scene.add(red,green);jetTower.lamps.push(red,green);
-   jetTower.lamps.push({isJetSignal:true,red,green});
- }
- jetTowerSetLight(false);
-}
-function jetTowerSetLight(open){
- jetTower.green=!!open;
- for(const item of jetTower.lamps){
-  if(!item.isJetSignal)continue;
-  item.red.material.color.setHex(open?0x35110e:0xff362a);
-  item.red.material.emissive.setHex(open?0x000000:0xff2a12);
-  item.green.material.color.setHex(open?0x18ff76:0x082914);
-  item.green.material.emissive.setHex(open?0x17ff65:0);
- }
-}
-function jetTowerReset(){
- jetTower.airport=pt.from;jetTower.rwy=pt.depRwy;
- jetTower.state='INBOUND';jetTower.triggered=false;
- jetTower.timer=0;jetTower.lastPoll=0;jetTower.feed='SIM';
- jetTower.feedError='';jetTower.feedUpdated=0;jetTower.live=[];
- jetTowerMakeScene();
- jetTowerSetLight(false);
- window.__jetAirportSnapshot={airport:jetTower.airport,signal:'RED',reason:'ARRIVAL INBOUND',feed:'SIM',records:[],simulated:true};
-}
-function jetTowerPoll(){
- const icao=jetTowerAirport(),airport=ro[icao];
- if(jetTower.polling||!airport||!airport.arp||!(/^https?:$/.test(location.protocol)))return;
- const now=Date.now();
- if(now-jetTower.lastPoll<28000)return;
- jetTower.lastPoll=now;jetTower.polling=true;
- const [lat,lon]=airport.arp;
- const url='/api/traffic?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon)+'&r=25';
- fetch(url,{cache:'no-cache',credentials:'same-origin',signal:AbortSignal.timeout?.(9000)})
-  .then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()})
-  .then(json=>{
-    if(icao!==jetTowerAirport())return;
-    if(!Array.isArray(json.aircraft))throw Error('Bad response');
-    jetTower.live=json.aircraft.filter(a=>Number.isFinite(+a.lat)&&Number.isFinite(+a.lon)&&Number(a.seen_pos??0)<120)
-     .map(a=>({id:String(a.hex||a.flight||'').slice(0,18),cs:String(a.flight||a.hex||'UNKNOWN').trim().slice(0,16),lat:+a.lat,lon:+a.lon,
-      alt:a.alt_baro==='ground'?0:Math.max(0,+a.alt_baro||0),gs:Math.max(0,+a.gs||0),track:+a.track||0,ground:a.alt_baro==='ground',seen:+a.seen_pos||0}));
-    jetTower.feed='LIVE';jetTower.feedError='';jetTower.feedUpdated=Date.now();jetTower.seq++;
-  }).catch(err=>{if(icao===jetTowerAirport()){
-     jetTower.live=[];jetTower.feed='SIM';jetTower.feedError=String(err.message||err).slice(0,50);jetTower.seq++;
-  }}).finally(()=>{jetTower.polling=false});
-}
-function jetTowerSync3D(){
- if(!It?.scene||!_t)return;
- const icao=jetTowerAirport(),keep=new Set();
- // Each aircraft retains its ADS-B callsign and is positioned approximately
- // relative to the selected airport runway threshold.
- for(const a of jetTower.live){
-  const wp=jetTowerLocalPoint(a.lon,a.lat,a.alt*.3048,icao);
-  if(!wp||wp.r>7200||keep.size>=12||!a.id)continue;
-  keep.add(a.id);
-  let m=jetTower.models.get(a.id);
-  if(!m){m=Z5('airliner');It.scene.add(m);jetTower.models.set(a.id,m)}
-  m.visible=true;m.position.set(wp.x,wp.y,wp.z);
-  m.rotation.set(0,Math.PI-(a.track-wp.course)*Math.PI/180-(_t.depRot||0),0);
- }
- for(const [id,m] of jetTower.models)if(!keep.has(id)){
-  if(m.parent)m.parent.remove(m);jetTower.models.delete(id);
- }
-}
-function jetTowerSnapshot(){
- const icao=jetTowerAirport(),airport=ro[icao];
- const sim=[];
- // This aircraft is strictly simulated and clearly marked as such.
- if(jetTower.arrival&&E.phase==='taxi'){
-  sim.push({id:'sim-arrival',cs:'SIM LANDING',
-   lat:null,lon:null,relativeX:0,relativeZ:jetTower.triggered?Math.max(-650,1500-55*jetTower.timer):1500,
-   alt:jetTower.triggered?Math.max(0,(1500-55*jetTower.timer)/1500*140):140,
-   ground:jetTower.timer>=27,track:jetTowerRunway(pt.from).course});
- }
- if(jetTower.feed!=='LIVE'&&_t)for(const aircraft of (E.trafficList||[])){
-  const pos=Js(_t,aircraft.x||0,aircraft.z||0);
-  sim.push({id:'sim-'+aircraft.i,cs:'SIM '+aircraft.cs,
-    relativeX:pos[0],relativeZ:pos[1]-(icao===pt.from?0:(_t.thrB||0)),
-    alt:Math.round((aircraft.y||0)*oe),track:(aircraft.psi||0)*An});
- }
- window.__jetAirportSnapshot={airport:icao,signal:jetTower.green?'GREEN':'RED',
-  reason:jetTower.state,runway:jetTower.rwy,feed:jetTower.feed,
-  feedError:jetTower.feedError,updated:jetTower.feedUpdated,
-  records:jetTower.live.map(x=>({cs:x.cs,lat:x.lat,lon:x.lon,alt:x.alt,track:x.track,gs:x.gs,ground:x.ground,seen:x.seen})),
-  simulation:sim,arp:airport?.arp||null,active:E.phase==='taxi',
-  taxiSpeed:E.groundTaxi?.speedKt||0,simulated:jetTower.feed!=='LIVE'};
-}
-function jetTowerTick(dt){
- if(!E.plane||!_t)return;
- const icao=jetTowerAirport();
- if(jetTower.airport!==pt.from){jetTowerReset()}
- if(jetTower.scene!==It?.scene)jetTowerMakeScene();
- if(jetTower.displayAirport!==icao){jetTower.displayAirport=icao;jetTower.live=[];jetTower.lastPoll=0;jetTower.feed='SIM';jetTower.seq++;}
- jetTowerPoll();
- if(jetTower.seq!==jetTower.synced){jetTower.synced=jetTower.seq;jetTowerSync3D()}
- if(E.phase==='taxi'){
-  const p=E.plane,local=Js(_t,p.x,p.z);
-  const close=local[0]>-175&&local[0]<75&&Math.abs(local[1]-34)<105;
-  if(close&&!jetTower.triggered){
-   jetTower.triggered=true;jetTower.timer=0;jetTower.state='LANDING · HOLD SHORT';
-   Mt.banner('HOLD SHORT · ARRIVING AIRCRAFT',2.2);
-   ee('tower_signal','red_arrival');
-  }
-  if(jetTower.triggered&&!jetTower.green){
-   jetTower.timer+=Math.max(0,Math.min(dt,.075));
-   if(jetTower.timer<27)jetTower.state='ARRIVAL ON FINAL';
-   else if(jetTower.timer<39)jetTower.state='AIRCRAFT LANDED · ROLLING';
-   else if(jetTower.timer<46)jetTower.state='WAIT · RUNWAY VACATING';
-   else{
-    jetTower.state='RUNWAY CLEAR · PROCEED TO LINEUP';
-    jetTowerSetLight(true);Mt.banner('GREEN · RUNWAY CLEAR · TAXI TO LINEUP',2.3);
-    ee('tower_signal','green_clear');
-   }
-  }
-  if(jetTower.arrival){
-   const t=jetTower.timer;
-   const z=jetTower.triggered?Math.max(-720,1500-55*t):1500;
-   const pos=qi(_t,0,z);
-   jetTower.arrival.position.set(pos[0],jetTower.triggered?Math.max(3,3+140*Math.max(0,z)/1500):143,pos[1]);
-   jetTower.arrival.rotation.set(0,Math.PI-(_t.depRot||0),0);
-   jetTower.arrival.visible=!jetTower.green;
-  }
-  // RED STOP BAR: physically prevent entering runway at the hold-short line.
-  // Keep the enforcement limited to the taxi-out phase.
-  if(!jetTower.green&&local[0]>-40&&local[0]<70&&Math.abs(local[1]-34)<48){
-    const stop=qi(_t,-40,local[1]);
-    p.x=stop[0];p.z=stop[1];p.v=0;
-    p.brakeIn=Math.max(p.brakeIn||0,1);
-    E.groundTaxi&&(E.groundTaxi.atGate=false);
-  }
- }else if(jetTower.arrival){jetTower.arrival.visible=false}
- if(Date.now()-jetTower.lastSnapshot>450){jetTower.lastSnapshot=Date.now();jetTowerSnapshot()}
-}
-
 function jetTaxiDepartureStart(){
  if(!_t||!E.plane)return;
  const p=E.plane;
@@ -5045,7 +4856,7 @@ function jetTaxiDepartureStart(){
  p.x=start.x;p.z=start.z;p.y=0;p.v=0;p.onGround=true;p.landed=false;
  p.psi=Math.atan2(next.x-start.x,-(next.z-start.z));
  p.theta=0;p.phi=0;p.gamma=0;
- E.phase='taxi';E.loop.zones=['taxi'];jetTowerReset();
+ E.phase='taxi';E.loop.zones=['taxi'];
 }
 function jetTaxiArrivalStart(){
  if(E.phase!=='approach'||!E.plane?.landed)return;
@@ -5084,7 +4895,7 @@ function jetTaxiTick(dt){
   const align=Math.abs(G0(p.psi-(_t.depRot||0)))*An;
   // Never unlock takeoff from the apron or a cross-taxiway.
   if(Math.abs(local[0])<14 && local[1]<30 && local[1]>-100 && align<23 && p.v<12){
-   if(!jetTower.green){Mt.banner('RED LIGHT · HOLD SHORT · ARRIVAL',1.1);return;} E.phase='takeoff';E.loop.zones=['runway'];taxi.atGate=true;
+   E.phase='takeoff';E.loop.zones=['runway'];taxi.atGate=true;
    Mt.banner('RWY '+pt.depRwy+' · LINED UP · TAKEOFF',1.9);
    ee('taxi_clear',pt.from+'/'+pt.depRwy);
   }
@@ -5212,7 +5023,7 @@ function jetFuelStep(n){
     ee("fuel_exhausted","engine_flameout");
   }
 }
-function Dp(n,t){if(E.clock+=n,Io.tick(n),gM(n),Mt.commTick(n),E.state==="end"){E.endT+=n,Mt.endTick(E.endT),E.finaleT>=0&&(E.finaleT+=n);return}if(E.state!=="play"){hn.intro=So(hn.intro,.4,.5,n);return}E.t+=n,(E.holdExempt||E.phase==="taxi"||E.phase==="taxiIn")&&(E.holdTimeExcluded+=n),E.reactT+=n;let e=E.plane,i=O3(E);E.guide=i;let s;t&&(s=t(E),s&&s.gear!==null&&s.gear!==void 0&&s.gear!==e.gear&&(tc(!1),E.reactT=0),s&&s.flaps!==null&&s.flaps!==void 0&&s.flaps!==e.flaps&&(ec(!1),E.reactT=0),s&&s.eng&&!e["eng"+s.eng]&&(nr(s.eng,!1),E.reactT=0),s&&s.engOff&&e["eng"+s.engOff]&&(nr(s.engOff,!1),E.reactT=0),s&&s.ap&&!e.apOn&&Oo(!1),s&&(Math.abs(s.sx)+Math.abs(s.sy)>.02||s.lever!==e.lever)&&(E.lastInputT=E.t,E.firstInputAt==null&&(E.firstInputAt=E.t))),s?$t.lever=s.lever:s={sx:Me($t.sx+$t.kx+xs.gx,-1,1),sy:Me($t.sy+$t.ky+xs.gy,-1,1),lever:$t.lever,rz:Me($t.kr+xs.rz,-1,1),brake:Math.max($t.kb,xs.brake)},e.apOn&&(!t&&(Math.abs(s.sx)>.5||Math.abs(s.sy)>.5)?ql("stick"):e.onGround?ql("ground"):E.phase==="approach"&&e.y<(_t.app==="vor"?_t.mda:10)?(ql("minimums"),E.flags.apMins=!0):s=Object.assign({},s,{sx:Me((i.bank-e.phi)*.09,-1,1),sy:Me((i.pitch-e.theta)*.32,-1,1)})),e.spdTarget=E.fms?I4(E):E.phase==="takeoff"?kt("rotateSpeed")+15:E.phase==="route"?210:145,e.fcu.spdSel&&!e.onGround&&(e.spdTarget=e.fcu.spd);let o=e.lever;z4(E,s,n*kt("flightPace")),jetTowerTick(n),jetTaxiTick(n),E.fms&&(P4(E.fms,e,n*kt("flightPace")),E.phase!=="approach"&&E.phase!=="done"&&M3(E)),o<.95&&e.lever>=.95&&!E.flags.toga&&(E.flags.toga=!0,wt.play("spool"),ee("reward","thrust"),e0(50,Bt("lever.toga")),E.loop.firstRewardAt==null&&(E.loop.firstRewardAt=E.t)),f5(E,n,wt,kt,ee);jetFuelStep(n);let r=e.v*wn,a=E.fms?E.fms.vr:kt("rotateSpeed"),l=E.fms?E.fms.v1:a-4;if(E.phase==="takeoff"&&e.onGround&&(r>l&&!E.flags.v1&&(E.flags.v1=!0,Mt.banner(Bt("banner.v1"),.7),ee("v1"),wt.play("tap")),r>a&&!E.flags.rot&&(E.flags.rot=!0,Mt.banner(Bt("banner.rotate"),.9),ee("rotate")),E.flags.rot&&e.theta>.5&&e.theta<6&&!E.flags.rotRate&&(E.flags.rotStart=E.flags.rotStart||E.t)),E.phase==="takeoff"&&!e.onGround&&E.flags.rotStart&&!E.flags.rotBonus){let u=E.t-E.flags.rotStart;E.flags.rotBonus=!0,u>1.2&&u<4.5&&(e0(200,Bt("praise.smooth")),ee("bonus","rotation"))}if(E.phase==="takeoff"&&!e.onGround&&(e.gear===0&&e.y>10||e.y>70)&&(E.phase="route",j5(1),Mt.banner(Bt("banner.stageClear")),E.loop.zones=["route"]),E.phase==="route"&&!E.holdExempt){let u=_t.wps[E.wpIdx];if(u){let A=Math.hypot(e.x-u.x,e.z-u.z),g=ya[E.lv&&E.lv.diff||"normal"]||ya.normal;if(A<120&&Math.abs(e.y-u.alt)<g.tol){u.hit=!0,E.events.push({t:+E.t.toFixed(3),type:"pickup",id:u.name,duration:0});let m=A<34&&Math.abs(e.y+y3-u.alt-4)<30;e0(m?800:500,Bt(m?"praise.awesome":"banner.waypoint")),wt.play("reward"),Mt.banner(Bt("banner.waypoint"),.9),m&&ee("bonus","ring"),It.rings[E.wpIdx]&&(It.rings[E.wpIdx].userData.pop=1e-4),E.wpIdx++,E.wpIdx<_t.wps.length&&za(!1)}else if(e.z<u.z-160&&(u.hit=!0,E.wpIdx++,E.misses++,ee("miss",u.name),wt.play("fail",.35),Mt.banner(Bt("banner.missed",{a:E.misses,b:g.miss}),1.1),E.misses>=g.miss&&!E.trailer)){E.crashWhy="route",ee("crash","route"),Zl("lose");return}E.wpIdx>=_t.wps.length&&(E.fms&&R4(E.fms),E.phase="approach",j5(2),Mt.banner(Bt("banner.changi",{apt:Bt("apt."+pt.dest).toUpperCase()}),1.6),ee("approach",pt.dest),E.loop.zones=["approach"],E.appBriefT=E.t+1.7,ee("approach_type",_t.app||"ils"))}if(E.lv&&E.lv.engFail&&!E.flags.engFail&&E.wpIdx>=(E.scen?E.scen.at:1)&&!e.onGround&&!E.trailer){let A=E.lv.engFail;E.flags.engFail=!0,e["eng"+A]=!1,E.scen&&(E.scen.fired=!0,E.scen.active=!0,E.scen.t0=E.t,E.scen.alertUntil=E.t+6),Mt.banner(Bt("banner.engFail",{n:A}),1.6),wt.play("fail",.5),ee("engine_fail",A)}E.scen&&E.scen.em==="engFail"&&E.scen.active&&e.eng1&&e.eng2&&(E.scen.active=!1,E.scen.cleared=!0,ee("emergency_clear","engFail")),Math.abs(r-e.spdTarget)<12?(E.onSpeedT+=n,E.onSpeedT>6&&(E.onSpeedT=0,e0(100,Bt("praise.onspeed")),ee("bonus","onspeed"))):E.onSpeedT=0}let c=gs(E);if(E.nav=c,c&&(E.phase==="approach"||E.phase==="route")&&!e.onGround&&(!E.flags.loc&&c.ils.locValid&&Math.abs(c.ils.loc)<1&&E.phase==="approach"&&(E.flags.loc=!0,Mt.banner(Bt("banner.loc"),1),e0(150,Bt("banner.loc")),ee("bonus","loc"),wt.play("chime",.5)),E.flags.loc&&!E.flags.gs&&c.ils.gsValid&&Math.abs(c.ils.gs)<1&&(E.flags.gs=!0,Mt.banner(Bt("banner.gs"),1),e0(150,Bt("banner.gs")),ee("bonus","gs"),wt.play("chime",.5))),E.phase==="approach"&&(E.appBriefT&&E.t>=E.appBriefT&&(E.appBriefT=0,Mt.banner(_t.app==="vor"?Bt("app.banner.vor",{rwy:pt.ils.rwy,mda:_t.mda*oe}):Bt("app.banner.ils",{rwy:pt.ils.rwy}),2.2)),E.phase==="approach"&&!E.flags.minimum&&!e.onGround&&e.y<(_t.app==="vor"?_t.mda:_t.dh||20)&&e.vy<0&&(E.flags.minimum=!0,Mt.banner(Bt("banner.minimum"),1.4),ee("minimum",_t.app||"ils")),e.landed&&(E.finaleT>=0&&(E.finaleT+=n),!0&&E.phase==="done"))){E.phase="done",E.events.push({t:+E.t.toFixed(3),type:"stage_complete",id:3,duration:3}),Zl("win");return}if(VM(n),e.damage>=100){let u=e.fire?"fire":E.scen&&E.scen.inAsh?"ash":"storm";E.crashWhy=u,Z3(u);return}if(!e.onGround&&H4(E)){Z3("terrain");return}if(E.trafficList&&G5(E.trafficList,e,n,kt("flightPace"),E.rngFx,(u,A,g,m)=>W5(E.atc,Q5(),u,A,V5(g,m,e.psi))),E.trafficList){let u=E.trafficList.find(A=>A.ta&&!A.said);u&&!e.onGround&&(u.said=!0,wt.play("caution",.45),Mt.banner(Bt("tcas.traffic"),1.1),ee("tcas",u.cs))}if(z5(E.atc,Q5(),n),E.state!=="play")return;let h=0;E.phase==="takeoff"&&e.onGround&&(h=Me((-Js(_t,e.x,e.z)[1]-200)/1e3,0,1)*.95),E.phase==="takeoff"&&!e.onGround&&(h=Math.max(h,Me((e.theta-15)/6,0,1))),e.onGround||(h=Math.max(h,Me((e.aoa-8)/6,0,1)));let d=$s(E);d&&!e.onGround&&(h=Math.max(h,Me(1-(d.d-d.r)/260,0,1)*.9)),h=Math.max(h,e.damage/100);{let u=i.obst;u&&E.phase==="route"&&(h=Math.max(h,Me(1-(e.y-u.surf)/60,0,1)*Me(1-u.along/900,0,1)*.9))}E.phase==="approach"&&!e.onGround&&e.y<25&&(h=Math.max(h,Me((-e.vy*hi-300)/(kt("landingLimit")*1.6-300),0,1))),E.phase==="approach"&&!e.onGround&&(h=Math.max(h,Me(Math.abs(e.y-Vl(E,e.z))/60,0,.8),Me(Math.abs(e.x)/80,0,.8))),E.trailer&&E.phase!=="takeoff"&&(h=Math.max(h,e.damage/100+.05)),E.danger=h,E.maxDanger=Math.max(E.maxDanger,h),E.maxDangerByStage[E.stage]=Math.max(E.maxDangerByStage[E.stage]||0,h),E.loop.frames++,(!e.onGround||e.v>5)&&E.loop.inFlightFrames++;let f=jetMissionCap();!E.holdExempt&&E.t-(E.holdTimeExcluded||0)>=f&&Zl("timeout"),kM(i),hn.intro=So(hn.intro,0,1.4,n)}function HM(){let n=E.scen;if(!n)return"";let t=Es(E),e=Bt("wind."+(n.wind?n.wind.mode:"calm")),i=!n.wind||n.wind.mode==="calm"||t.steady<=0?Bt("wind.calm"):Bt(t.gmax>=5?"wind.gustChip":"wind.chip",{n:e,d:String(Math.round(t.dir/10)*10%360||360).padStart(3,"0"),k:Math.round(t.steady),g:Math.round(t.steady+t.gmax)});return Bt(n.app==="vor"?"app.vor":"app.ils")+" \xB7 "+i}var k3=null;function Q5(){k3||(k3={G:E,t:Bt,audio:wt,event:ee,banner:(t,e)=>Mt.banner(t,e),addScore:e0,hdgDeg:$i,FT:oe});let n=k3;n.csN=100+E.level,n.rwy=pt.ils.rwy,n.depRwy=pt.depRwy,n.apt=Bt("apt."+pt.dest);{let t=Es(E);n.wind=t.steady>0?[Math.round(t.dir/10)*10%360||360,String(Math.round(t.steady)).padStart(2,"0")+(t.gmax>=5?"G"+Math.round(t.steady+t.gmax):"")]:[0,"00"]}return n.app=E.route&&E.route.app==="vor"?"vor":"ils",n}function kM(n){if(E.state!=="play")return;if(je.open){E.hintShownFor&&(Mt.hideHint(),E.hintShownFor=null);return}let t=E.t-E.lastInputT,e=n.hint,i=E.atc&&E.atc.cur;i&&i.dev&&(!e||e==="follow"||e==="fcu"||e==="ap")&&E.atc.devT>3&&(e="atc");let s=e==="engine"||e==="fire"||e==="gearGrav"||e==="flaps2"||e==="rotate"||e==="gear"||e==="gearDown"||e==="flaps"||e==="flare"||e==="idle"||e==="storm"||e==="climb"||e==="atc",o=t>kt("hintDelay")||s&&E.t>(E.hintCool||0);E.hintShownFor&&e!==E.hintShownFor&&(Mt.hideHint(),E.hintShownFor=null),e&&o&&E.hintShownFor!==e?(Mt.showHint(e==="atc"?Bt("hint.atc",{hdg:String(i.hdg).padStart(3,"0"),alt:i.alt}):Bt("hint."+e),e==="atc"?"stick":n.target),E.hintShownFor=e):e||Mt.hideHint()}var Ca=new K,tp=0,xo=null,J3=document.createElement("canvas");J3.width=J3.height=64;function Cp(n){let t=E.scen?E.scen.k:Kl.clear,e=E.scen?Math.min(1.2,E.scen.strength):0,i=Math.max(.1,1+((n?t.fogApp:t.fogK)-1)*e);return[(n?4200:1400)*i*(i<.5?.15:1),(n?13500:7800)*i]}function d0(){if(!Ye||E.state==="boot")return;Bi&&Is();let n=E.plane,[t,e,i,s]=pe.world,o=hn.shake*kt("cameraShake"),r=n.onGround&&n.v>2?Math.min(1,n.v/60)*.25*kt("cameraShake"):0,a=n.turb*.8*kt("cameraShake"),l=E.rngFx,c=(o+r+a)*.004,h=n.phi*.12*kt("cameraLead"),d=14*(kt("cameraDistance")-1),f=-n.psi-(kt("cameraYaw")-h)*qe+(l()-.5)*c;hn.appLook=So(hn.appLook||0,E.phase==="approach"&&!n.onGround&&n.y>6?3.5:0,1.2,1/60);let u=(n.theta*.92-5-hn.appLook-kt("cameraPitch"))*qe+(l()-.5)*c+hn.intro*.05*kt("cameraIntroZoom");ui.rotation.order="YXZ",ui.rotation.set(u,f,-n.phi*qe);let A=Math.sin(n.psi),g=-Math.cos(n.psi);ui.position.set(n.x-A*d,n.y+y3+kt("cameraHeight"),n.z-g*d),ui.aspect=i/Math.max(1,s);let m=70+kt("cameraFov")+hn.fovPunch+hn.intro*10*kt("cameraIntroZoom"),p=2*Math.atan(Math.tan(m*qe/2)/ui.aspect)*An;p=Me(p,34,78),ui.fov=p,ui.updateProjectionMatrix();{let M=Cp(E.phase==="approach"||E.phase==="done"),L=It.scene.fog;L.near=So(L.near,M[0],1,1/60),L.far=So(L.far,M[1],1,1/60)}{let M=P5(It.wxfx,It,E,ui,.016666666666666666,wt);It.skyU.flash.value=M,It.hemi.intensity=(It.hemiBase||.95)+M*1.6,It.sun.intensity=(It.sunBase||1.75)+M*.4,It.landmarks&&It.landmarks.forEach(L=>{L.userData.spin&&(L.userData.spin.rotation.z=E.clock*.08)}),It.seaTexs&&It.seaTexs.forEach(L=>{L.offset.y=E.clock*.006}),It.oceanTex&&(It.oceanTex.offset.y=E.clock*.006)}if(_t&&_t.thrB&&kt("countryScenery")!=="Editor colors"){let M=Me(n.z/_t.thrB,0,1),L=Me((M-.3)/.45,0,1),x=Math.round(L*L*(3-2*L)*10)/10;x!==(E.biomeK||0)&&(E.biomeK=x,Wa(!0))}if(It.sky.position.copy(ui.position),It.skyU.csT.value=E.clock,It.sun.position.set(n.x-400,700,n.z+250),It.sun.target.position.set(n.x,0,n.z-150),It.sun.target.updateMatrixWorld(),It.rings.forEach((M,L)=>{M.rotation.y=E.clock*.6,_t.wps[L]&&(M.position.y=So(M.position.y,_t.wps[L].alt+4,4,1/60));let x=M.userData;x.pop?(x.pop+=.05,M.scale.setScalar(1+x.pop*3),x.pop>.4&&(M.visible=!1,x.pop=0)):M.visible=!(_t.wps[L]&&_t.wps[L].hit)}),It.obstMeshes&&It.obstMeshes.forEach((M,L)=>{let x=M.userData.beacon;if(x){let I=Math.sin(E.clock*4.2+L*1.7)>.1;x.color.setRGB(I?1:.35,I?.16:.05,I?.1:.04)}}),It.stormMeshes.forEach((M,L)=>{let x=M.userData.core,I=Math.sin(E.clock*7+L*3)>.92?.7:0;x.material.opacity=I,x.material.color.set(kt("enemyColor2"))}),It.papi.length){let M=Math.atan2(n.y,Math.max(1,n.z-_t.tdz))*An,L=_t.glide*An;It.papi.forEach((x,I)=>{let v=L+(1.5-I)*.35;x.material.color.set(M>v?16774872:16726570)})}E.trafficList&&K5(E.trafficList,E.clock),Ye.setScissorTest(!1),Ye.setClearColor(728650,1),Ye.clear(),Ye.setViewport(t,pe.H-e-s,i,s),Ye.setScissor(t,pe.H-e-s,i,s),Ye.setScissorTest(!0),Ye.render(It.scene,ui),Ye.setScissorTest(!1),Ye.setViewport(0,0,pe.W,pe.H),Ye.clearDepth(),Z4(Ba,E,kt("playerColor"),"#"+new Vt(kt("playerColor")).offsetHSL(0,.3,-.1).getHexString()),Ye.render(Ba.scene,Ba.cam),(--tp<=0||!xo)&&(tp=30,Bp());let T=Mt.cvs,S=Math.min(2.5,pe.dpr);J4(T.pfd,cn.pfd[2]*pe.s,cn.pfd[3]*pe.s,S,E,Bt),j4(T.nd,cn.nd[2]*pe.s,cn.nd[3]*pe.s,S,E,Bt),$4(T.ewd,cn.ewd[2]*pe.s,cn.ewd[3]*pe.s,S,E,Bt),Q4(T.mcdu,cn.mcdu[2]*pe.s,cn.mcdu[3]*pe.s,S,E,Bt),t5(T.fcu,cn.fcu[2]*pe.s,cn.fcu[3]*pe.s,S,E,Bt),GM(),i5(T.efis,cn.efis[2]*pe.s,cn.efis[3]*pe.s,S,E,Bt);{let M=E.scen;if(M&&(M.em==="elec"&&M.fired&&!M.cleared||M.flickerUntil>E.t)){let L=M.flickerUntil>E.t,x=I=>{let v=I.getContext("2d");v.save(),v.setTransform(1,0,0,1,0,0),v.fillStyle="#020306",v.fillRect(0,0,I.width,I.height),v.fillStyle="#FFB020",v.font="700 "+Math.round(I.height*.12)+"px Menlo, Consolas, monospace",v.textAlign="center",v.textBaseline="middle",v.fillText("INOP",I.width/2,I.height/2),v.restore()};L?Math.sin(E.clock*40)>0&&(x(T.pfd),x(T.nd)):(x(T.nd),x(T.mcdu),x(T.fcu),x(T.efis))}}Mt.navSize&&e5(T.nav,Mt.navSize[0],Mt.navSize[1],S,E,Bt),Mt.hud(E,n),E.trafficList&&Mt.trafficTags(E.state==="play"?E.trafficList.map(M=>{let L=go(M.obj,(M.obj.userData.height||10)*1.6);return L&&L.on&&M.dist<3e3?{x:L.x,y:L.y,cs:M.cs,dy:Math.round(M.dy*oe/100),ta:M.ta}:null}):[]),je.open&&je.draw(),zM()}function Bp(){try{let n=J3.getContext("2d",{willReadFrequently:!0});n.drawImage(Ga,0,0,64,64);let t=n.getImageData(0,0,64,64).data,e=0,i=0,s=0,o=0,r=0;for(let a=0;a<t.length;a+=4){let l=t[a]/255,c=t[a+1]/255,h=t[a+2]/255,d=Math.max(l,c,h),f=Math.min(l,c,h),u=(d+f)/2,A=d===f?0:u>.5?(d-f)/(2-d-f):(d-f)/(d+f),g=d===0?0:(d-f)/d;e+=A,i+=g,d>.85&&g<.18&&s++,A<.15&&o++,r++}xo={saturation:+(e/r).toFixed(3),vivid:+(i/r).toFixed(3),whiteShare:+(s/r).toFixed(3),greyShare:+(o/r).toFixed(3)}}catch{xo=xo||null}}function go(n,t){if(!n)return null;Ca.set(n.position.x,n.position.y+(t||5),n.position.z).project(ui);let[e,i,s,o]=pe.world,r=e+(Ca.x+1)/2*s,a=i+(1-Ca.y)/2*o,l=Ca.z<1&&Ca.z>-1&&r>=e&&r<=e+s&&a>=i&&a<=i+o;return{x:r,y:a,on:l}}function zM(){let n=E.objects,t=(o,r,a)=>{let l=n[o]||(n[o]={exists:!0,seen:!1,onScreen:!1,stuckFor:0});r&&(l.onScreen=r.on,l.x=Math.round(r.x),l.y=Math.round(r.y),r.on&&(l.seen=!0)),a&&Object.assign(l,a)};["airliner","tower","hangar","fueltruck","radar","towerB","traffic","traffic2","traffic3","traffic4"].forEach(o=>{let r=go(Ts[o],Ts[o]&&Ts[o].userData.height||10);t(o,r,{bottom:Ts[o]?+(Ts[o].position.y/Math.max(1,Ts[o].userData.height||1)).toFixed(3):0})}),t("runway",go({position:new K(0,0,-300)},0)),t("runwayB",go({position:new K(0,0,_t.thrB)},0)),It.stormMeshes[0]&&t("storm",go(It.stormMeshes[0],80));let e=It.rings[Math.min(E.wpIdx,It.rings.length-1)];t("waypoint",go(e,0)),["pfd","nd","ewd","mcdu","fcu","thrust","stick","gear","flaps","ap","ap2","athr","loc","appr","exped","kSpd","kHdg","kAlt","kVs","eng1","eng2","efis","kBaro","kMode","kRange"].forEach(o=>{let r=V0(o,pe);t(o,{x:r[0],y:r[1],on:!0},{w:Math.round(r[2]),h:Math.round(r[3])})});let s=(E.guide||{}).target||"thrust";t("goal",{x:n[s]?n[s].x:0,y:n[s]?n[s].y:0,on:!0},{target:s}),n.scene=Object.assign({props:12,dressingShare:.7},xo||{})}function To(n,t,e){let i=V0(n,pe);return t>=i[0]&&t<=i[0]+i[2]&&e>=i[1]&&e<=i[1]+i[3]}function Fp(n){let t=V0("thrust",pe),e=t[1]+t[3]*.18,i=t[1]+t[3]*.88,s=Me((i-n)/(i-e),-.28,1);s<-.06&&(s=-.28);s<0&&s>-.06&&(s=0);for(let o of[En.idle,En.cl,En.flx,En.toga])Math.abs(s-o)<.05&&(s=o);return s}yi.addEventListener("pointerdown",n=>{if(n.target&&n.target.closest&&n.target.closest("[data-ui]"))return;let t=yi.getBoundingClientRect(),e=n.clientX-t.left,i=n.clientY-t.top;if(wt.unlock(),E.state==="intro"&&To("mcdu",e,i)){yo();return}if(E.state==="intro"&&Lo(),E.state==="play"){try{yi.setPointerCapture(n.pointerId)}catch{}if(To("altStep",e,i)){id("altStep",!0);return}{let s=_p(e,i);if(s){$t.knob={id:n.pointerId,k:s,x:e,y:i,x0:e,y0:i,t0:performance.now(),acc:0,moved:0},fn();return}}if(To("thrust",e,i)){$t.leverId=n.pointerId;let s=Fp(i);s!==$t.lever&&wt.play("tap",.4),$t.lever=s,fn();return}if(To("mcdu",e,i)){yo(),fn();return}$t.stickId=n.pointerId,$t.ox=e,$t.oy=i,$t.sx=0,$t.sy=0,Mt.stickShow(e,i),fn()}});yi.addEventListener("pointermove",n=>{let t=yi.getBoundingClientRect(),e=n.clientX-t.left,i=n.clientY-t.top;if($t.knob&&n.pointerId===$t.knob.id){let s=$t.knob,o=e-s.x,r=i-s.y;if(s.x=e,s.y=i,s.moved=Math.max(s.moved,Math.hypot(e-s.x0,i-s.y0)),s.moved<6)return;let a=o-r;s.acc+=a;let l=7*Math.max(.8,pe.s),c=s.acc>0?Math.floor(s.acc/l):Math.ceil(s.acc/l);if(c){s.acc-=c*l;let h=Math.abs(a)>14*pe.s?s.k==="hdg"?5:s.k==="spd"?3:1:1;nd(s.k,c*h),fn()}return}if(n.pointerId===$t.leverId){let s=Fp(i);s!==$t.lever&&[0,En.cl,En.flx,1].indexOf(s)>=0&&wt.play("tap",.3),$t.lever=s,fn()}else if(n.pointerId===$t.stickId){let s=e-$t.ox,o=i-$t.oy,r=54*Math.max(.8,pe.s),a=Math.hypot(s,o);a>r&&(s*=r/a,o*=r/a),$t.sx=Math.abs(s)<6?0:s/r,$t.sy=Math.abs(o)<6?0:o/r,Mt.stickMove($t.ox+s,$t.oy+o),fn()}});var Gp=n=>{if($t.knob&&n.pointerId===$t.knob.id){let t=$t.knob;$t.knob=null,n.type==="pointerup"&&t.moved<6&&performance.now()-t.t0<600&&Lp(t.k);return}n.pointerId===$t.leverId&&($t.leverId=null),n.pointerId===$t.stickId&&($t.stickId=null,$t.sx=0,$t.sy=0,Mt.stickHide())};yi.addEventListener("pointerup",Gp);yi.addEventListener("pointercancel",Gp);yi.addEventListener("contextmenu",n=>n.preventDefault());yi.addEventListener("wheel",n=>{let t=yi.getBoundingClientRect(),e=E.state==="play"?_p(n.clientX-t.left,n.clientY-t.top):null;e&&(n.preventDefault(),nd(e,n.deltaY<0?1:-1),fn())},{passive:!1});var Rn={};window.addEventListener("keydown",n=>{if(!(Mt.acctOpen()||Mt.commOpen()||n.target&&/^(INPUT|TEXTAREA)$/.test(n.target.tagName))){if(E.userPaused){(n.key==="Escape"||n.key==="Pause"||n.key==="Enter"||n.key===" ")&&(vo(!1,"key"),n.preventDefault());return}if((n.key==="Pause"||n.key==="Escape"&&!je.open)&&E.state==="play"){vo(!0,"key"),n.preventDefault();return}if(je.open){je.key(n.key),n.preventDefault();return}if(n.key==="v"||n.key==="V"){Ql(!E.panelMax,!0);return}if((n.key==="k"||n.key==="K")&&E.state==="play"){za(!0);return}if(n.key==="m"||n.key==="M"){(E.state==="intro"||E.state==="play")&&yo();return}if(n.key==="p"||n.key==="P"){Oo(!0);return}if(n.key==="t"||n.key==="T"){Up(!0);return}Rn[n.key]=!0,E.state==="intro"&&Lo(),wt.unlock(),(n.key==="g"||n.key==="G")&&tc(!0),(n.key==="f"||n.key==="F")&&ec(!0),n.key==="1"&&nr(1,!0),n.key==="2"&&nr(2,!0),(n.key==="PageUp"||n.key==="e"||n.key==="E")&&($t.lever=Math.min(1,$t.lever<0?0:$t.lever+.1),$t.lever>.97&&($t.lever=1),fn()),(n.key==="PageDown"||n.key==="q"||n.key==="Q")&&($t.lever=E.plane.onGround&&E.plane.landed&&$t.lever<=0?-.28:Math.max(0,$t.lever-.1),$t.lever>0&&$t.lever<.03&&($t.lever=0),fn()),Kp()}});window.addEventListener("keyup",n=>{Rn[n.key]=!1,Kp()});var xs=T5({detents:[En.idle,En.cl,En.flx,En.toga],onConnect(n){wt.play("chime",.6),E.mcduPage=4,(E.state==="play"||E.state==="intro")&&Mt.banner(Bt("banner.hotas"),1.4),ee("device",n||"usb")},onDisconnect(n){ee("device_lost",n||"usb")},onButton(n){if(wt.unlock(),E.state==="intro"){Lo();return}n==="gear"?tc(!0):n==="flaps"?ec(!0):n==="ap"?Oo(!0):n==="eng1"?nr(1,!0):n==="eng2"&&nr(2,!0)},onLever(n){E.state==="play"&&(n!==$t.lever&&[En.idle,En.cl,En.flx,En.toga].indexOf(n)>=0&&wt.play("tap",.3),$t.lever=n,fn())},onLeverDelta(n){E.state==="play"&&($t.lever=Me($t.lever+n,0,1),fn())},onInput(){E.state==="play"&&fn()}});E.pads=xs;function Kp(){$t.kr=(Rn.x||Rn.X?1:0)-(Rn.z||Rn.Z?1:0),$t.kb=Rn.b||Rn.B?1:0,$t.kx=(Rn.ArrowRight||Rn.d||Rn.D?1:0)-(Rn.ArrowLeft||Rn.a||Rn.A?1:0),$t.ky=(Rn.ArrowDown||Rn.s||Rn.S?1:0)-(Rn.ArrowUp||Rn.w||Rn.W?1:0),($t.kx||$t.ky)&&fn()}function WM(){if(!_t||kt("countryScenery")==="Editor colors")return null;let n=i3[C0(_t.from)],t=i3[C0(_t.dest)],e=E.biomeK||0,i={};return["ground","foliage","rock","hor"].forEach(s=>{i[s]=new Vt(n[s]).lerp(new Vt(t[s]),e)}),i}function Wa(n){if(!It)return;It.mats.ground.color.set(kt("groundColor")),It.mats.path.color.set(kt("pathColor")),It.mats.apron.color.set(kt("pathColor")).multiplyScalar(1.25),It.mats.path.emissive.set(kt("pathColor")).multiplyScalar(.35),It.mats.apron.emissive.set(kt("pathColor")).multiplyScalar(.3),It.mats.rock.color.set(kt("rockColor")),It.mats.foliage.color.set(kt("foliageColor")),It.skyU.top.value.set(kt("skyTopColor")),It.skyU.hor.value.set(kt("skyHorizonColor")),It.skyU.cloud.value.set(kt("cloudColor")),It.scene.fog.color.set(kt("fogColor"));{let i=WM();i&&(It.mats.ground.color.lerp(i.ground,.6),It.mats.foliage.color.lerp(i.foliage,.55),It.mats.rock.color.lerp(i.rock,.45),It.skyU.hor.value.lerp(i.hor,.12))}It.mats.storm.color.set(kt("enemyColor")).lerp(new Vt(9081016),.9),It.mats.storm.emissive.set(kt("enemyColor")),It.mats.ring.color.set(kt("rewardColor")),It.mats.ring.emissive.set(kt("rewardColor"));let t=Tn.backgrounds[kt("background")]||{};It.sun.color.set(t.sunTint||"#FFF2D6");let e=kt("background")==="Night neon";It.sun.intensity=e?.6:1.75,It.hemi.intensity=e?.6:.95;{let i=E.scen,s=i?i.k:null,o=i?Math.min(1,.85*i.strength):0,r=(a,l,c)=>a.lerp(new Vt(l),c);It.skyU.ovc.value=s?(s.ovc||0)*Math.min(1,i.strength):0,s&&s.sky&&(r(It.skyU.top.value,s.sky[0],o),r(It.skyU.hor.value,s.sky[1],o),r(It.skyU.cloud.value,s.sky[2],o)),s&&s.fog&&r(It.scene.fog.color,s.fog,o),s&&s.ground&&r(It.mats.ground.color,s.ground,o*(s.groundK||.85)),s&&s.foliage&&r(It.mats.foliage.color,s.foliage,o*.8),s&&s.rock&&r(It.mats.rock.color,s.rock,o*.6),s&&s.sunTint&&r(It.sun.color,s.sunTint,o),s&&s.sun&&(It.sun.intensity*=1-(1-s.sun)*o),s&&s.ovc&&(It.hemi.intensity*=1-.12*s.ovc*o),It.sunBase=It.sun.intensity,It.hemiBase=It.hemi.intensity}n||Mt.applySkin(kt("uiSkin"),kt("uiAccent"),kt("uiPanel"),kt("endCardColor"),kt("endRibbonColor"))}function sd(n){let t=Tn.backgrounds[n];t&&["groundColor","pathColor","rockColor","foliageColor","skyTopColor","skyHorizonColor","cloudColor","fogColor"].forEach(e=>$e.set(e,t[e]))}var z3=!1;function Vp(){z3||(z3=!0,requestAnimationFrame(()=>{z3=!1,Rs=!0,ii()}))}function XM(n){if(!n)return;let t=n.settings||{},e=n.params||{},i=!1;if(typeof t.cta_text=="string"&&(Oe.cta_text=t.cta_text.slice(0,24),$e.set("ctaText",Oe.cta_text)),typeof t.locale=="string"&&t.locale!==Oe.locale&&(Oe.locale=t.locale,u0=$l(),document.documentElement.lang=u0,Mt.relang(),je.relang(),E.state==="end"&&Mt.showEnd(E.outcome,jl())),t.difficulty&&t.difficulty!==Oe.difficulty&&["easy","normal","hard"].indexOf(t.difficulty)>=0&&(Oe.difficulty=t.difficulty,$e.diff=t.difficulty,E.plan.diff=t.difficulty,E.plan.seed=0,i=!0),t.max_play_time!=null&&isFinite(+t.max_play_time)){let r=Me(+t.max_play_time,300,3600);r!==Oe.max_play_time&&(Oe.max_play_time=r,$e.set("maxPlayTime",r),i=!0)}t.hint_delay!=null&&isFinite(+t.hint_delay)&&(Oe.hint_delay=Me(+t.hint_delay,1,8),$e.set("hintDelay",Oe.hint_delay));let s=!1,o=!1;Object.keys(e).forEach(r=>{let a=wa(r),l=Tn.params[a];if(!(!l||l.shared||!$e.set(a,e[r]))){if(a==="background"&&(o=!0),a==="panelSize"&&(Bi=!0),a==="communitySource")try{Mt.commRefresh()}catch{}a==="panelMaximized"&&(E.panelMax=!!kt("panelMaximized"),Mt.setPanelMax(E.panelMax),Bi=!0),l.apply==="restart"?i=!0:s=!0}}),o&&sd(kt("background")),(s||o)&&(Wa(),wt.applyVolumes(),E.state==="end"&&Mt.showEnd(E.outcome,jl())),i&&Vp(),Bi&&Is(),d0()}function YM(n){n==="pause"?(E.hostPaused=!0,wt.suspend()):n==="resume"?(E.hostPaused=!1,E.visPaused||wt.resume()):n==="mute"?ka(!0):n==="unmute"&&ka(!1)}var Mo=null,j3=30;var W3=0,Xl=0,ep=performance.now();function Hp(n){if(requestAnimationFrame(Hp),Mo!=null){let i=(n-Mo)/1e3;i>0&&(j3=j3*.9+1/i*.1),W3+=i,Xl++}let t=Mo==null?1/60:(n-Mo)/1e3;if(Mo=n,t=Me(t,0,.05),document.hidden?E.visPaused=!0:E.visPaused&&(E.visPaused=!1,wt.resume()),E.hostPaused||E.visPaused||E.userPaused||E.state==="boot")return;xs.poll(t);let e=Math.max(1,Math.ceil(t/(1/60)));for(let i=0;i<e;i++)Dp(t/e,null);if((E.state==="play"||E.state==="intro")&&wt.engineUpdate((E.plane.n1+E.plane.n1b)/2,E.state==="play"),E.scen&&wt.ambientUpdate(E.state==="play"&&E.scen.k.amb||null,(E.scen.k.heavy?1:.7)*Math.min(1.2,E.scen.strength)+(E.plane.turb||0)),d0(),performance.now()-ep>1e3){let i=Xl?W3/Xl:0,f=Xl;W3=0,Xl=0,ep=performance.now(),hdAutoTune(i,f),Yl<.58&&Ye.shadowMap.enabled&&(Ye.shadowMap.enabled=!1),Yl>.80&&!Ye.shadowMap.enabled&&(Ye.shadowMap.enabled=!0)}}document.addEventListener("visibilitychange",()=>{document.hidden?wt.suspend():wt.resume()});window.__game={setSpoilers(mode){
+function Dp(n,t){if(E.clock+=n,Io.tick(n),gM(n),Mt.commTick(n),E.state==="end"){E.endT+=n,Mt.endTick(E.endT),E.finaleT>=0&&(E.finaleT+=n);return}if(E.state!=="play"){hn.intro=So(hn.intro,.4,.5,n);return}E.t+=n,(E.holdExempt||E.phase==="taxi"||E.phase==="taxiIn")&&(E.holdTimeExcluded+=n),E.reactT+=n;let e=E.plane,i=O3(E);E.guide=i;let s;t&&(s=t(E),s&&s.gear!==null&&s.gear!==void 0&&s.gear!==e.gear&&(tc(!1),E.reactT=0),s&&s.flaps!==null&&s.flaps!==void 0&&s.flaps!==e.flaps&&(ec(!1),E.reactT=0),s&&s.eng&&!e["eng"+s.eng]&&(nr(s.eng,!1),E.reactT=0),s&&s.engOff&&e["eng"+s.engOff]&&(nr(s.engOff,!1),E.reactT=0),s&&s.ap&&!e.apOn&&Oo(!1),s&&(Math.abs(s.sx)+Math.abs(s.sy)>.02||s.lever!==e.lever)&&(E.lastInputT=E.t,E.firstInputAt==null&&(E.firstInputAt=E.t))),s?$t.lever=s.lever:s={sx:Me($t.sx+$t.kx+xs.gx,-1,1),sy:Me($t.sy+$t.ky+xs.gy,-1,1),lever:$t.lever,rz:Me($t.kr+xs.rz,-1,1),brake:Math.max($t.kb,xs.brake)},e.apOn&&(!t&&(Math.abs(s.sx)>.5||Math.abs(s.sy)>.5)?ql("stick"):e.onGround?ql("ground"):E.phase==="approach"&&e.y<(_t.app==="vor"?_t.mda:10)?(ql("minimums"),E.flags.apMins=!0):s=Object.assign({},s,{sx:Me((i.bank-e.phi)*.09,-1,1),sy:Me((i.pitch-e.theta)*.32,-1,1)})),e.spdTarget=E.fms?I4(E):E.phase==="takeoff"?kt("rotateSpeed")+15:E.phase==="route"?210:145,e.fcu.spdSel&&!e.onGround&&(e.spdTarget=e.fcu.spd);let o=e.lever;z4(E,s,n*kt("flightPace")),jetTaxiTick(n),E.fms&&(P4(E.fms,e,n*kt("flightPace")),E.phase!=="approach"&&E.phase!=="done"&&M3(E)),o<.95&&e.lever>=.95&&!E.flags.toga&&(E.flags.toga=!0,wt.play("spool"),ee("reward","thrust"),e0(50,Bt("lever.toga")),E.loop.firstRewardAt==null&&(E.loop.firstRewardAt=E.t)),f5(E,n,wt,kt,ee);jetFuelStep(n);let r=e.v*wn,a=E.fms?E.fms.vr:kt("rotateSpeed"),l=E.fms?E.fms.v1:a-4;if(E.phase==="takeoff"&&e.onGround&&(r>l&&!E.flags.v1&&(E.flags.v1=!0,Mt.banner(Bt("banner.v1"),.7),ee("v1"),wt.play("tap")),r>a&&!E.flags.rot&&(E.flags.rot=!0,Mt.banner(Bt("banner.rotate"),.9),ee("rotate")),E.flags.rot&&e.theta>.5&&e.theta<6&&!E.flags.rotRate&&(E.flags.rotStart=E.flags.rotStart||E.t)),E.phase==="takeoff"&&!e.onGround&&E.flags.rotStart&&!E.flags.rotBonus){let u=E.t-E.flags.rotStart;E.flags.rotBonus=!0,u>1.2&&u<4.5&&(e0(200,Bt("praise.smooth")),ee("bonus","rotation"))}if(E.phase==="takeoff"&&!e.onGround&&(e.gear===0&&e.y>10||e.y>70)&&(E.phase="route",j5(1),Mt.banner(Bt("banner.stageClear")),E.loop.zones=["route"]),E.phase==="route"&&!E.holdExempt){let u=_t.wps[E.wpIdx];if(u){let A=Math.hypot(e.x-u.x,e.z-u.z),g=ya[E.lv&&E.lv.diff||"normal"]||ya.normal;if(A<120&&Math.abs(e.y-u.alt)<g.tol){u.hit=!0,E.events.push({t:+E.t.toFixed(3),type:"pickup",id:u.name,duration:0});let m=A<34&&Math.abs(e.y+y3-u.alt-4)<30;e0(m?800:500,Bt(m?"praise.awesome":"banner.waypoint")),wt.play("reward"),Mt.banner(Bt("banner.waypoint"),.9),m&&ee("bonus","ring"),It.rings[E.wpIdx]&&(It.rings[E.wpIdx].userData.pop=1e-4),E.wpIdx++,E.wpIdx<_t.wps.length&&za(!1)}else if(e.z<u.z-160&&(u.hit=!0,E.wpIdx++,E.misses++,ee("miss",u.name),wt.play("fail",.35),Mt.banner(Bt("banner.missed",{a:E.misses,b:g.miss}),1.1),E.misses>=g.miss&&!E.trailer)){E.crashWhy="route",ee("crash","route"),Zl("lose");return}E.wpIdx>=_t.wps.length&&(E.fms&&R4(E.fms),E.phase="approach",j5(2),Mt.banner(Bt("banner.changi",{apt:Bt("apt."+pt.dest).toUpperCase()}),1.6),ee("approach",pt.dest),E.loop.zones=["approach"],E.appBriefT=E.t+1.7,ee("approach_type",_t.app||"ils"))}if(E.lv&&E.lv.engFail&&!E.flags.engFail&&E.wpIdx>=(E.scen?E.scen.at:1)&&!e.onGround&&!E.trailer){let A=E.lv.engFail;E.flags.engFail=!0,e["eng"+A]=!1,E.scen&&(E.scen.fired=!0,E.scen.active=!0,E.scen.t0=E.t,E.scen.alertUntil=E.t+6),Mt.banner(Bt("banner.engFail",{n:A}),1.6),wt.play("fail",.5),ee("engine_fail",A)}E.scen&&E.scen.em==="engFail"&&E.scen.active&&e.eng1&&e.eng2&&(E.scen.active=!1,E.scen.cleared=!0,ee("emergency_clear","engFail")),Math.abs(r-e.spdTarget)<12?(E.onSpeedT+=n,E.onSpeedT>6&&(E.onSpeedT=0,e0(100,Bt("praise.onspeed")),ee("bonus","onspeed"))):E.onSpeedT=0}let c=gs(E);if(E.nav=c,c&&(E.phase==="approach"||E.phase==="route")&&!e.onGround&&(!E.flags.loc&&c.ils.locValid&&Math.abs(c.ils.loc)<1&&E.phase==="approach"&&(E.flags.loc=!0,Mt.banner(Bt("banner.loc"),1),e0(150,Bt("banner.loc")),ee("bonus","loc"),wt.play("chime",.5)),E.flags.loc&&!E.flags.gs&&c.ils.gsValid&&Math.abs(c.ils.gs)<1&&(E.flags.gs=!0,Mt.banner(Bt("banner.gs"),1),e0(150,Bt("banner.gs")),ee("bonus","gs"),wt.play("chime",.5))),E.phase==="approach"&&(E.appBriefT&&E.t>=E.appBriefT&&(E.appBriefT=0,Mt.banner(_t.app==="vor"?Bt("app.banner.vor",{rwy:pt.ils.rwy,mda:_t.mda*oe}):Bt("app.banner.ils",{rwy:pt.ils.rwy}),2.2)),E.phase==="approach"&&!E.flags.minimum&&!e.onGround&&e.y<(_t.app==="vor"?_t.mda:_t.dh||20)&&e.vy<0&&(E.flags.minimum=!0,Mt.banner(Bt("banner.minimum"),1.4),ee("minimum",_t.app||"ils")),e.landed&&(E.finaleT>=0&&(E.finaleT+=n),!0&&E.phase==="done"))){E.phase="done",E.events.push({t:+E.t.toFixed(3),type:"stage_complete",id:3,duration:3}),Zl("win");return}if(VM(n),e.damage>=100){let u=e.fire?"fire":E.scen&&E.scen.inAsh?"ash":"storm";E.crashWhy=u,Z3(u);return}if(!e.onGround&&H4(E)){Z3("terrain");return}if(E.trafficList&&G5(E.trafficList,e,n,kt("flightPace"),E.rngFx,(u,A,g,m)=>W5(E.atc,Q5(),u,A,V5(g,m,e.psi))),E.trafficList){let u=E.trafficList.find(A=>A.ta&&!A.said);u&&!e.onGround&&(u.said=!0,wt.play("caution",.45),Mt.banner(Bt("tcas.traffic"),1.1),ee("tcas",u.cs))}if(z5(E.atc,Q5(),n),E.state!=="play")return;let h=0;E.phase==="takeoff"&&e.onGround&&(h=Me((-Js(_t,e.x,e.z)[1]-200)/1e3,0,1)*.95),E.phase==="takeoff"&&!e.onGround&&(h=Math.max(h,Me((e.theta-15)/6,0,1))),e.onGround||(h=Math.max(h,Me((e.aoa-8)/6,0,1)));let d=$s(E);d&&!e.onGround&&(h=Math.max(h,Me(1-(d.d-d.r)/260,0,1)*.9)),h=Math.max(h,e.damage/100);{let u=i.obst;u&&E.phase==="route"&&(h=Math.max(h,Me(1-(e.y-u.surf)/60,0,1)*Me(1-u.along/900,0,1)*.9))}E.phase==="approach"&&!e.onGround&&e.y<25&&(h=Math.max(h,Me((-e.vy*hi-300)/(kt("landingLimit")*1.6-300),0,1))),E.phase==="approach"&&!e.onGround&&(h=Math.max(h,Me(Math.abs(e.y-Vl(E,e.z))/60,0,.8),Me(Math.abs(e.x)/80,0,.8))),E.trailer&&E.phase!=="takeoff"&&(h=Math.max(h,e.damage/100+.05)),E.danger=h,E.maxDanger=Math.max(E.maxDanger,h),E.maxDangerByStage[E.stage]=Math.max(E.maxDangerByStage[E.stage]||0,h),E.loop.frames++,(!e.onGround||e.v>5)&&E.loop.inFlightFrames++;let f=jetMissionCap();!E.holdExempt&&E.t-(E.holdTimeExcluded||0)>=f&&Zl("timeout"),kM(i),hn.intro=So(hn.intro,0,1.4,n)}function HM(){let n=E.scen;if(!n)return"";let t=Es(E),e=Bt("wind."+(n.wind?n.wind.mode:"calm")),i=!n.wind||n.wind.mode==="calm"||t.steady<=0?Bt("wind.calm"):Bt(t.gmax>=5?"wind.gustChip":"wind.chip",{n:e,d:String(Math.round(t.dir/10)*10%360||360).padStart(3,"0"),k:Math.round(t.steady),g:Math.round(t.steady+t.gmax)});return Bt(n.app==="vor"?"app.vor":"app.ils")+" \xB7 "+i}var k3=null;function Q5(){k3||(k3={G:E,t:Bt,audio:wt,event:ee,banner:(t,e)=>Mt.banner(t,e),addScore:e0,hdgDeg:$i,FT:oe});let n=k3;n.csN=100+E.level,n.rwy=pt.ils.rwy,n.depRwy=pt.depRwy,n.apt=Bt("apt."+pt.dest);{let t=Es(E);n.wind=t.steady>0?[Math.round(t.dir/10)*10%360||360,String(Math.round(t.steady)).padStart(2,"0")+(t.gmax>=5?"G"+Math.round(t.steady+t.gmax):"")]:[0,"00"]}return n.app=E.route&&E.route.app==="vor"?"vor":"ils",n}function kM(n){if(E.state!=="play")return;if(je.open){E.hintShownFor&&(Mt.hideHint(),E.hintShownFor=null);return}let t=E.t-E.lastInputT,e=n.hint,i=E.atc&&E.atc.cur;i&&i.dev&&(!e||e==="follow"||e==="fcu"||e==="ap")&&E.atc.devT>3&&(e="atc");let s=e==="engine"||e==="fire"||e==="gearGrav"||e==="flaps2"||e==="rotate"||e==="gear"||e==="gearDown"||e==="flaps"||e==="flare"||e==="idle"||e==="storm"||e==="climb"||e==="atc",o=t>kt("hintDelay")||s&&E.t>(E.hintCool||0);E.hintShownFor&&e!==E.hintShownFor&&(Mt.hideHint(),E.hintShownFor=null),e&&o&&E.hintShownFor!==e?(Mt.showHint(e==="atc"?Bt("hint.atc",{hdg:String(i.hdg).padStart(3,"0"),alt:i.alt}):Bt("hint."+e),e==="atc"?"stick":n.target),E.hintShownFor=e):e||Mt.hideHint()}var Ca=new K,tp=0,xo=null,J3=document.createElement("canvas");J3.width=J3.height=64;function Cp(n){let t=E.scen?E.scen.k:Kl.clear,e=E.scen?Math.min(1.2,E.scen.strength):0,i=Math.max(.1,1+((n?t.fogApp:t.fogK)-1)*e);return[(n?4200:1400)*i*(i<.5?.15:1),(n?13500:7800)*i]}function d0(){if(!Ye||E.state==="boot")return;Bi&&Is();let n=E.plane,[t,e,i,s]=pe.world,o=hn.shake*kt("cameraShake"),r=n.onGround&&n.v>2?Math.min(1,n.v/60)*.25*kt("cameraShake"):0,a=n.turb*.8*kt("cameraShake"),l=E.rngFx,c=(o+r+a)*.004,h=n.phi*.12*kt("cameraLead"),d=14*(kt("cameraDistance")-1),f=-n.psi-(kt("cameraYaw")-h)*qe+(l()-.5)*c;hn.appLook=So(hn.appLook||0,E.phase==="approach"&&!n.onGround&&n.y>6?3.5:0,1.2,1/60);let u=(n.theta*.92-5-hn.appLook-kt("cameraPitch"))*qe+(l()-.5)*c+hn.intro*.05*kt("cameraIntroZoom");ui.rotation.order="YXZ",ui.rotation.set(u,f,-n.phi*qe);let A=Math.sin(n.psi),g=-Math.cos(n.psi);ui.position.set(n.x-A*d,n.y+y3+kt("cameraHeight"),n.z-g*d),ui.aspect=i/Math.max(1,s);let m=70+kt("cameraFov")+hn.fovPunch+hn.intro*10*kt("cameraIntroZoom"),p=2*Math.atan(Math.tan(m*qe/2)/ui.aspect)*An;p=Me(p,34,78),ui.fov=p,ui.updateProjectionMatrix();{let M=Cp(E.phase==="approach"||E.phase==="done"),L=It.scene.fog;L.near=So(L.near,M[0],1,1/60),L.far=So(L.far,M[1],1,1/60)}{let M=P5(It.wxfx,It,E,ui,.016666666666666666,wt);It.skyU.flash.value=M,It.hemi.intensity=(It.hemiBase||.95)+M*1.6,It.sun.intensity=(It.sunBase||1.75)+M*.4,It.landmarks&&It.landmarks.forEach(L=>{L.userData.spin&&(L.userData.spin.rotation.z=E.clock*.08)}),It.seaTexs&&It.seaTexs.forEach(L=>{L.offset.y=E.clock*.006}),It.oceanTex&&(It.oceanTex.offset.y=E.clock*.006)}if(_t&&_t.thrB&&kt("countryScenery")!=="Editor colors"){let M=Me(n.z/_t.thrB,0,1),L=Me((M-.3)/.45,0,1),x=Math.round(L*L*(3-2*L)*10)/10;x!==(E.biomeK||0)&&(E.biomeK=x,Wa(!0))}if(It.sky.position.copy(ui.position),It.skyU.csT.value=E.clock,It.sun.position.set(n.x-400,700,n.z+250),It.sun.target.position.set(n.x,0,n.z-150),It.sun.target.updateMatrixWorld(),It.rings.forEach((M,L)=>{M.rotation.y=E.clock*.6,_t.wps[L]&&(M.position.y=So(M.position.y,_t.wps[L].alt+4,4,1/60));let x=M.userData;x.pop?(x.pop+=.05,M.scale.setScalar(1+x.pop*3),x.pop>.4&&(M.visible=!1,x.pop=0)):M.visible=!(_t.wps[L]&&_t.wps[L].hit)}),It.obstMeshes&&It.obstMeshes.forEach((M,L)=>{let x=M.userData.beacon;if(x){let I=Math.sin(E.clock*4.2+L*1.7)>.1;x.color.setRGB(I?1:.35,I?.16:.05,I?.1:.04)}}),It.stormMeshes.forEach((M,L)=>{let x=M.userData.core,I=Math.sin(E.clock*7+L*3)>.92?.7:0;x.material.opacity=I,x.material.color.set(kt("enemyColor2"))}),It.papi.length){let M=Math.atan2(n.y,Math.max(1,n.z-_t.tdz))*An,L=_t.glide*An;It.papi.forEach((x,I)=>{let v=L+(1.5-I)*.35;x.material.color.set(M>v?16774872:16726570)})}E.trafficList&&K5(E.trafficList,E.clock),Ye.setScissorTest(!1),Ye.setClearColor(728650,1),Ye.clear(),Ye.setViewport(t,pe.H-e-s,i,s),Ye.setScissor(t,pe.H-e-s,i,s),Ye.setScissorTest(!0),Ye.render(It.scene,ui),Ye.setScissorTest(!1),Ye.setViewport(0,0,pe.W,pe.H),Ye.clearDepth(),Z4(Ba,E,kt("playerColor"),"#"+new Vt(kt("playerColor")).offsetHSL(0,.3,-.1).getHexString()),Ye.render(Ba.scene,Ba.cam),(--tp<=0||!xo)&&(tp=30,Bp());let T=Mt.cvs,S=Math.min(2.5,pe.dpr);J4(T.pfd,cn.pfd[2]*pe.s,cn.pfd[3]*pe.s,S,E,Bt),j4(T.nd,cn.nd[2]*pe.s,cn.nd[3]*pe.s,S,E,Bt),$4(T.ewd,cn.ewd[2]*pe.s,cn.ewd[3]*pe.s,S,E,Bt),Q4(T.mcdu,cn.mcdu[2]*pe.s,cn.mcdu[3]*pe.s,S,E,Bt),t5(T.fcu,cn.fcu[2]*pe.s,cn.fcu[3]*pe.s,S,E,Bt),GM(),i5(T.efis,cn.efis[2]*pe.s,cn.efis[3]*pe.s,S,E,Bt);{let M=E.scen;if(M&&(M.em==="elec"&&M.fired&&!M.cleared||M.flickerUntil>E.t)){let L=M.flickerUntil>E.t,x=I=>{let v=I.getContext("2d");v.save(),v.setTransform(1,0,0,1,0,0),v.fillStyle="#020306",v.fillRect(0,0,I.width,I.height),v.fillStyle="#FFB020",v.font="700 "+Math.round(I.height*.12)+"px Menlo, Consolas, monospace",v.textAlign="center",v.textBaseline="middle",v.fillText("INOP",I.width/2,I.height/2),v.restore()};L?Math.sin(E.clock*40)>0&&(x(T.pfd),x(T.nd)):(x(T.nd),x(T.mcdu),x(T.fcu),x(T.efis))}}Mt.navSize&&e5(T.nav,Mt.navSize[0],Mt.navSize[1],S,E,Bt),Mt.hud(E,n),E.trafficList&&Mt.trafficTags(E.state==="play"?E.trafficList.map(M=>{let L=go(M.obj,(M.obj.userData.height||10)*1.6);return L&&L.on&&M.dist<3e3?{x:L.x,y:L.y,cs:M.cs,dy:Math.round(M.dy*oe/100),ta:M.ta}:null}):[]),je.open&&je.draw(),zM()}function Bp(){try{let n=J3.getContext("2d",{willReadFrequently:!0});n.drawImage(Ga,0,0,64,64);let t=n.getImageData(0,0,64,64).data,e=0,i=0,s=0,o=0,r=0;for(let a=0;a<t.length;a+=4){let l=t[a]/255,c=t[a+1]/255,h=t[a+2]/255,d=Math.max(l,c,h),f=Math.min(l,c,h),u=(d+f)/2,A=d===f?0:u>.5?(d-f)/(2-d-f):(d-f)/(d+f),g=d===0?0:(d-f)/d;e+=A,i+=g,d>.85&&g<.18&&s++,A<.15&&o++,r++}xo={saturation:+(e/r).toFixed(3),vivid:+(i/r).toFixed(3),whiteShare:+(s/r).toFixed(3),greyShare:+(o/r).toFixed(3)}}catch{xo=xo||null}}function go(n,t){if(!n)return null;Ca.set(n.position.x,n.position.y+(t||5),n.position.z).project(ui);let[e,i,s,o]=pe.world,r=e+(Ca.x+1)/2*s,a=i+(1-Ca.y)/2*o,l=Ca.z<1&&Ca.z>-1&&r>=e&&r<=e+s&&a>=i&&a<=i+o;return{x:r,y:a,on:l}}function zM(){let n=E.objects,t=(o,r,a)=>{let l=n[o]||(n[o]={exists:!0,seen:!1,onScreen:!1,stuckFor:0});r&&(l.onScreen=r.on,l.x=Math.round(r.x),l.y=Math.round(r.y),r.on&&(l.seen=!0)),a&&Object.assign(l,a)};["airliner","tower","hangar","fueltruck","radar","towerB","traffic","traffic2","traffic3","traffic4"].forEach(o=>{let r=go(Ts[o],Ts[o]&&Ts[o].userData.height||10);t(o,r,{bottom:Ts[o]?+(Ts[o].position.y/Math.max(1,Ts[o].userData.height||1)).toFixed(3):0})}),t("runway",go({position:new K(0,0,-300)},0)),t("runwayB",go({position:new K(0,0,_t.thrB)},0)),It.stormMeshes[0]&&t("storm",go(It.stormMeshes[0],80));let e=It.rings[Math.min(E.wpIdx,It.rings.length-1)];t("waypoint",go(e,0)),["pfd","nd","ewd","mcdu","fcu","thrust","stick","gear","flaps","ap","ap2","athr","loc","appr","exped","kSpd","kHdg","kAlt","kVs","eng1","eng2","efis","kBaro","kMode","kRange"].forEach(o=>{let r=V0(o,pe);t(o,{x:r[0],y:r[1],on:!0},{w:Math.round(r[2]),h:Math.round(r[3])})});let s=(E.guide||{}).target||"thrust";t("goal",{x:n[s]?n[s].x:0,y:n[s]?n[s].y:0,on:!0},{target:s}),n.scene=Object.assign({props:12,dressingShare:.7},xo||{})}function To(n,t,e){let i=V0(n,pe);return t>=i[0]&&t<=i[0]+i[2]&&e>=i[1]&&e<=i[1]+i[3]}function Fp(n){let t=V0("thrust",pe),e=t[1]+t[3]*.18,i=t[1]+t[3]*.88,s=Me((i-n)/(i-e),-.28,1);s<-.06&&(s=-.28);s<0&&s>-.06&&(s=0);for(let o of[En.idle,En.cl,En.flx,En.toga])Math.abs(s-o)<.05&&(s=o);return s}yi.addEventListener("pointerdown",n=>{if(n.target&&n.target.closest&&n.target.closest("[data-ui]"))return;let t=yi.getBoundingClientRect(),e=n.clientX-t.left,i=n.clientY-t.top;if(wt.unlock(),E.state==="intro"&&To("mcdu",e,i)){yo();return}if(E.state==="intro"&&Lo(),E.state==="play"){try{yi.setPointerCapture(n.pointerId)}catch{}if(To("altStep",e,i)){id("altStep",!0);return}{let s=_p(e,i);if(s){$t.knob={id:n.pointerId,k:s,x:e,y:i,x0:e,y0:i,t0:performance.now(),acc:0,moved:0},fn();return}}if(To("thrust",e,i)){$t.leverId=n.pointerId;let s=Fp(i);s!==$t.lever&&wt.play("tap",.4),$t.lever=s,fn();return}if(To("mcdu",e,i)){yo(),fn();return}$t.stickId=n.pointerId,$t.ox=e,$t.oy=i,$t.sx=0,$t.sy=0,Mt.stickShow(e,i),fn()}});yi.addEventListener("pointermove",n=>{let t=yi.getBoundingClientRect(),e=n.clientX-t.left,i=n.clientY-t.top;if($t.knob&&n.pointerId===$t.knob.id){let s=$t.knob,o=e-s.x,r=i-s.y;if(s.x=e,s.y=i,s.moved=Math.max(s.moved,Math.hypot(e-s.x0,i-s.y0)),s.moved<6)return;let a=o-r;s.acc+=a;let l=7*Math.max(.8,pe.s),c=s.acc>0?Math.floor(s.acc/l):Math.ceil(s.acc/l);if(c){s.acc-=c*l;let h=Math.abs(a)>14*pe.s?s.k==="hdg"?5:s.k==="spd"?3:1:1;nd(s.k,c*h),fn()}return}if(n.pointerId===$t.leverId){let s=Fp(i);s!==$t.lever&&[0,En.cl,En.flx,1].indexOf(s)>=0&&wt.play("tap",.3),$t.lever=s,fn()}else if(n.pointerId===$t.stickId){let s=e-$t.ox,o=i-$t.oy,r=54*Math.max(.8,pe.s),a=Math.hypot(s,o);a>r&&(s*=r/a,o*=r/a),$t.sx=Math.abs(s)<6?0:s/r,$t.sy=Math.abs(o)<6?0:o/r,Mt.stickMove($t.ox+s,$t.oy+o),fn()}});var Gp=n=>{if($t.knob&&n.pointerId===$t.knob.id){let t=$t.knob;$t.knob=null,n.type==="pointerup"&&t.moved<6&&performance.now()-t.t0<600&&Lp(t.k);return}n.pointerId===$t.leverId&&($t.leverId=null),n.pointerId===$t.stickId&&($t.stickId=null,$t.sx=0,$t.sy=0,Mt.stickHide())};yi.addEventListener("pointerup",Gp);yi.addEventListener("pointercancel",Gp);yi.addEventListener("contextmenu",n=>n.preventDefault());yi.addEventListener("wheel",n=>{let t=yi.getBoundingClientRect(),e=E.state==="play"?_p(n.clientX-t.left,n.clientY-t.top):null;e&&(n.preventDefault(),nd(e,n.deltaY<0?1:-1),fn())},{passive:!1});var Rn={};window.addEventListener("keydown",n=>{if(!(Mt.acctOpen()||Mt.commOpen()||n.target&&/^(INPUT|TEXTAREA)$/.test(n.target.tagName))){if(E.userPaused){(n.key==="Escape"||n.key==="Pause"||n.key==="Enter"||n.key===" ")&&(vo(!1,"key"),n.preventDefault());return}if((n.key==="Pause"||n.key==="Escape"&&!je.open)&&E.state==="play"){vo(!0,"key"),n.preventDefault();return}if(je.open){je.key(n.key),n.preventDefault();return}if(n.key==="v"||n.key==="V"){Ql(!E.panelMax,!0);return}if((n.key==="k"||n.key==="K")&&E.state==="play"){za(!0);return}if(n.key==="m"||n.key==="M"){(E.state==="intro"||E.state==="play")&&yo();return}if(n.key==="p"||n.key==="P"){Oo(!0);return}if(n.key==="t"||n.key==="T"){Up(!0);return}Rn[n.key]=!0,E.state==="intro"&&Lo(),wt.unlock(),(n.key==="g"||n.key==="G")&&tc(!0),(n.key==="f"||n.key==="F")&&ec(!0),n.key==="1"&&nr(1,!0),n.key==="2"&&nr(2,!0),(n.key==="PageUp"||n.key==="e"||n.key==="E")&&($t.lever=Math.min(1,$t.lever<0?0:$t.lever+.1),$t.lever>.97&&($t.lever=1),fn()),(n.key==="PageDown"||n.key==="q"||n.key==="Q")&&($t.lever=E.plane.onGround&&E.plane.landed&&$t.lever<=0?-.28:Math.max(0,$t.lever-.1),$t.lever>0&&$t.lever<.03&&($t.lever=0),fn()),Kp()}});window.addEventListener("keyup",n=>{Rn[n.key]=!1,Kp()});var xs=T5({detents:[En.idle,En.cl,En.flx,En.toga],onConnect(n){wt.play("chime",.6),E.mcduPage=4,(E.state==="play"||E.state==="intro")&&Mt.banner(Bt("banner.hotas"),1.4),ee("device",n||"usb")},onDisconnect(n){ee("device_lost",n||"usb")},onButton(n){if(wt.unlock(),E.state==="intro"){Lo();return}n==="gear"?tc(!0):n==="flaps"?ec(!0):n==="ap"?Oo(!0):n==="eng1"?nr(1,!0):n==="eng2"&&nr(2,!0)},onLever(n){E.state==="play"&&(n!==$t.lever&&[En.idle,En.cl,En.flx,En.toga].indexOf(n)>=0&&wt.play("tap",.3),$t.lever=n,fn())},onLeverDelta(n){E.state==="play"&&($t.lever=Me($t.lever+n,0,1),fn())},onInput(){E.state==="play"&&fn()}});E.pads=xs;function Kp(){$t.kr=(Rn.x||Rn.X?1:0)-(Rn.z||Rn.Z?1:0),$t.kb=Rn.b||Rn.B?1:0,$t.kx=(Rn.ArrowRight||Rn.d||Rn.D?1:0)-(Rn.ArrowLeft||Rn.a||Rn.A?1:0),$t.ky=(Rn.ArrowDown||Rn.s||Rn.S?1:0)-(Rn.ArrowUp||Rn.w||Rn.W?1:0),($t.kx||$t.ky)&&fn()}function WM(){if(!_t||kt("countryScenery")==="Editor colors")return null;let n=i3[C0(_t.from)],t=i3[C0(_t.dest)],e=E.biomeK||0,i={};return["ground","foliage","rock","hor"].forEach(s=>{i[s]=new Vt(n[s]).lerp(new Vt(t[s]),e)}),i}function Wa(n){if(!It)return;It.mats.ground.color.set(kt("groundColor")),It.mats.path.color.set(kt("pathColor")),It.mats.apron.color.set(kt("pathColor")).multiplyScalar(1.25),It.mats.path.emissive.set(kt("pathColor")).multiplyScalar(.35),It.mats.apron.emissive.set(kt("pathColor")).multiplyScalar(.3),It.mats.rock.color.set(kt("rockColor")),It.mats.foliage.color.set(kt("foliageColor")),It.skyU.top.value.set(kt("skyTopColor")),It.skyU.hor.value.set(kt("skyHorizonColor")),It.skyU.cloud.value.set(kt("cloudColor")),It.scene.fog.color.set(kt("fogColor"));{let i=WM();i&&(It.mats.ground.color.lerp(i.ground,.6),It.mats.foliage.color.lerp(i.foliage,.55),It.mats.rock.color.lerp(i.rock,.45),It.skyU.hor.value.lerp(i.hor,.12))}It.mats.storm.color.set(kt("enemyColor")).lerp(new Vt(9081016),.9),It.mats.storm.emissive.set(kt("enemyColor")),It.mats.ring.color.set(kt("rewardColor")),It.mats.ring.emissive.set(kt("rewardColor"));let t=Tn.backgrounds[kt("background")]||{};It.sun.color.set(t.sunTint||"#FFF2D6");let e=kt("background")==="Night neon";It.sun.intensity=e?.6:1.75,It.hemi.intensity=e?.6:.95;{let i=E.scen,s=i?i.k:null,o=i?Math.min(1,.85*i.strength):0,r=(a,l,c)=>a.lerp(new Vt(l),c);It.skyU.ovc.value=s?(s.ovc||0)*Math.min(1,i.strength):0,s&&s.sky&&(r(It.skyU.top.value,s.sky[0],o),r(It.skyU.hor.value,s.sky[1],o),r(It.skyU.cloud.value,s.sky[2],o)),s&&s.fog&&r(It.scene.fog.color,s.fog,o),s&&s.ground&&r(It.mats.ground.color,s.ground,o*(s.groundK||.85)),s&&s.foliage&&r(It.mats.foliage.color,s.foliage,o*.8),s&&s.rock&&r(It.mats.rock.color,s.rock,o*.6),s&&s.sunTint&&r(It.sun.color,s.sunTint,o),s&&s.sun&&(It.sun.intensity*=1-(1-s.sun)*o),s&&s.ovc&&(It.hemi.intensity*=1-.12*s.ovc*o),It.sunBase=It.sun.intensity,It.hemiBase=It.hemi.intensity}n||Mt.applySkin(kt("uiSkin"),kt("uiAccent"),kt("uiPanel"),kt("endCardColor"),kt("endRibbonColor"))}function sd(n){let t=Tn.backgrounds[n];t&&["groundColor","pathColor","rockColor","foliageColor","skyTopColor","skyHorizonColor","cloudColor","fogColor"].forEach(e=>$e.set(e,t[e]))}var z3=!1;function Vp(){z3||(z3=!0,requestAnimationFrame(()=>{z3=!1,Rs=!0,ii()}))}function XM(n){if(!n)return;let t=n.settings||{},e=n.params||{},i=!1;if(typeof t.cta_text=="string"&&(Oe.cta_text=t.cta_text.slice(0,24),$e.set("ctaText",Oe.cta_text)),typeof t.locale=="string"&&t.locale!==Oe.locale&&(Oe.locale=t.locale,u0=$l(),document.documentElement.lang=u0,Mt.relang(),je.relang(),E.state==="end"&&Mt.showEnd(E.outcome,jl())),t.difficulty&&t.difficulty!==Oe.difficulty&&["easy","normal","hard"].indexOf(t.difficulty)>=0&&(Oe.difficulty=t.difficulty,$e.diff=t.difficulty,E.plan.diff=t.difficulty,E.plan.seed=0,i=!0),t.max_play_time!=null&&isFinite(+t.max_play_time)){let r=Me(+t.max_play_time,300,3600);r!==Oe.max_play_time&&(Oe.max_play_time=r,$e.set("maxPlayTime",r),i=!0)}t.hint_delay!=null&&isFinite(+t.hint_delay)&&(Oe.hint_delay=Me(+t.hint_delay,1,8),$e.set("hintDelay",Oe.hint_delay));let s=!1,o=!1;Object.keys(e).forEach(r=>{let a=wa(r),l=Tn.params[a];if(!(!l||l.shared||!$e.set(a,e[r]))){if(a==="background"&&(o=!0),a==="panelSize"&&(Bi=!0),a==="communitySource")try{Mt.commRefresh()}catch{}a==="panelMaximized"&&(E.panelMax=!!kt("panelMaximized"),Mt.setPanelMax(E.panelMax),Bi=!0),l.apply==="restart"?i=!0:s=!0}}),o&&sd(kt("background")),(s||o)&&(Wa(),wt.applyVolumes(),E.state==="end"&&Mt.showEnd(E.outcome,jl())),i&&Vp(),Bi&&Is(),d0()}function YM(n){n==="pause"?(E.hostPaused=!0,wt.suspend()):n==="resume"?(E.hostPaused=!1,E.visPaused||wt.resume()):n==="mute"?ka(!0):n==="unmute"&&ka(!1)}var Mo=null,j3=30;var W3=0,Xl=0,ep=performance.now();function Hp(n){if(requestAnimationFrame(Hp),Mo!=null){let i=(n-Mo)/1e3;i>0&&(j3=j3*.9+1/i*.1),W3+=i,Xl++}let t=Mo==null?1/60:(n-Mo)/1e3;if(Mo=n,t=Me(t,0,.05),document.hidden?E.visPaused=!0:E.visPaused&&(E.visPaused=!1,wt.resume()),E.hostPaused||E.visPaused||E.userPaused||E.state==="boot")return;xs.poll(t);let e=Math.max(1,Math.ceil(t/(1/60)));for(let i=0;i<e;i++)Dp(t/e,null);if((E.state==="play"||E.state==="intro")&&wt.engineUpdate((E.plane.n1+E.plane.n1b)/2,E.state==="play"),E.scen&&wt.ambientUpdate(E.state==="play"&&E.scen.k.amb||null,(E.scen.k.heavy?1:.7)*Math.min(1.2,E.scen.strength)+(E.plane.turb||0)),d0(),performance.now()-ep>1e3){let i=Xl?W3/Xl:0,f=Xl;W3=0,Xl=0,ep=performance.now(),hdAutoTune(i,f),Yl<.58&&Ye.shadowMap.enabled&&(Ye.shadowMap.enabled=!1),Yl>.80&&!Ye.shadowMap.enabled&&(Ye.shadowMap.enabled=!0)}}document.addEventListener("visibilitychange",()=>{document.hidden?wt.suspend():wt.resume()});window.__game={setSpoilers(mode){
   if(E.state!=="play"||!E.plane)return false;
   mode=Number(mode);
   if(!Number.isInteger(mode)||mode<0||mode>2)return false;
@@ -7078,103 +6889,5 @@ window.__holdHud={update};
  #ui.playing #jc-pulldown-stack .jc-value{font-size:clamp(7px,2vw,10px);min-height:8px}
 }
 </style>
-
-<style id="jet-airport-live-style">
-#jet-airport-tower{position:absolute;z-index:23;top:max(78px,env(safe-area-inset-top));left:8px;display:none;
- pointer-events:none;font-family:Menlo,Consolas,monospace;color:#eafaff;max-width:calc(100vw - 180px)}
-#jet-airport-tower .jet-tower-signal{display:flex;align-items:center;gap:7px;padding:7px 9px;
- border:1px solid #fa6c52;border-radius:8px;background:rgba(5,18,34,.87);font-weight:900;font-size:11px}
-#jet-airport-tower .jet-tower-lamp{width:16px;height:16px;min-width:16px;border-radius:50%;background:#ff3423;box-shadow:0 0 10px #ff3423}
-#jet-airport-tower.green .jet-tower-signal{border-color:#23ef7d}
-#jet-airport-tower.green .jet-tower-lamp{background:#17ee72;box-shadow:0 0 10px #17ee72}
-#jet-airport-tower .jet-tower-caption{font-size:9px;background:rgba(4,14,29,.82);
- border-radius:5px;margin-top:2px;padding:4px 7px;color:#bdeeff}
-#jet-airport-radar{position:absolute;z-index:22;top:max(82px,env(safe-area-inset-top));right:7px;
- width:158px;pointer-events:auto;background:rgba(4,19,37,.87);color:#dcf9ff;
- border:1px solid rgba(60,203,239,.85);border-radius:8px;box-shadow:0 3px 16px #0009;
- font-family:Menlo,Consolas,monospace;overflow:hidden}
-#jet-airport-radar .jet-radar-head{display:flex;align-items:center;justify-content:space-between;gap:4px;
- font-size:10px;font-weight:900;padding:4px 6px;white-space:nowrap}
-#jet-airport-radar button{pointer-events:auto;border:1px solid #5a9cb4;border-radius:4px;
- background:#143c56;color:#fff;min-width:27px;min-height:24px;font:800 11px monospace}
-#jet-airport-radar canvas{display:block;width:100%;height:auto;aspect-ratio:1;background:#051526}
-#jet-airport-radar .jet-radar-meta{font-size:8.8px;padding:3px 6px 5px;color:#a7dcf3;line-height:1.4}
-#jet-airport-radar.closed{width:auto}#jet-airport-radar.closed canvas,#jet-airport-radar.closed .jet-radar-meta{display:none}
-@media(max-width:520px){
- #jet-airport-tower{top:58px;max-width:calc(100vw - 145px)}
- #jet-airport-tower .jet-tower-signal{font-size:10px;padding:5px 6px}
- #jet-airport-tower .jet-tower-caption{font-size:8px}
- #jet-airport-radar{top:58px;width:128px}
- #jet-airport-radar .jet-radar-head{font-size:9px;padding:3px}
- #jet-airport-radar .jet-radar-meta{font-size:8px}
-}
-</style>
-<script id="jet-airport-live-ui">
-(()=>{
- 'use strict';
- const ui=document.getElementById('ui');if(!ui)return;
- const signal=document.createElement('div');signal.id='jet-airport-tower';
- signal.innerHTML='<div class="jet-tower-signal"><i class="jet-tower-lamp"></i><span class="jet-tower-text">RUNWAY HOLD</span></div><div class="jet-tower-caption">SIM ATC · ALWAYS FOLLOW GAME SIGNAL</div>';
- ui.appendChild(signal);
- const radar=document.createElement('div');radar.id='jet-airport-radar';
- radar.setAttribute('aria-label','Selected airport live ADS-B traffic radar, simulation fallback');
- radar.innerHTML='<div class="jet-radar-head"><span class="jet-radar-title">AIRPORT RADAR</span><button type="button" aria-label="Minimize or maximize radar">−</button></div><canvas width="260" height="260"></canvas><div class="jet-radar-meta">Checking airport traffic...</div>';
- ui.appendChild(radar);
- const cv=radar.querySelector('canvas'),ctx=cv.getContext('2d');
- const title=radar.querySelector('.jet-radar-title'),meta=radar.querySelector('.jet-radar-meta');
- radar.querySelector('button').addEventListener('click',e=>{
-   e.preventDefault();e.stopPropagation();radar.classList.toggle('closed');
-   e.currentTarget.textContent=radar.classList.contains('closed')?'+':'−';
- });
- function draw(data){
-  const W=cv.width,H=cv.height,c=W/2,R=112,rangeNm=data.feed==='LIVE'?25:5;
-  ctx.clearRect(0,0,W,H);ctx.fillStyle='#06192a';ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#2d6170';ctx.lineWidth=1.5;
-  for(const r of [R/3,2*R/3,R]){ctx.beginPath();ctx.arc(c,c,r,0,Math.PI*2);ctx.stroke()}
-  ctx.beginPath();ctx.moveTo(c,8);ctx.lineTo(c,H-8);ctx.moveTo(8,c);ctx.lineTo(W-8,c);ctx.stroke();
-  ctx.fillStyle='#a3dcec';ctx.font='12px monospace';ctx.fillText('N',c-4,12);
-  ctx.font='11px monospace';ctx.fillText(rangeNm+' NM',8,H-9);
-  ctx.fillStyle='#29f1a0';ctx.beginPath();ctx.arc(c,c,5,0,Math.PI*2);ctx.fill();
-  const arp=data.arp;let shown=0;
-  if(Array.isArray(arp))for(const a of data.records||[]){
-    const lat=Number(a.lat),lon=Number(a.lon);
-    if(!Number.isFinite(lat)||!Number.isFinite(lon))continue;
-    const nmN=(lat-arp[0])*60,nmE=(lon-arp[1])*60*Math.cos(arp[0]*Math.PI/180);
-    const x=c+nmE/rangeNm*R,y=c-nmN/rangeNm*R;
-    if((x-c)**2+(y-c)**2>R**2)continue;
-    const head=(Number(a.track)||0)*Math.PI/180;
-    ctx.save();ctx.translate(x,y);ctx.rotate(head);
-    ctx.fillStyle=a.ground?'#ffca65':'#32e9ef';
-    ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(4,5);ctx.lineTo(0,2);ctx.lineTo(-4,5);ctx.closePath();ctx.fill();ctx.restore();
-    if(shown++<13){ctx.font='10px monospace';ctx.fillStyle='#e3f7ff';ctx.fillText((a.cs||'FLT').slice(0,8),x+5,y-5)}
-  }
-  for(const a of (data.simulation||[])){
-    const x=c+(a.relativeX||0)/(rangeNm*1852)*R;
-    const y=c+(a.relativeZ||0)/(rangeNm*1852)*R;
-    if((x-c)**2+(y-c)**2>R*R)continue;
-    ctx.fillStyle='#ffbe56';ctx.beginPath();ctx.arc(x,y,3.8,0,Math.PI*2);ctx.fill();
-    ctx.font='10px monospace';ctx.fillText(String(a.cs||'SIM').slice(0,9),x+5,y-4);
-  }
- }
- function tick(){
-  const d=window.__jetAirportSnapshot;
-  if(!d)return;
-  const show=!!(d.active);
-  const currentState=window.__game?.info?.()?.st;radar.style.display=currentState==='end'?'none':'block';
-  signal.style.display=show?'block':'none';
-  signal.classList.toggle('green',d.signal==='GREEN');
-  signal.querySelector('.jet-tower-text').textContent=d.signal==='GREEN'?'GREEN · PROCEED':('RED · HOLD SHORT');
-  signal.querySelector('.jet-tower-caption').textContent='SIM ATC · '+String(d.reason||'ARRIVAL INBOUND');
-  const icao=d.airport||'----';title.textContent=icao+' · '+(d.feed==='LIVE'?'LIVE':'SIM');
-  const count=(d.records||[]).length;
-  meta.textContent=(d.feed==='LIVE'?'ADS-B.LOL LIVE · '+count+' tracked':'SIM TRAFFIC · LIVE FEED OFFLINE')+' · '+(d.feed==='LIVE'?'25':'5')+' NM · Not ATC clearance';
-  if(!radar.classList.contains('closed'))draw(d);
- }
- let failed=0;
- const loop=()=>{try{tick()}catch(err){if(++failed<3)console.warn('Jetline radar UI',err)}};
- setInterval(loop,850);setTimeout(loop,800);
-})();
-</script>
-
 </body>
 </html>
