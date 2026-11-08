@@ -4892,12 +4892,19 @@ function jetTrafficParallelFree(){
 // Clear high scenery buildings/trees from protected runway and connecting taxiway
 // geometry. Never remove ground, sky, runway pavement or cockpit meshes.
 function jetChangiProtectedLocal(x,z,margin=0){
- const runways=[[-310,-405],[310,115]];
- if(runways.some(([cx,cz])=>Math.abs(x-cx)<(62+margin)&&z>cz-1940-margin&&z<cz+1390+margin))return true;
- if((Math.abs(x+175)<27+margin||Math.abs(x-168)<27+margin)&&z>-2210-margin&&z<1300+margin)return true;
- for(const cz of [-1270,-620,100,660]){
-  if(x>-365-margin&&x<366+margin&&Math.abs(x)>90&&Math.abs(z-cz)<29+margin)return true;
+ const runways=[[-310,-405],[0,0],[310,115]];
+ // Protect all 3 runway strips with a generous safety buffer so scenery
+ // buildings cannot overlap the operational pavement in the 3D view.
+ if(runways.some(([cx,cz])=>Math.abs(x-cx)<(86+margin)&&z>cz-2080-margin&&z<cz+1520+margin))return true;
+ // North-south taxiway spines connecting the three runways.
+ if((Math.abs(x+174)<42+margin||Math.abs(x-168)<42+margin)&&z>-2240-margin&&z<1380+margin)return true;
+ // Cross-connectors between the runway systems.
+ for(const cz of [-1840,-1270,-620,-250,100,660,1020]){
+  if(x>-395-margin&&x<395+margin&&Math.abs(z-cz)<42+margin)return true;
  }
+ // Small buffer around the central operating area to prevent terminal roofs or
+ // shed-like scenery from overhanging the playable runway view.
+ if(x>-120-margin&&x<120+margin&&z>-260-margin&&z<420+margin)return true;
  return false;
 }
 function jetChangiClearObstacles(){
@@ -4915,11 +4922,22 @@ function jetChangiClearObstacles(){
   const size=bb.max.clone().sub(bb.min),centre=bb.min.clone().add(bb.max).multiplyScalar(.5);
   const wscale=node.getWorldScale?.(new K())||new K(1,1,1);
   const h=Math.abs(size.y*wscale.y),hx=Math.abs(size.x*wscale.x),hz=Math.abs(size.z*wscale.z);
-  if(h<7||h>450||hx>850||hz>850)return;
-  const world=node.localToWorld(centre);
-  if(!Number.isFinite(world.x)||!Number.isFinite(world.z))return;
-  const local=Js(_t,world.x,world.z);
-  if(jetChangiProtectedLocal(local[0],local[1],Math.min(40,Math.max(hx,hz)*.45))){node.visible=false;cleared++;}
+  // Buildings, roofs, sheds and tree clusters only.
+  if(h<3||h>900||hx>5200||hz>5200)return;
+  const samples=[centre.clone()];
+  const dx=size.x*.5, dz=size.z*.5;
+  samples.push(new K(centre.x-dx,centre.y,centre.z-dz));
+  samples.push(new K(centre.x+dx,centre.y,centre.z-dz));
+  samples.push(new K(centre.x-dx,centre.y,centre.z+dz));
+  samples.push(new K(centre.x+dx,centre.y,centre.z+dz));
+  let hit=false;
+  for(const sample of samples){
+   const world=node.localToWorld(sample.clone());
+   if(!Number.isFinite(world.x)||!Number.isFinite(world.z))continue;
+   const local=Js(_t,world.x,world.z);
+   if(jetChangiProtectedLocal(local[0],local[1],Math.min(85,Math.max(hx,hz)*.18))){hit=true;break;}
+  }
+  if(hit){node.visible=false;cleared++;}
  });
  return cleared;
 }
