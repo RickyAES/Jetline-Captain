@@ -4709,24 +4709,12 @@ function hdAutoTune(seconds,frames){
     if(hdFast>=6&&Yl<1){Yl=Math.min(1,Yl+.07);Bi=!0;hdFast=0}
   }else{hdSlow=0;hdFast=0}
 }function Is(){let n=yi.getBoundingClientRect(),t=Math.round(n.width),e=Math.round(n.height);if(t<2||e<2)return!1;
-// Mobile PFD / ND / ECAM / MCDU: preserve the original cockpit geometry.
-// Panel MAX still uses the native large layout; Panel MIN now also reclaims
-// the unused SIDE margins in portrait. Scale is UNIFORM: no stretched gauges.
-// A height budget protects a portion of the forward runway view on short phones.
+// Mobile instruments: use the original full-width panel layout at startup.
+// This scales all gauges UNIFORMLY (no stretched displays), and leaves the
+// native PANEL MAX / MIN button available for manual changes afterwards.
 const jcMobilePanel=t<=760&&e<=1100&&(t<=520||((navigator.maxTouchPoints||0)>0)||(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches));
 if(jcMobilePanel&&!E.__mobilePanelAutoSized){E.__mobilePanelAutoSized=!0;E.panelMax=!0;if(Mt&&Mt.setPanelMax)Mt.setPanelMax(!0)}
-if(pe.W=t,pe.H=e,pe.landscape=e/t<1.15,pe.landscape){let i=Math.min(e/Ri.h,t*(E.panelMax?.62:.52*kt("panelSize")/.62)/Ri.w);pe.s=i,pe.bx=t-Ri.w*i,pe.by=(e-Ri.h*i)/2,pe.world=[0,0,pe.bx+4,e]}else{
-  let i=E.panelMax?(jcMobilePanel?.85:.72):kt("panelSize")+Math.min(1,Math.max(0,(700-e)/400))*Math.max(0,.62-kt("panelSize"));
-  let s=t/Ri.w;
-  if(jcMobilePanel&&!E.panelMax){
-    // 97% of the display width in Panel MIN (previously ~65-75% on phones).
-    // Keep at least ~22% of the viewport for the forward-world window when possible.
-    const widthScale=.97*t/Ri.w;
-    const heightScale=.78*e/Ri.h;
-    s=Math.min(widthScale,heightScale);
-  }else if(Ri.h*s>e*i){s=e*i/Ri.h}
-  pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;pe.world=[0,0,t,pe.by+8*s]
-}return pe.dpr=CM(t,e),Ye&&(Ye.setPixelRatio(pe.dpr),Ye.setSize(t,e,!1),Ga.style.width=t+"px",Ga.style.height=e+"px"),Ba&&Y4(Ba,pe),Mt.layout(pe,cn),je.layout(pe),Bi=!1,E.state!=="boot"&&d0(),!0}var J5=window.ResizeObserver?new ResizeObserver(()=>{Bi=!0,(pi||E.state==="end"||E.hostPaused)&&Is()}):null;J5&&J5.observe(yi);window.addEventListener("resize",()=>{Bi=!0});window.addEventListener("orientationchange",()=>setTimeout(()=>{Bi=!0,Is()},200));var BM=Bn(ni);
+if(pe.W=t,pe.H=e,pe.landscape=e/t<1.15,pe.landscape){let i=Math.min(e/Ri.h,t*(E.panelMax?.62:.52*kt("panelSize")/.62)/Ri.w);pe.s=i,pe.bx=t-Ri.w*i,pe.by=(e-Ri.h*i)/2,pe.world=[0,0,pe.bx+4,e]}else{let i=E.panelMax?(jcMobilePanel?.85:.72):kt("panelSize")+Math.min(1,Math.max(0,(700-e)/400))*Math.max(0,.62-kt("panelSize")),s=t/Ri.w;Ri.h*s>e*i&&(s=e*i/Ri.h),pe.s=s,pe.bx=(t-Ri.w*s)/2,pe.by=e-Ri.h*s,pe.world=[0,0,t,pe.by+8*s]}return pe.dpr=CM(t,e),Ye&&(Ye.setPixelRatio(pe.dpr),Ye.setSize(t,e,!1),Ga.style.width=t+"px",Ga.style.height=e+"px"),Ba&&Y4(Ba,pe),Mt.layout(pe,cn),je.layout(pe),Bi=!1,E.state!=="boot"&&d0(),!0}var J5=window.ResizeObserver?new ResizeObserver(()=>{Bi=!0,(pi||E.state==="end"||E.hostPaused)&&Is()}):null;J5&&J5.observe(yi);window.addEventListener("resize",()=>{Bi=!0});window.addEventListener("orientationchange",()=>setTimeout(()=>{Bi=!0,Is()},200));var BM=Bn(ni);
 /* Taxi-out / taxi-in routes are navigable simulated airport service roads.
    Runway IDs, headings and lengths follow the selected airport record.
    Ground taxiway centre lines are illustrative; not official airport charts. */
