@@ -4853,10 +4853,12 @@ function jetTaxiBuildScene(){
 const jetTraffic={airport:'',age:0,clear:false,phase:'',plane:null,lights:null,lightMaterials:[],scene:null,
  live:[],liveAt:0,liveAirport:'',liveRef:null,liveRunway:null,liveMeshes:[],liveModels:new Map(),
  nextLiveDraw:0,nextHud:0,announced:false,hideAt:0,arrivalId:'',arrivalLostAt:0,arrivalLandedAt:0,
- runwayOccupied:false,mode:'SIM',lastLiveStatus:'',changeAirportAt:0,arrivalCallsign:'',scenarioId:'SIM-JL01',lastTrackedPhase:'',lastTrackedSeen:0};
+ runwayOccupied:false,mode:'SIM',lastLiveStatus:'',changeAirportAt:0,arrivalCallsign:'',scenarioId:'SIM-JL01',lastTrackedPhase:'',lastTrackedSeen:0,
+ primaryArrivalSeenAt:0};
 function jetTrafficDispose(object){
  if(!object)return;
  if(object.userData?.trafficTag)object.userData.trafficTag.remove();
+ if(object.userData?.airlineBadge)object.userData.airlineBadge.remove();
  if(object.parent)object.parent.remove(object);
  object.traverse?.(node=>{node.geometry?.dispose?.();
   const mat=node.material;if(Array.isArray(mat))mat.forEach(m=>m?.dispose?.());else mat?.dispose?.();});
@@ -4920,6 +4922,37 @@ function jetTrafficMakeObjects(){
  jetTraffic.lightMaterials=[redM,greenM];jetTraffic.lights=lamps;
  lamps.rotation.y=-(_t.depRot||0)-Math.PI/2;It.scene.add(lamps);
 }
+
+function jetTrafficCallsign(a){
+ const name=String(a?.name||a?.callsign||a?.id||'').trim().toUpperCase();
+ return name||'UNKNOWN';
+}
+function jetTrafficIsSingapore(a){
+ const cs=jetTrafficCallsign(a);
+ return /^SIA\d{1,4}$/.test(cs)||cs.startsWith('SINGAPORE')||cs.startsWith('SQ');
+}
+function jetTrafficApplyLivery(group,a){
+ if(!group)return;
+ const data=group.userData||(group.userData={});
+ const isSIA=jetTrafficIsSingapore(a);
+ data.airline=isSIA?'SINGAPORE_AIRLINES':'GENERIC';
+ data.callsign=jetTrafficCallsign(a);
+ const setHex=(mat,hex)=>{if(mat?.color)mat.color.setHex(hex);};
+ setHex(data.bodyMat,isSIA?0xf7fbff:(a?.onGround?0xffd87c:0x38d8ff));
+ setHex(data.bellyMat,isSIA?0x102d5e:(a?.onGround?0xffb85c:0x9deaff));
+ setHex(data.wingMat,isSIA?0xdee7ef:(a?.onGround?0xffb85c:0x9deaff));
+ setHex(data.tailMat,isSIA?0x123f82:0x264f79);
+ setHex(data.engineMat,isSIA?0x183760:0x264f79);
+ setHex(data.stripeGoldMat,isSIA?0xd8a52c:0x264f79);
+ setHex(data.stripeBlueMat,isSIA?0x0f3d82:0x264f79);
+ if(data.airlineBadge){
+  data.airlineBadge.textContent=isSIA?'SINGAPORE AIRLINES':'LIVE '+data.callsign;
+  data.airlineBadge.style.borderColor=isSIA?'#d6b357':'#36d7f5';
+  data.airlineBadge.style.color=isSIA?'#fff1bf':'#b5faff';
+  data.airlineBadge.style.background=isSIA?'#17284ae8':'#061a33e8';
+ }
+}
+
 function jetTrafficAccept(data){
  if(!data||!Array.isArray(data.aircraft))return false;
  const airport=String(data.airport||'').toUpperCase(),active=jetTrafficActiveAirport();
@@ -5010,6 +5043,7 @@ function jetTrafficRunwayDecision(){
   jetTraffic.arrivalCallsign=tracked.name||jetTraffic.arrivalCallsign;
   jetTraffic.arrivalLostAt=0;
   jetTraffic.lastTrackedSeen=Date.now();
+  jetTraffic.primaryArrivalSeenAt=Date.now();
   jetTraffic.lastTrackedPhase=tracked.onGround?'ON GROUND':tracked.phase||'AIRBORNE';
   if(tracked.onGround&&!jetTraffic.arrivalLandedAt)jetTraffic.arrivalLandedAt=Date.now();
  }else if(jetTraffic.arrivalId&&!jetTraffic.arrivalLostAt){jetTraffic.arrivalLostAt=Date.now();}
@@ -5055,24 +5089,40 @@ function jetTrafficRefreshHud(){
  }else radar.textContent='📡 LIVE ADS-B · RUNWAY STATUS IS A GAME ESTIMATE';
 }
 function jetTrafficBuildLivePlane(a){
- const group=new me(),onGround=a.onGround;
- const hull=new Xt({color:onGround?0xffd87c:0x38d8ff,roughness:.48,metalness:.15});
- const wing=new Xt({color:onGround?0xffb85c:0x9deaff,roughness:.50,metalness:.12});
- const dark=new Xt({color:0x264f79,roughness:.6});
- const body=new Tt(new Ae(3.3,3.2,32),hull);body.position.y=3.5;group.add(body);
- const wings=new Tt(new Ae(35,.7,5.3),wing);wings.position.set(0,3.7,-1.5);group.add(wings);
- const tail=new Tt(new Ae(1.3,7,6),dark);tail.position.set(0,7,12);group.add(tail);
- const stab=new Tt(new Ae(12,.6,4),wing);stab.position.set(0,6.2,13);group.add(stab);
- for(const x of [-7.5,7.5]){const engine=new Tt(new Ae(3,2.8,7),dark);engine.position.set(x,1.8,-2.7);group.add(engine);}
- const port=new Tt(new Ae(1.4,.7,1.6),new be({color:0xff535b}));port.position.set(-17,3.7,-2);group.add(port);
- const star=new Tt(new Ae(1.4,.7,1.6),new be({color:0x37ff9c}));star.position.set(17,3.7,-2);group.add(star);
- group.userData={source:'LIVE_ADSB',callsign:a.name,icao24:a.id,approximate:true};
- // The visual label is never a separate simulated aircraft: exactly one
- // DOM tag per ICAO24 3D model and the same callsign as the radar list.
+ const group=new me(),onGround=!!a.onGround;
+ const bodyMat=new Xt({color:0xf7fbff,roughness:.42,metalness:.18});
+ const bellyMat=new Xt({color:0x102d5e,roughness:.46,metalness:.12});
+ const wingMat=new Xt({color:0xdfe7ef,roughness:.48,metalness:.14});
+ const tailMat=new Xt({color:0x123f82,roughness:.44,metalness:.14});
+ const engineMat=new Xt({color:0x183760,roughness:.52,metalness:.12});
+ const stripeBlueMat=new Xt({color:0x0f3d82,roughness:.38,metalness:.12});
+ const stripeGoldMat=new Xt({color:0xd8a52c,roughness:.34,metalness:.16});
+ const navRed=new be({color:0xff535b}),navGreen=new be({color:0x37ff9c});
+ const body=new Tt(new Ae(3.7,3.5,34),bodyMat);body.position.y=4.0;group.add(body);
+ const belly=new Tt(new Ae(3.9,1.2,31),bellyMat);belly.position.set(0,2.3,0);group.add(belly);
+ const nose=new Tt(new Ae(3.5,2.1,5.6),new Xt({color:0xf7fbff,roughness:.32,metalness:.20}));nose.position.set(0,5.2,-15.2);group.add(nose);
+ const wings=new Tt(new Ae(37,0.75,5.5),wingMat);wings.position.set(0,4.1,-1.4);group.add(wings);
+ const tailFin=new Tt(new Ae(1.5,8.5,6.2),tailMat);tailFin.position.set(0,8.2,13.5);group.add(tailFin);
+ const stab=new Tt(new Ae(12.5,0.65,4.2),wingMat);stab.position.set(0,6.9,14.2);group.add(stab);
+ const stripeBlue=new Tt(new Ae(3.85,0.33,26),stripeBlueMat);stripeBlue.position.set(0,4.55,-1.6);group.add(stripeBlue);
+ const stripeGold=new Tt(new Ae(3.86,0.22,26),stripeGoldMat);stripeGold.position.set(0,4.07,-1.6);group.add(stripeGold);
+ const tailGold=new Tt(new Ae(0.3,2.9,4.5),stripeGoldMat);tailGold.position.set(-0.4,8.7,13.4);group.add(tailGold);
+ for(const x of [-8.5,8.5]){
+  const engine=new Tt(new Ae(3.2,2.6,7.4),engineMat);engine.position.set(x,2.2,-2.8);group.add(engine);
+ }
+ const port=new Tt(new Ae(1.4,.7,1.6),navRed);port.position.set(-18,4.0,-2);group.add(port);
+ const star=new Tt(new Ae(1.4,.7,1.6),navGreen);star.position.set(18,4.0,-2);group.add(star);
+ group.userData={source:'LIVE_ADSB',callsign:jetTrafficCallsign(a),icao24:a.id,approximate:true,
+  bodyMat,bellyMat,wingMat,tailMat,engineMat,stripeBlueMat,stripeGoldMat};
  const label=document.createElement('div');label.className='jc-live-flight-tag';
  label.setAttribute('aria-hidden','true');label.style.cssText='position:absolute;z-index:14;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:#061a33e8;color:#b5faff;border:1px solid #36d7f5;border-radius:5px;padding:2px 4px;font:800 10px system-ui;text-shadow:0 1px #000;display:none';
  (document.getElementById('ui')||document.body).appendChild(label);
  group.userData.trafficTag=label;
+ const badge=document.createElement('div');badge.className='jc-live-airline-tag';
+ badge.setAttribute('aria-hidden','true');badge.style.cssText='position:absolute;z-index:13;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:#17284ae8;color:#fff1bf;border:1px solid #d6b357;border-radius:999px;padding:1px 6px;font:700 9px system-ui;display:none';
+ (document.getElementById('ui')||document.body).appendChild(badge);
+ group.userData.airlineBadge=badge;
+ jetTrafficApplyLivery(group,a);
  It.scene.add(group);return group;
 }
 function jetTrafficPosition(a,now){
@@ -5092,22 +5142,21 @@ function jetTrafficPosition(a,now){
  const matched=isTaxi&&a.id===jetTraffic.arrivalId;
  let x,z;
  if(matched&&!a.onGround){
-  // A real contact approaching the chosen airport is shown in the same
-  // *illustrative* 3D runway corridor as the game. Progress is driven only by
-  // its reported geographic distance, NOT by a fake landing timer.
-  x=Math.max(-180,Math.min(180,side*130));
-  const realKm=Math.hypot(north,east);
-  z=Math.max(85,Math.min(1550,realKm*130));
+  // The tracked inbound flight is always staged in the playable landing corridor
+  // so the same radar callsign can be seen physically landing during taxi hold.
+  x=Math.max(-110,Math.min(110,side*95));
+  const realKm=Math.max(.05,Math.hypot(north,east));
+  z=Math.max(120,Math.min(1650,realKm*145));
  }else if(matched&&a.onGround){
-  x=Math.max(-390,Math.min(390,side*410));
-  z=Math.max(-1450,Math.min(1550,-along*410));
+  x=Math.max(-95,Math.min(95,side*95));
+  z=Math.max(-1450,Math.min(240,-along*420));
  }else{
   // All other aircraft stay relative to the radar airport and bearing.
   // Compress the coordinate distances to fit the 3D simulation's scale.
   x=side*350;z=(arrival?(_t.thrB-900):0)-along*350;
  }
  const pos=qi(_t,x,z);
- const height=a.onGround?3.4:Math.max(12,Math.min(780,Number(a.altFt||0)*.3048*(matched?.36:.65)));
+ const height=a.onGround?3.4:(matched&&!a.onGround?Math.max(10,Math.min(220,Number(a.altFt||0)*0.065)):Math.max(12,Math.min(780,Number(a.altFt||0)*.3048*.48)));
  const yaw=-(_t.depRot||0)-(((a.heading-course+540)%360)-180)*Math.PI/180;
  return {x:pos[0],y:height,z:pos[1],yaw};
 }
@@ -5141,28 +5190,32 @@ function jetTrafficDrawLiveContacts(dt){
   const d=((target.yaw-entry.yaw+Math.PI*3)%(Math.PI*2))-Math.PI;
   entry.yaw+=d*k;
   entry.group.position.set(entry.x,entry.y,entry.z);entry.group.rotation.y=entry.yaw;
-  entry.group.userData.callsign=a.name;
+  entry.group.userData.callsign=jetTrafficCallsign(a);
   entry.group.userData.onGround=a.onGround;
   entry.group.userData.reportedSpeedKt=a.speedKt;
-  const fuselage=entry.group.children[0],wings=entry.group.children[1];
-  if(fuselage?.material?.color)fuselage.material.color.setHex(a.onGround?0xffd87c:0x38d8ff);
-  if(wings?.material?.color)wings.material.color.setHex(a.onGround?0xffb85c:0x9deaff);
+  const isTracked=a.id===jetTraffic.arrivalId;
+  jetTrafficApplyLivery(entry.group,a);
+  entry.group.scale.setScalar(isTracked?1.28:(a.onGround?0.95:1.02));
   const tag=entry.group.userData.trafficTag;
+  const badge=entry.group.userData.airlineBadge;
   if(tag){
-   const isTracked=a.id===jetTraffic.arrivalId;
-   tag.textContent=(isTracked?'▶ ':'✈ ')+a.name+(a.onGround?' · GROUND':' · '+Math.round(a.altFt||0)+' FT');
-   tag.style.borderColor=isTracked?'#ffe18b':a.onGround?'#ffcd68':'#36d7f5';
-   tag.style.color=isTracked?'#fff0b1':a.onGround?'#ffd782':'#b5faff';
+   tag.textContent=(isTracked?'▶ ':'✈ ')+jetTrafficCallsign(a)+(a.onGround?' · GROUND':' · '+Math.round(a.altFt||0)+' FT');
+   tag.style.borderColor=isTracked?'#ffe18b':jetTrafficIsSingapore(a)?'#d6b357':a.onGround?'#ffcd68':'#36d7f5';
+   tag.style.color=isTracked?'#fff0b1':jetTrafficIsSingapore(a)?'#fff1bf':a.onGround?'#ffd782':'#b5faff';
    try{
-    const projected=entry.group.position.clone();projected.y+=20;projected.project(ui);
+    const projected=entry.group.position.clone();projected.y+=22;projected.project(ui);
     const vw=rect?.width||innerWidth,vh=rect?.height||innerHeight;
     const px=(projected.x*.5+.5)*vw+(rect?.left||0);
     const py=(-projected.y*.5+.5)*vh+(rect?.top||0);
     const nearCanvas=projected.z>-1&&projected.z<1&&px>15&&px<innerWidth-15&&py>12&&py<innerHeight-25;
     tag.style.display=nearCanvas?'block':'none';
-    if(nearCanvas){tag.style.left=px+'px';tag.style.top=py+'px';}
-   }catch{tag.style.display='none';}
-  }
+    if(badge)badge.style.display=nearCanvas&&jetTrafficIsSingapore(a)?'block':'none';
+    if(nearCanvas){
+      tag.style.left=px+'px';tag.style.top=py+'px';
+      if(badge){badge.style.left=px+'px';badge.style.top=(py-17)+'px';}
+    }
+   }catch{tag.style.display='none'; if(badge)badge.style.display='none';}
+  }else if(badge)badge.style.display='none';
  }
  for(const [key,entry] of jetTraffic.liveModels){if(!visible.has(key)){
   jetTrafficDispose(entry.group);jetTraffic.liveModels.delete(key);
