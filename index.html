@@ -597,7 +597,9 @@
     $('radarStreetMode').setAttribute('aria-pressed',String(radarMapMode==='streets'));
     const credit=$('radarMapAttributionText');
     if(credit){
-      credit.textContent=radarMapMode==='streets'?'© OpenStreetMap contributors · coastlines GSHHG':coastAttribution;
+      const singaporeMap=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport);
+      credit.textContent=singaporeMap?'Singapore coast: © OpenStreetMap contributors':
+        radarMapMode==='streets'?'© OpenStreetMap contributors · GSHHG coastline':coastAttribution;
     }
     if(radarOpenState)drawRadar();
   }
@@ -654,6 +656,90 @@
       const tile=loadStreetTile(zoom,x,y);
       if(tile?.status!=='ready')continue;
       ctx.drawImage(tile.image,g.cx+(x-cx)*tilePx,g.cy+(y-cy)*tilePx,tilePx+0.6,tilePx+0.6);
+    }
+    ctx.restore();
+  }
+  // Modern Singapore shorelines are traced from the *same OpenStreetMap raster*
+  // used by STREETS. Old coarse GSHHG polygons misidentified Changi's reclaimed
+  // coastal airport land and cut through the runways at 15 km / 25 km.
+  // This cartographic illustration is not an official airport surface chart.
+  function makeSingaporeCoastTile(tile){
+    if(tile.coastCanvas||tile.coastUnavailable)return;
+    try{
+      const S=192;
+      const sample=document.createElement('canvas');sample.width=sample.height=S;
+      const sampleCtx=sample.getContext('2d',{willReadFrequently:true});
+      sampleCtx.drawImage(tile.image,0,0,S,S);
+      // The same-origin/cross-origin access policy as the OSM image is respected.
+      // When blocked, we fall back to the correctly aligned raster tiles.
+      const rgba=sampleCtx.getImageData(0,0,S,S).data;
+      const water=new Uint8Array(S*S);
+      for(let i=0;i<water.length;i++){
+        const j=i*4,r=rgba[j],g=rgba[j+1],b=rgba[j+2];
+        // OSM water has a blue/cyan hue; ordinary land, road and park colors do not.
+        water[i]=(g>r+14 && b>r+25 && b>=g-7 && b>145)?1:0;
+      }
+      // Suppress fine cartographic labels and road pixels that could otherwise
+      // be mistaken for narrow waterways or tiny disconnected islands.
+      const smooth=new Uint8Array(S*S);
+      for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+        let count=0,total=0;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          const xx=x+dx,yy=y+dy;
+          if(xx<0||xx>=S||yy<0||yy>=S)continue;
+          total++;count+=water[yy*S+xx];
+        }
+        smooth[y*S+x]=count>total/2?1:0;
+      }
+      const output=document.createElement('canvas');output.width=output.height=S;
+      const outputCtx=output.getContext('2d');
+      const img=outputCtx.createImageData(S,S),d=img.data;
+      for(let y=0;y<S;y++)for(let x=0;x<S;x++){
+        const i=y*S+x,j=i*4,isWater=smooth[i];
+        let boundary=false;
+        // Skip tile-edge neighbours: a tile must not draw a false shoreline seam.
+        if(x>0&&x<S-1&&y>0&&y<S-1){
+          boundary=(smooth[i-1]!==isWater||smooth[i+1]!==isWater||
+                    smooth[i-S]!==isWater||smooth[i+S]!==isWater);
+        }
+        if(boundary){d[j]=115;d[j+1]=234;d[j+2]=255;d[j+3]=255;}
+        else if(!isWater){d[j]=18;d[j+1]=91;d[j+2]=117;d[j+3]=185;}
+        // Ocean is transparent over the radar's existing navy background.
+      }
+      outputCtx.putImageData(img,0,0);
+      tile.coastCanvas=output;
+    }catch(error){
+      // Canvas sampling can be blocked by CORS or privacy restrictions. In that
+      // case, draw the already correctly positioned STREET tiles, darkened.
+      tile.coastUnavailable=true;
+      console.warn('OSM coast styling unavailable; using aligned map tiles',error);
+    }
+  }
+  function drawSingaporeCoastMap(ctx,g){
+    const c=radarDisplayCenter();if(!c)return;
+    // Identical tile projection/coordinates to drawStreetMap and geoPoint.
+    const globeKm=40075.016686*Math.max(.03,Math.cos(c.lat*Math.PI/180));
+    const screenWorldPixels=globeKm*g.R/radarScale;
+    const zoom=Math.max(2,Math.min(15,Math.round(Math.log2(screenWorldPixels/256))));
+    const n=2**zoom,tilePx=screenWorldPixels/n;
+    const cx=((c.lon+180)/360)*n,cy=mercY(c.lat)*n;
+    const left=Math.floor(cx-g.R/tilePx)-1,right=Math.ceil(cx+g.R/tilePx)+1;
+    const top=Math.max(0,Math.floor(cy-g.R/tilePx)-1);
+    const bottom=Math.min(n-1,Math.ceil(cy+g.R/tilePx)+1);
+    ctx.save();
+    for(let y=top;y<=bottom;y++)for(let x=left;x<=right;x++){
+      const tile=loadStreetTile(zoom,x,y);
+      if(tile?.status!=='ready')continue;
+      makeSingaporeCoastTile(tile);
+      const dx=g.cx+(x-cx)*tilePx,dy=g.cy+(y-cy)*tilePx;
+      if(tile.coastCanvas){
+        ctx.drawImage(tile.coastCanvas,dx,dy,tilePx+0.6,tilePx+0.6);
+      }else{
+        ctx.save();ctx.globalAlpha=.68;
+        ctx.filter='saturate(.45) brightness(.42) contrast(1.1)';
+        ctx.drawImage(tile.image,dx,dy,tilePx+0.6,tilePx+0.6);
+        ctx.restore();
+      }
     }
     ctx.restore();
   }
@@ -1314,10 +1400,20 @@ function drawRadar(){
   const grad=ctx.createRadialGradient(g.cx,g.cy,g.R*.1,g.cx,g.cy,g.R*1.05);
   grad.addColorStop(0,'#0a2a39');grad.addColorStop(1,'#041119');
   ctx.fillStyle=grad;ctx.fillRect(0,0,g.width,g.height);
+  // Keep attribution correct when switching countries without changing map mode.
+  {const credit=$('radarMapAttributionText');if(credit){
+    credit.textContent=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport)
+      ?'Singapore coast: © OpenStreetMap contributors'
+      :(radarMapMode==='streets'?'© OpenStreetMap contributors · GSHHG coastline':coastAttribution);
+  }}
   // Real geographic map aligned to airport coordinates — no invented Singapore outline.
   ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,Math.PI*2);ctx.clip();
+  const isSingaporeMap=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport);
   if(radarMapMode==='streets')drawStreetMap(ctx,g);
-  drawGeoCoastlines(ctx,g);
+  else if(isSingaporeMap)drawSingaporeCoastMap(ctx,g);
+  // The coarse GSHHG shoreline is retained outside Singapore only. Drawing it
+  // above Singapore's modern OSM coast would make Changi appear outside the island.
+  if(!isSingaporeMap)drawGeoCoastlines(ctx,g);
   // background grid
   ctx.strokeStyle='rgba(57,103,120,.22)';ctx.lineWidth=1;
   for(let i=0;i<=10;i++){
