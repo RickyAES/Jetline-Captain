@@ -313,6 +313,7 @@
       </div>
       <div id="radarCatalogStatus" role="status" style="font-size:11px;color:#91dbea;margin:3px 0 6px">Loading airport directory…</div>
       <div id="radarRunwayStatus" role="status" style="font-size:12px;color:#f4cf82;margin:3px 0 8px">RUNWAY: awaiting airport selection</div>
+       <div id="radarGameMatch" role="status" style="color:#ffe0a1;font-size:12px;line-height:1.35;margin:4px 0">Game traffic matching: awaiting taxi sequence</div>
       <div id="radarStatus" role="status">Select an airport to request real aircraft positions.</div>
       <div id="radarGroundDiagnostic" role="status" style="font-size:12px;color:#ffd18b;margin:3px 0 10px;line-height:1.5;display:none"></div>
       <div class="radarContent">
@@ -1273,12 +1274,22 @@ function drawAircraftTrail(ctx,p,g,now){
   }
   function openRadar(){
     closeModal();radarOpenState=true;
+    const activeFlightAirport=taxiFlightAirport();
+    if(activeFlightAirport&&airports[activeFlightAirport.code]&&!radarManualAirport){
+      radarAirport=activeFlightAirport.code;
+      rebuildAirportOptions();showAirportRunway();
+      $('radarFilter').value='ALL';
+      const hold=gameInfo()?.runwaySignal;
+      if(hold?.arrivalId)radarSelected=hold.arrivalId;
+      setRadarRange(15);
+    }
+    updateGameRadarMatch();
     loadRadarCoastlines();
     $('radarShade').classList.add('show');
     $('radarShade').setAttribute('aria-hidden','false');
     enableRadarModes(radarAirport);
     if(radarAirport==='SGALL'){ $('radarFilter').value='SGACT';if(radarScale===25)setRadarRange(50); }
-    else if(radarAirport==='WSSS'){ $('radarFilter').value='CHANGI';if(radarScale===50)setRadarRange(25); }
+    else if(radarAirport==='WSSS'&&!taxiFlightAirport()){ $('radarFilter').value='CHANGI';if(radarScale===50)setRadarRange(25); }
     if(!Object.keys(airports).length){loadRadarAirports().then(loadRadar);}else {loadRadarAirports();loadRadar();}
     cancelAnimationFrame(radarAnim);
     radarLastPaint=0;
@@ -1339,6 +1350,8 @@ function drawAircraftTrail(ctx,p,g,now){
       if(id!==radarRequestId||requested!==radarAirport||!radarOpenState)return;
       radarData=d;
       radarLastFetchMs=Date.now();
+      const activeFlight=taxiFlightAirport();
+      if(activeFlight?.code===requested)deliverAirportRadar(d,activeFlight);
       const stamp=Date.parse(d.asOf||d.fetchedAt);
       const when=Number.isFinite(stamp)?new Date(stamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'unknown time';
       const groundReports=requested==='WSSS'?d.aircraft.filter(p=>p.groundAtChangi).length:0;
@@ -1521,7 +1534,22 @@ function drawRadar(){
   if(!radarData){ctx.textAlign='center';ctx.fillStyle='#b5d4e4';ctx.font='13px system-ui';ctx.fillText('NO VERIFIED LIVE POSITIONS',g.cx,g.cy+g.R*.58)}
 }
 function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueFlightSchedules([p]);renderRadar()}
+  function updateGameRadarMatch(){
+    const el=$('radarGameMatch');if(!el)return;
+    const info=gameInfo(), hold=info?.runwaySignal;
+    if(!hold||info?.phase!=='taxi'){
+      el.textContent='Game taxi traffic matching: available while your aircraft taxis.';return;
+    }
+    if(hold.source==='LIVE'&&hold.arrivalId){
+      el.textContent='✈ MATCHED LIVE AIRCRAFT: '+(hold.arrivalCallsign||hold.arrivalId)+
+        ' · ICAO24 '+hold.arrivalId+' · same identifier on radar and 3D model. Runway signal remains game-only.';
+    }else if(hold.source==='SIM'){
+      el.textContent='🎮 GAME TRAINING ARRIVAL '+(hold.scenario||'SIM-JL01')+
+        ' · clearly simulated; not an ADS-B aircraft and not added to live radar contacts.';
+    }else el.textContent='No confirmed inbound selected · game runway status is estimated.';
+  }
   function renderRadar(){
+    updateGameRadarMatch();
     const flights=radarFlights();
     const taxiMode=radarAirport==='WSSS'&&$('radarFilter').value==='TAXI';
     const activityMode=radarAirport==='WSSS'&&$('radarFilter').value==='CHANGI';
@@ -1910,42 +1938,67 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }catch{}}
   function gameInfo(){try{return frame.contentWindow?.__game?.info?.()||null}catch{return null}}
 
-  // Automatic airport-wide ADS-B feed during taxi, even while RADAR modal is closed.
-  // ADS-B contacts are observational; they do NOT authorize runway entry.
+  // Automatic ADS-B for the active departure/arrival airport (not just open RADAR).
+  // The same real contacts drive radar dots and the game's approximate 3D models.
   let taxiRadarFlightAirport='',taxiRadarLastMs=0,taxiRadarFetching=false,taxiRadarLive=null;
   function taxiFlightAirport(){
     const info=gameInfo();
-    if(!info||info.st!=='play'||info.phase!=='taxi')return null;
-    const code=String(info.rwys?.dep||'').toUpperCase();
+    if(!info||info.st!=='play'||!['taxi','takeoff','approach','taxiIn'].includes(info.phase))return null;
+    const arrival=info.phase==='approach'||info.phase==='taxiIn';
+    const code=String(arrival?info.rwys?.arr:info.rwys?.dep||'').toUpperCase();
     if(!/^[A-Z0-9]{4}$/.test(code))return null;
     const existing=airports[code]||SG_AIRFIELDS[code];
     return existing&&Number.isFinite(Number(existing.lat))&&Number.isFinite(Number(existing.lon))?
-      {code,lat:Number(existing.lat),lon:Number(existing.lon),name:existing.name||code}:null;
+      {code,lat:Number(existing.lat),lon:Number(existing.lon),name:existing.name||code,
+       runway:String(arrival?info.rwys?.arrRwy:info.rwys?.depRwy||'')}:null;
+  }
+  function runwayForGame(current){
+    const records=SG_AIRFIELDS[current.code]?.runways||runwayLookup.get(current.code)||[];
+    const runway=current.runway.toUpperCase();
+    const pair=records.find(r=>String(r.id||'').toUpperCase().split('/').some(x=>x===runway))||
+      records.find(r=>String(r.id||'').toUpperCase().includes(runway));
+    return pair&&Array.isArray(pair.a)&&Array.isArray(pair.b)?[pair.a,pair.b]:null;
+  }
+  function deliverAirportRadar(d,current){
+    if(!gameLoaded||!d?.aircraft||!current)return;
+    const native=flightApi();
+    native?.setAirportTraffic?.({airport:current.code,reference:[current.lat,current.lon],
+      asOf:d.asOf||d.fetchedAt,runwayEnds:runwayForGame(current),aircraft:d.aircraft});
   }
   async function syncTaxiRadar(){
     const current=taxiFlightAirport();
     if(!current||taxiRadarFetching||document.visibilityState==='hidden')return;
     const stamp=Date.now();
-    if(current.code===taxiRadarFlightAirport&&stamp-taxiRadarLastMs<30000)return;
+    if(current.code===taxiRadarFlightAirport&&stamp-taxiRadarLastMs<27000)return;
     taxiRadarFetching=true;taxiRadarFlightAirport=current.code;taxiRadarLastMs=stamp;
     try{
+      // Reuse the radar modal's fresh dataset if its airport matches the game.
+      if(radarData?.airport?.icao===current.code&&stamp-radarLastFetchMs<16000){
+        taxiRadarLive=radarData;deliverAirportRadar(radarData,current);return;
+      }
       const url='/api/radar?'+new URLSearchParams({airport:current.code,lat:String(current.lat),
         lon:String(current.lon),name:current.name});
       const resp=await fetch(url,{cache:'no-store'}),d=await resp.json();
-      if(!resp.ok||!Array.isArray(d?.aircraft))throw new Error(d?.error||'Live positions unavailable');
+      if(!resp.ok||!Array.isArray(d?.aircraft)||d?.airport?.icao!==current.code)
+        throw new Error(d?.error||'ADS-B positions unavailable');
+      if(taxiFlightAirport()?.code!==current.code)return; // Ignore stale airport response.
       taxiRadarLive=d;
-      // One payload serves all airlines, not SIA-only, with actual callsigns and coordinates.
-      const native=flightApi();
-      native?.setAirportTraffic?.({airport:current.code,reference:[current.lat,current.lon],aircraft:d.aircraft});
-      if(radarOpenState && radarAirport===current.code && !radarBusy){
-        radarData=d;radarLastFetchMs=Date.now();renderRadar();
+      deliverAirportRadar(d,current);
+      if(radarOpenState&&radarAirport===current.code&&!radarBusy){
+        radarData=d;radarLastFetchMs=Date.now();
+      if(!radarManualAirport&&taxiFlightAirport()?.code===radarAirport){
+        const hold=gameInfo()?.runwaySignal;
+        if(hold?.arrivalId&&d.aircraft.some(p=>(p.hex||p.callsign)===hold.arrivalId))
+          radarSelected=hold.arrivalId;
+      }renderRadar();
       }
     }catch(e){
-      taxiRadarLive=null;console.warn('Taxi live ADS-B',e.message);
-      // No invented ADS-B contacts. Native game continues its separately labelled scenario.
+      taxiRadarLive=null;console.warn('Airport 3D ADS-B sync:',e?.message||e);
+      // Never invent live contacts; game clearly labels its separate SIM fallback.
     }finally{taxiRadarFetching=false;}
   }
   setInterval(syncTaxiRadar,3200);
+  setInterval(()=>{if(radarOpenState)updateGameRadarMatch();},1500);
   frame.addEventListener('load',()=>{taxiRadarLastMs=0;taxiRadarFlightAirport='';});
 
   let fuelPanelOpen=false;
