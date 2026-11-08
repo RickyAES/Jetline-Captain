@@ -6685,55 +6685,101 @@ window.__holdHud={update};
  #jet-taxi-route-map .routeSvg{height:79px}}
 </style>
 
-<script id="jet-taxi-clear-path-script">
+<script id="jet-taxi-clear-path-script" data-fix="2026-11-follow-plane-next-waypoint">
 (()=>{
  'use strict';
- const root=document.getElementById('ui');if(!root||document.getElementById('jet-taxi-route-map'))return;
+ const root=document.getElementById('ui');
+ if(!root||document.getElementById('jet-taxi-route-map'))return;
  const panel=document.createElement('div');panel.id='jet-taxi-route-map';
- panel.innerHTML='<div class="head"><span class="name">TAXI ROUTE</span><button type="button" aria-expanded="true">HIDE MAP</button></div><svg class="routeSvg" viewBox="0 0 200 130" role="img" aria-label="Your aircraft and highlighted taxiway path"><path class="trace" stroke="#14f9dc" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" fill="none"/><path class="remaining" stroke="#ffcf59" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" fill="none"/><circle class="target" r="5" fill="#ffcf59" stroke="#071d24" stroke-width="2"/><g class="aircraft"><path d="M0,-11 L5,6 L0,3 L-5,6 Z" fill="#fff" stroke="#07202b" stroke-width="1"/></g><text x="9" y="15" fill="#9ddadd" font-size="9">START</text><text x="186" y="121" text-anchor="end" fill="#9ddadd" font-size="9">RUNWAY / GATE</text></svg><div class="foot"><span class="direction">FOLLOW CYAN PATH</span><span class="distance"></span></div>';
+ panel.innerHTML=`
+ <div class="head"><span class="name">TAXI ROUTE</span><button type="button" aria-expanded="true">HIDE MAP</button></div>
+ <svg class="routeSvg" viewBox="0 0 200 130" role="img" aria-label="Aircraft-up taxi navigation map: aircraft is fixed near the bottom; cyan route and yellow segment lead to the next waypoint">
+  <defs><clipPath id="jet-taxi-forward-clip"><rect x="3" y="3" width="194" height="124" rx="5"/></clipPath></defs>
+  <g clip-path="url(#jet-taxi-forward-clip)">
+   <path class="trace" stroke="#14f9dc" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+   <path class="remaining" stroke="#ffcf59" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
+   <circle class="target" r="5" fill="#ffcf59" stroke="#071d24" stroke-width="2"/>
+   <g class="aircraft" transform="translate(100 104)"><circle r="10" fill="#061c2a" stroke="#64f4e6" stroke-width=".8" opacity=".9"/><path d="M0,-11 L5,7 L0,4 L-5,7 Z" fill="#fff" stroke="#07202b" stroke-width="1"/></g>
+  </g>
+  <text x="8" y="14" fill="#9ddadd" font-size="9" font-weight="bold">▲ FORWARD</text>
+  <text class="nextLabel" x="190" y="121" text-anchor="end" fill="#ffda77" font-size="9">NEXT WAYPOINT</text>
+ </svg>
+ <div class="foot"><span class="direction">FOLLOW YELLOW LINE</span><span class="distance"></span></div>`;
  root.appendChild(panel);
  const btn=panel.querySelector('button');
- btn.addEventListener('click',()=>{const compact=panel.classList.toggle('compact');btn.textContent=compact?'SHOW MAP':'HIDE MAP';btn.setAttribute('aria-expanded',String(!compact));});
- const svg=panel.querySelector('svg');
- const svgPath=panel.querySelector('.trace');
- const remaining=panel.querySelector('.remaining');
+ btn.addEventListener('click',()=>{
+   const compact=panel.classList.toggle('compact');
+   btn.textContent=compact?'SHOW MAP':'HIDE MAP';
+   btn.setAttribute('aria-expanded',String(!compact));
+ });
+ const trace=panel.querySelector('.trace');
+ const activeLine=panel.querySelector('.remaining');
  const target=panel.querySelector('.target');
- const aircraft=panel.querySelector('.aircraft');
- const label=panel.querySelector('.name');
  const direction=panel.querySelector('.direction');
  const distance=panel.querySelector('.distance');
+ const label=panel.querySelector('.name');
+ const nextLabel=panel.querySelector('.nextLabel');
+ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+ const norm=a=>Math.atan2(Math.sin(a),Math.cos(a));
  function update(){
   const api=window.__game;
   if(!api?.info)return;
-  let s=null,probe=null;
-  try{s=api.info();probe=api.probe?.();}catch{return;}
+  let s,probe;
+  try{s=api.info();probe=api.probe?.()}catch{return;}
   const active=s?.st==='play'&&(s.phase==='taxi'||s.phase==='taxiIn')&&!s?.mcdu?.open&&!api.mcduIsOpen?.();
-  if(!active){panel.style.display='none';return;}
-  const route=s.taxi?.path||[];
-  if(route.length<2||!probe?.hero){panel.style.display='none';return;}
+  if(!active){if(panel.style.display!=='none')panel.style.display='none';return;}
+  const raw=s?.taxi?.path||[];
+  if(raw.length<2||!probe?.hero){if(panel.style.display!=='none')panel.style.display='none';return;}
   panel.style.display='block';
   label.textContent=s.phase==='taxi'?'TO RWY '+(s.taxi.runway||''):'TO PARKING';
-  const pos={x:probe.hero.x,z:probe.hero.z,psi:probe.hero.yaw};
-  const xs=route.map(p=>p[0]).concat([pos.x]);
-  const zs=route.map(p=>p[1]).concat([pos.z]);
-  const cx=(Math.min(...xs)+Math.max(...xs))/2;
-  const cz=(Math.min(...zs)+Math.max(...zs))/2;
-  const scale=Math.min(166/Math.max(1,Math.max(...xs)-Math.min(...xs)),98/Math.max(1,Math.max(...zs)-Math.min(...zs)));
-  const xy=p=>[100+(p[0]-cx)*scale,66-(p[1]-cz)*scale];
-  const track=route.map((p,i)=>{const [x,y]=xy(p);return(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)}).join(' ');
-  svgPath.setAttribute('d',track);
-  const remainingPts=[[pos.x,pos.z],...route.slice(Math.min(route.length-1,Math.max(1,Number(s.taxi.next)||1)))];
-  remaining.setAttribute('d',remainingPts.map((p,i)=>{const[x,y]=xy(p);return(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)}).join(' '));
-  const next=route[Math.min(route.length-1,Math.max(1,Number(s.taxi.next)||1))];
-  const [tx,ty]=xy(next);target.setAttribute('cx',tx.toFixed(1));target.setAttribute('cy',ty.toFixed(1));
-  const [px,py]=xy([pos.x,pos.z]);
-  const degrees=(Math.PI-(Number(pos.psi)||0))*180/Math.PI;
-  aircraft.setAttribute('transform',`translate(${px.toFixed(1)} ${py.toFixed(1)}) rotate(${degrees.toFixed(1)})`);
-  const error=Number(s.taxi.headingError)||0;
-  direction.textContent=Math.abs(error)<12?'GO STRAIGHT':error>0?'TURN RIGHT '+Math.abs(error)+'°':'TURN LEFT '+Math.abs(error)+'°';
-  distance.textContent=Math.round(s.taxi.distance||0)+' m';
+  const pos={x:Number(probe.hero.x),z:Number(probe.hero.z)};
+  const yaw=Number(probe.hero.yaw)||0;
+  const nextIdx=clamp(Math.round(Number(s.taxi.next)||1),1,raw.length-1);
+  const path=raw.slice(nextIdx).filter(p=>p&&Number.isFinite(p[0])&&Number.isFinite(p[1]));
+  if(!path.length)return;
+  // Same heading convention as jetTaxiAngle / jetTaxiTick:
+  // yaw=0 travels towards world -Z, yaw=90deg towards +X.
+  // Screen X is aircraft RIGHT, screen negative Y is FORWARD.
+  // Transform both in a single frame tied to the actual plane yaw.
+  const cos=Math.cos(yaw),sin=Math.sin(yaw);
+  const projectWorld=(p)=>{
+    const dx=Number(p[0])-pos.x,dz=Number(p[1])-pos.z;
+    return [dx*cos+dz*sin, -dx*sin+dz*cos];
+  };
+  const [nextX,nextY]=projectWorld(path[0]);
+  const d=Math.hypot(nextX,nextY);
+  // Follow aircraft rather than squeezing START and RUNWAY onto the same
+  // map: that former zoom made the distant route look like it ran backward.
+  // Keep the airplane near the bottom with its NEXT waypoint visible ahead.
+  const zoom=clamp(68/Math.max(55,d),.12,1.05);
+  const place=p=>{
+    const [x,y]=projectWorld(p);
+    return [100+x*zoom,104+y*zoom];
+  };
+  const toCmd=(x,y,first)=>`${first?'M':'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
+  const routePts=[[pos.x,pos.z],...path];
+  const routeD=routePts.map((p,i)=>{
+    const [x,y]=place(p);
+    return toCmd(x,y,i===0);
+  }).join(' ');
+  const [tx,ty]=place(path[0]);
+  trace.setAttribute('d',routeD);
+  activeLine.setAttribute('d',`M100 104 L${tx.toFixed(1)} ${ty.toFixed(1)}`);
+  target.setAttribute('cx',tx.toFixed(1));target.setAttribute('cy',ty.toFixed(1));
+  // Hold NEXT waypoint while distant runway/START markers are hidden. The
+  // true runway identifier remains in the title, so no reversed endpoint labels.
+  nextLabel.textContent=nextIdx===raw.length-1?(s.phase==='taxi'?'RUNWAY ENTRY':'PARKING'):'NEXT TURN';
+  // Verify next waypoint is left/right/ahead with the same signed error as
+  // the steering instruction; protects against a flipped map convention.
+  const derivedErr=norm(Math.atan2(Number(path[0][0])-pos.x,-(Number(path[0][1])-pos.z))-yaw)*180/Math.PI;
+  const error=Number.isFinite(derivedErr)?derivedErr:(Number(s.taxi.headingError)||0);
+  const dist=Math.round(Number(s.taxi.distance)||d);
+  direction.textContent=Math.abs(error)<12?'▲ GO STRAIGHT':error>0?`↱ RIGHT ${Math.round(Math.abs(error))}°`:`↰ LEFT ${Math.round(Math.abs(error))}°`;
+  distance.textContent=`NEXT ${dist} m`;
  }
- setInterval(update,350);setTimeout(update,500);
+ const tick=()=>{try{update()}catch(e){console.warn('Taxi map update',e)}};
+ setInterval(tick,350);
+ setTimeout(tick,500);
 })();
 </script>
 
