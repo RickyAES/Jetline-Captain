@@ -345,7 +345,7 @@
           <div id="radarDetail">Select an aircraft marker or list item to view its flight number, route, destination, aircraft type, speed, heading and detailed departure/arrival times.</div>
         </div>
       </div>
-      <p id="radarFoot">Changi activity mode shows <strong>confirmed ground aircraft and nearby low-altitude flights separately</strong>; airborne aircraft are never labeled taxiing. Changi ground mode shows only reported aircraft on the ground within approximately 8.5 km of WSSS, including stopped and moving aircraft. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. International coastlines use GSHHG shoreline geography; Singapore's bright neon silhouette is an illustrative tracing of the supplied reference, approximately georeferenced rather than an official coast survey. Street-map tiles, when selected, are © OpenStreetMap contributors. Runway strips for Singapore use published CAAS coordinates; international runway ends, when available, use OurAirports public-domain data. Runway 02R/20L at Changi is not available for civil use until at least 24 Dec 2026 under the published notice. The display cannot reliably tell whether a stopped aircraft is parked, holding short or waiting for a departure clearance. Climbing and descending aircraft near airports are labelled possible departures/arrivals only, because ADS-B does not prove which airport or runway they are using. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Singapore airport overlay shows Changi (WSSS), Seletar (WSSL) and Paya Lebar (WSAP); it is not a verified airport surface movement chart. Ground positions may be absent, and reported aircraft are NOT guaranteed to include all aircraft at the airport. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). This is a geographic visualization, not an official aeronautical chart; coastline and airport data may be simplified or outdated. Aircraft markers animate between ADS-B reports using reported groundspeed and track; their short animated trails between updates are estimates, not verified historical positions. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
+      <p id="radarFoot">Changi activity mode shows <strong>confirmed ground aircraft and nearby low-altitude flights separately</strong>; airborne aircraft are never labeled taxiing. Changi ground mode shows only reported aircraft on the ground within approximately 8.5 km of WSSS, including stopped and moving aircraft. It includes all airlines, but ADS-B ground reception is incomplete and this is not a certified airport-movement display. International coastlines use GSHHG shoreline geography; Singapore's highlighted main-island outline uses GSHHG geographic shoreline data rather than the previous hand-traced decoration. Street-map tiles, when selected, are © OpenStreetMap contributors. Runway strips for Singapore use published CAAS coordinates; international runway ends, when available, use OurAirports public-domain data. Runway 02R/20L at Changi is not available for civil use until at least 24 Dec 2026 under the published notice. The display cannot reliably tell whether a stopped aircraft is parked, holding short or waiting for a departure clearance. Climbing and descending aircraft near airports are labelled possible departures/arrivals only, because ADS-B does not prove which airport or runway they are using. Nearby flight cards automatically request detailed departure and arrival times when a flight-status source is configured, and those times are shown in Singapore time (SGT); otherwise they remain unavailable. Flight times may have provider usage charges. Singapore airport overlay shows Changi (WSSS), Seletar (WSSL) and Paya Lebar (WSAP); it is not a verified airport surface movement chart. Ground positions may be absent, and reported aircraft are NOT guaranteed to include all aircraft at the airport. Range controls: + / − buttons, mouse wheel, or two-finger pinch. The 100 km data feed is filtered to your selected viewing range. Estimated time to the selected airport assumes a straight line at current groundspeed and is <strong>not a verified landing time</strong>. Airport pairs are looked up separately using <a href="https://www.adsbdb.com/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">ADSBdb</a> and may reflect a published route rather than the actual itinerary today; missing routes remain unavailable. Aircraft positions are live ADS-B data from <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer" style="color:#9fe8ff">adsb.lol contributors</a> (ODbL 1.0). This is a geographic visualization, not an official aeronautical chart; coastline and airport data may be simplified or outdated. Aircraft markers animate between ADS-B reports using reported groundspeed and track; their short animated trails between updates are estimates, not verified historical positions. Reception may be incomplete or delayed. This is not an official ATC radar and must not be used for flight operations.</p>
     </section>
   </div>
 
@@ -608,8 +608,16 @@
     const r=Math.max(-85.05112878,Math.min(85.05112878,lat))*Math.PI/180;
     return (1-Math.asinh(Math.tan(r))/Math.PI)/2;
   }
+  // Singapore overview centres on the island, not on Changi's runway midpoint.
+  // At <=15 km range, return to the selected airport for runway-level detail.
+  // For all other world airports, always use that airport's real coordinates.
+  function radarDisplayCenter(){
+    const airport=airports[radarAirport]||SG_AIRFIELDS[radarAirport]||{lat:1.3501,lon:103.9947};
+    const sg=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport);
+    return sg && radarScale>=25 ? {lat:1.36,lon:103.82} : airport;
+  }
   function geoPoint(lat,lon,g){
-    const c=airports[radarAirport]||{lat:1.3501,lon:103.9947};
+    const c=radarDisplayCenter();
     const globeWidthKm=40075.016686*Math.max(.03,Math.cos(c.lat*Math.PI/180));
     const scale=globeWidthKm*g.R/radarScale;
     const dlon=(((lon-c.lon+540)%360)+360)%360-180;
@@ -632,7 +640,7 @@
     return record;
   }
   function drawStreetMap(ctx,g){
-    const c=airports[radarAirport];if(!c)return;
+    const c=radarDisplayCenter();if(!c)return;
     const globeKm=40075.016686*Math.max(.03,Math.cos(c.lat*Math.PI/180));
     const screenWorldPixels=globeKm*g.R/radarScale;
     const zoom=Math.max(2,Math.min(15,Math.round(Math.log2(screenWorldPixels/256))));
@@ -651,7 +659,7 @@
   }
   function drawGeoCoastlines(ctx,g){
     if(!geoSegments)return;
-    const c=airports[radarAirport];if(!c)return;
+    const c=radarDisplayCenter();if(!c)return;
     const latRange=Math.max(.04,radarScale/111.195*1.25);
     const lonRange=Math.min(180,Math.max(.05,radarScale/(111.195*Math.max(.03,Math.cos(c.lat*Math.PI/180)))*1.25));
     const lo=c.lon-lonRange,hi=c.lon+lonRange,low=c.lat-latRange,high=c.lat+latRange;
@@ -669,30 +677,27 @@
         if(!last||Math.abs(q.x-last.x)>g.width*1.5){ctx.moveTo(q.x,q.y)}else{ctx.lineTo(q.x,q.y);valid=true;}
         last=q;
       }
-      if(valid)ctx.stroke();
+      if(valid){
+        // Highlight Singapore's actual GSHHG main-island shoreline. The earlier
+        // hand-traced decorative silhouette was too large and misaligned at WSSS.
+        const mainSingapore=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport)
+          && radarMapMode==='coast'
+          && b[0]>=103.60 && b[2]<=104.05 && b[1]>=1.24 && b[3]<=1.51
+          && pts.length>=15 && pts.length<=100;
+        if(mainSingapore){
+          ctx.save();
+          ctx.fillStyle='rgba(15,112,143,.22)';ctx.fill();
+          ctx.strokeStyle='#c1f7ff';ctx.lineWidth=2.8;
+          ctx.shadowColor='#3caeff';ctx.shadowBlur=9;ctx.stroke();
+          ctx.restore();
+        }else ctx.stroke();
+      }
     }
     ctx.restore();
-    // A separate high-contrast Singapore silhouette follows the provided visual
-    // reference. It is anchored approximately to geographic coordinates and is
-    // decorative, not a precise official coastline or airport movement chart.
-    if(geoSingapore?.length>2&&radarMapMode==='coast'&&
-       ['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport)){
-      ctx.save();
-      ctx.beginPath();
-      geoSingapore.forEach(([lon,lat],i)=>{
-        const q=geoPoint(lat,lon,g);
-        if(i===0)ctx.moveTo(q.x,q.y);else ctx.lineTo(q.x,q.y);
-      });
-      ctx.closePath();
-      ctx.fillStyle='rgba(19,105,141,.13)';ctx.fill();
-      ctx.lineWidth=2.0;ctx.strokeStyle='#b8f3ff';
-      ctx.shadowColor='#3caeff';ctx.shadowBlur=11;ctx.stroke();
-      ctx.restore();
-    }
   }
   window.__jetlineGeographicMapInfo=()=>({mode:radarMapMode,coastlineReady:!!geoSegments,
     coastlineSegments:geoSegments?.length||0,singaporeReferenceReady:!!geoSingapore,
-    coastlineError:geoFailed,
+    coastlineError:geoFailed,displayCenter:radarDisplayCenter(),
     worldDirectoryStatus:worldAirportsStatus,airport:radarAirport,zoomKm:radarScale});
   function flightRouteKey(p){return String(p?.callsign||'').trim().toUpperCase();}
   function routeSource(p){return flightRouteCache.get(flightRouteKey(p))||null;}
@@ -756,7 +761,16 @@
     return {north,east};
   };
   const radarFlights=()=>{
-    const all=(radarData?.aircraft||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon)).map(animatedPlane).filter(p=>Number.isFinite(p.km)&&p.km<=radarScale+0.05);
+    // Clip against the *display* centre; previous code filtered around WSSS
+    // even when the map was showing the entire Singapore island.
+    const centre=radarDisplayCenter();
+    const all=(radarData?.aircraft||[])
+      .filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon))
+      .map(animatedPlane)
+      .filter(p=>{
+        const rel=radKm(p.lat,p.lon,centre.lat,centre.lon);
+        return Math.hypot(rel.north,rel.east)<=radarScale+0.05;
+      });
     const mode=$('radarFilter').value;
     const close=all.filter(p=>radarAirport==='SGALL'||p.nearAirport===radarAirport);
     if(mode==='SGGND')return close.filter(p=>p.groundAtAirport);
@@ -1178,7 +1192,7 @@ function drawAircraftTrail(ctx,p,g,now){
     $('radarShade').setAttribute('aria-hidden','false');
     enableRadarModes(radarAirport);
     if(radarAirport==='SGALL'){ $('radarFilter').value='SGACT';if(radarScale===25)setRadarRange(50); }
-    else if(radarAirport==='WSSS'){ $('radarFilter').value='CHANGI';if(radarScale===50)setRadarRange(10); }
+    else if(radarAirport==='WSSS'){ $('radarFilter').value='CHANGI';if(radarScale===50)setRadarRange(25); }
     if(!Object.keys(airports).length){loadRadarAirports().then(loadRadar);}else {loadRadarAirports();loadRadar();}
     cancelAnimationFrame(radarAnim);
     radarLastPaint=0;
@@ -1204,12 +1218,13 @@ function drawAircraftTrail(ctx,p,g,now){
     showAirportRunway();
     $('radarFilter').value=radarAirport==='SGALL'?'SGACT':radarAirport==='WSSS'?'CHANGI':SG_AIRFIELDS[radarAirport]?'SGACT':'ALL';
     enableRadarModes(radarAirport);
-    setRadarRange(radarAirport==='SGALL'?50:radarAirport==='WSSS'?10:SG_AIRFIELDS[radarAirport]?15:50);
+    setRadarRange(radarAirport==='SGALL'?50:radarAirport==='WSSS'?25:SG_AIRFIELDS[radarAirport]?15:50);
     loadRadar();
   };
   $('radarFilter').onchange=()=>{
     radarSelected=null;
-    if(['TAXI','CHANGI'].includes($('radarFilter').value)&&radarAirport==='WSSS')setRadarRange(10);
+    // Preserve the user's chosen range when switching between surface/flight filters.
+    // Use the + zoom control for a 10 km airport close-up, centred on Changi.
     if(sgFilterModes.includes($('radarFilter').value)&&radarAirport==='SGALL'&&radarScale>50)setRadarRange(25);
     renderRadar();
   };
@@ -1370,8 +1385,11 @@ function drawRadar(){
     ctx.fillStyle='#6b9eae';
     ctx.fillText(`${Number.isInteger(n)?n:n.toFixed(1)} km`,g.cx+4,g.cy-g.R*i/4+13);
   }
-  // centre for selected radar area (not a physical runway threshold)
-  ctx.fillStyle='#ffbe75';ctx.beginPath();ctx.arc(g.cx,g.cy,3,0,2*Math.PI);ctx.fill();
+  // Airport marker stays at the *actual* airport position even when the
+  // Singapore map view itself is centred on the island.
+  const markerAirport=airports[radarAirport]||SG_AIRFIELDS[radarAirport];
+  const marker=markerAirport?geoPoint(markerAirport.lat,markerAirport.lon,g):{x:g.cx,y:g.cy};
+  ctx.fillStyle='#ffbe75';ctx.beginPath();ctx.arc(marker.x,marker.y,3,0,2*Math.PI);ctx.fill();
   ctx.font='12px system-ui';ctx.textAlign='left';ctx.fillStyle='#d8f6ff';
   ctx.fillText(radarAirport+' · '+(airports[radarAirport]?.name||''),10,18);
   ctx.fillStyle='#8ecddd';ctx.fillText('ADS-B reports · estimated motion',10,35);
