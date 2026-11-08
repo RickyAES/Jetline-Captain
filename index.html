@@ -300,8 +300,8 @@
         <label>Airport<select id="radarAirport" aria-label="Airport radar"></select></label>
         <label class="radarSearchWrap">Search all airports<input id="radarAirportSearch" type="search" placeholder="London, Haneda, Seletar, Phuket..." autocomplete="off" aria-label="Search international and regional airports"></label>
         <label>Traffic view<select id="radarFilter" aria-label="Airline filter">
+          <option value="ALL" selected>All detected aircraft</option>
           <option value="SIA">Singapore Airlines (SIA)</option>
-          <option value="ALL">All detected aircraft</option>
           <option value="SGACT">Singapore · all airport activity</option>
           <option value="SGGND">Singapore · ground / taxiing</option>
           <option value="SGARR">Singapore · descending (arrival possible)</option>
@@ -599,7 +599,7 @@
     if(credit){
       const singaporeMap=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport);
       credit.textContent=singaporeMap?'Singapore coast: © OpenStreetMap contributors':
-        radarMapMode==='streets'?'© OpenStreetMap contributors · GSHHG coastline':coastAttribution;
+        radarMapMode==='streets'||!geoSegments?.length?'© OpenStreetMap contributors · map tiles':coastAttribution;
     }
     if(radarOpenState)drawRadar();
   }
@@ -1331,7 +1331,7 @@ function drawAircraftTrail(ctx,p,g,now){
     try{
       const airport=airports[requested];
       const params=new URLSearchParams({airport:requested});
-      if(airport.remote){params.set('lat',String(airport.lat));params.set('lon',String(airport.lon));params.set('name',String(airport.name));}
+      params.set('lat',String(airport.lat));params.set('lon',String(airport.lon));params.set('name',String(airport.name));
       const response=await fetch(`/api/radar?${params.toString()}`,{cache:'no-store'});
       let d=null;try{d=await response.json()}catch{}
       if(!response.ok)throw new Error(d?.error||`Server returned ${response.status}`);
@@ -1404,12 +1404,12 @@ function drawRadar(){
   {const credit=$('radarMapAttributionText');if(credit){
     credit.textContent=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport)
       ?'Singapore coast: © OpenStreetMap contributors'
-      :(radarMapMode==='streets'?'© OpenStreetMap contributors · GSHHG coastline':coastAttribution);
+      :(radarMapMode==='streets'||!geoSegments?.length?'© OpenStreetMap contributors · map tiles':coastAttribution);
   }}
   // Real geographic map aligned to airport coordinates — no invented Singapore outline.
   ctx.save();ctx.beginPath();ctx.arc(g.cx,g.cy,g.R,0,Math.PI*2);ctx.clip();
   const isSingaporeMap=['SGALL','WSSS','WSSL','WSAP'].includes(radarAirport);
-  if(radarMapMode==='streets')drawStreetMap(ctx,g);
+  if(radarMapMode==='streets'||(!isSingaporeMap&&!(geoSegments?.length)))drawStreetMap(ctx,g);
   else if(isSingaporeMap)drawSingaporeCoastMap(ctx,g);
   // The coarse GSHHG shoreline is retained outside Singapore only. Drawing it
   // above Singapore's modern OSM coast would make Changi appear outside the island.
@@ -1636,7 +1636,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   function autoRadarAirport(){
     if(radarManualAirport||radarAirport==='SGALL'||!Object.keys(airports).length)return;
     const r=safeRouteInfo();const dest=r?.arr,dep=r?.dep;
-    const chosen=airports[dest]?dest:airports[dep]?dep:null;
+    const chosen=(r?.phase==='taxi'&&airports[dep])?dep:airports[dest]?dest:airports[dep]?dep:null;
     if(chosen&&chosen!==radarAirport){
       radarTrails.clear();radarAnimatedTrails.clear();radarDisplayStates.clear();radarData=null;radarSelected=null;
       chooseRadarAirport(chosen,false);
@@ -1909,6 +1909,44 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     doc.head.appendChild(st);
   }catch{}}
   function gameInfo(){try{return frame.contentWindow?.__game?.info?.()||null}catch{return null}}
+
+  // Automatic airport-wide ADS-B feed during taxi, even while RADAR modal is closed.
+  // ADS-B contacts are observational; they do NOT authorize runway entry.
+  let taxiRadarFlightAirport='',taxiRadarLastMs=0,taxiRadarFetching=false,taxiRadarLive=null;
+  function taxiFlightAirport(){
+    const info=gameInfo();
+    if(!info||info.st!=='play'||info.phase!=='taxi')return null;
+    const code=String(info.rwys?.dep||'').toUpperCase();
+    if(!/^[A-Z0-9]{4}$/.test(code))return null;
+    const existing=airports[code]||SG_AIRFIELDS[code];
+    return existing&&Number.isFinite(Number(existing.lat))&&Number.isFinite(Number(existing.lon))?
+      {code,lat:Number(existing.lat),lon:Number(existing.lon),name:existing.name||code}:null;
+  }
+  async function syncTaxiRadar(){
+    const current=taxiFlightAirport();
+    if(!current||taxiRadarFetching||document.visibilityState==='hidden')return;
+    const stamp=Date.now();
+    if(current.code===taxiRadarFlightAirport&&stamp-taxiRadarLastMs<30000)return;
+    taxiRadarFetching=true;taxiRadarFlightAirport=current.code;taxiRadarLastMs=stamp;
+    try{
+      const url='/api/radar?'+new URLSearchParams({airport:current.code,lat:String(current.lat),
+        lon:String(current.lon),name:current.name});
+      const resp=await fetch(url,{cache:'no-store'}),d=await resp.json();
+      if(!resp.ok||!Array.isArray(d?.aircraft))throw new Error(d?.error||'Live positions unavailable');
+      taxiRadarLive=d;
+      // One payload serves all airlines, not SIA-only, with actual callsigns and coordinates.
+      const native=flightApi();
+      native?.setAirportTraffic?.({airport:current.code,reference:[current.lat,current.lon],aircraft:d.aircraft});
+      if(radarOpenState && radarAirport===current.code && !radarBusy){
+        radarData=d;radarLastFetchMs=Date.now();renderRadar();
+      }
+    }catch(e){
+      taxiRadarLive=null;console.warn('Taxi live ADS-B',e.message);
+      // No invented ADS-B contacts. Native game continues its separately labelled scenario.
+    }finally{taxiRadarFetching=false;}
+  }
+  setInterval(syncTaxiRadar,3200);
+  frame.addEventListener('load',()=>{taxiRadarLastMs=0;taxiRadarFlightAirport='';});
 
   let fuelPanelOpen=false;
   const fuelTimeText=secs=>{const q=Math.max(0,Math.floor(Number(secs)||0));return String(Math.floor(q/3600)).padStart(2,'0')+':'+String(Math.floor(q%3600/60)).padStart(2,'0')+':'+String(q%60).padStart(2,'0')};
