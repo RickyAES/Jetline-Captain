@@ -1554,21 +1554,27 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     }else el.textContent='No confirmed inbound selected · game runway status is estimated.';
   }
   function changiRunwayEstimate(p){
-    if(!p||!Number.isFinite(Number(p.lat))||!Number.isFinite(Number(p.lon)))return null;
-    if(p.altFt!=null&&Number(p.altFt)>6500)return null;
-    const head=Number(p.heading),speed=Number(p.speedKt)||0;
-    if(Number.isFinite(head)&&speed>55){
-      const delta=Math.min(Math.abs(((head-23+540)%360)-180),Math.abs(((head-203+540)%360)-180));
-      if(delta>37)return null;
-    }
-    const opts=SG_AIRFIELDS.WSSS.runways.map(r=>{
-      const a=r.a,b=r.b,lat0=a[0],kx=111.195*Math.cos(lat0*Math.PI/180);
-      const dx=(b[1]-a[1])*kx,dy=(b[0]-a[0])*111.195,len=Math.hypot(dx,dy)||1;
-      const ux=dx/len,uy=dy/len;
-      const east=(Number(p.lon)-a[1])*kx,north=(Number(p.lat)-a[0])*111.195;
-      return{id:r.id.split('/')[0],along:east*ux+north*uy,cross:east*uy-north*ux};
-    }).filter(r=>r.along>=-11&&r.along<=6).sort((a,b)=>Math.abs(a.cross)-Math.abs(b.cross));
-    return opts[0]&&Math.abs(opts[0].cross)<=.65?opts[0]:null;
+    if(!p||!Number.isFinite(+p.lat)||!Number.isFinite(+p.lon))return null;
+    const bearing=23.01,head=Number(p.heading),speed=Number(p.speedKt)||0;
+    const delta02=Math.abs(((head-bearing+540)%360)-180);
+    const delta20=Math.abs(((head-bearing-180+540)%360)-180);
+    if(Number.isFinite(head)&&speed>50&&Math.min(delta02,delta20)>32)return null;
+    const direction=Number.isFinite(head)&&delta20<delta02?'20':'02';
+    const runways=SG_AIRFIELDS.WSSS.runways;
+    if(!runways?.length)return null;
+    const matches=runways.map(r=>{
+      const a=r.a,lat0=a[0];
+      const east=(+p.lon-a[1])*111.195*Math.cos(lat0*Math.PI/180);
+      const north=(+p.lat-a[0])*111.195;
+      const h=bearing*Math.PI/180;
+      const along=east*Math.sin(h)+north*Math.cos(h);
+      const cross=east*Math.cos(h)-north*Math.sin(h);
+      const runwayId=r.id.split('/')[0];
+      const distanceToThreshold=direction==='02'?-along:along-4;
+      return {id:runwayId,designation:direction==='02'?runwayId:({'02L':'20R','02C':'20C','02R':'20L'}[runwayId]),
+        along,cross,dir:direction,distanceToThreshold};
+    }).filter(r=>r.along>=-18&&r.along<=22).sort((a,b)=>Math.abs(a.cross)-Math.abs(b.cross));
+    return matches[0]&&Math.abs(matches[0].cross)<=(p.onGround?.25:.62)?matches[0]:null;
   }
   function showChangiRunwayActivity(){
     const section=$('jcChangiRunways');if(!section)return;
@@ -1582,18 +1588,18 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
       const spd=Number(p.speedKt)||0,alt=Number(p.altFt)||0,vr=Number(p.verticalRate)||0;
       let phase='';
       if(p.onGround&&spd>=20)phase=spd>=85?'ROLL?':'GROUND';
-      else if(!p.onGround&&alt<5500&&(p.trafficPhase==='DESCENDING'||vr<-200))phase='ARR?';
-      else if(!p.onGround&&alt<5500&&(p.trafficPhase==='CLIMBING'||vr>200))phase='DEP?';
-      if(phase)by[r.id].push({phase,flight:String(p.callsign||p.hex||'UNKNOWN').trim(),dist:Math.abs(r.along)});
+      else if(!p.onGround&&alt<9000&&(p.trafficPhase==='DESCENDING'||vr<-200))phase='ARR?';
+      else if(!p.onGround&&alt<9000&&(p.trafficPhase==='CLIMBING'||vr>200))phase='DEP?';
+      if(phase)by[r.id].push({phase,flight:String(p.callsign||p.hex||'UNKNOWN').trim(),dist:Math.abs(r.distanceToThreshold),designation:r.designation});
     }
     for(const id of ['02L','02C','02R']){
       const box=document.createElement('div');
       box.style.cssText='min-width:0;border:1px solid #315d73;border-radius:7px;background:#102942;padding:6px';
       const title=document.createElement('strong');title.textContent='RWY '+id;
       title.style.cssText='display:block;color:#e8f5ff;font:850 12px system-ui';box.appendChild(title);
-      const flights=by[id].sort((a,b)=>a.dist-b.dist).slice(0,3);
+      const flights=by[id].sort((a,b)=>a.dist-b.dist).slice(0,5);
       if(!flights.length){const label=document.createElement('div');label.textContent='No matched contact';label.style.cssText='color:#a7bac8;font:10px/1.5 system-ui;overflow-wrap:anywhere';box.appendChild(label);}
-      for(const p of flights){const label=document.createElement('div');label.textContent=p.phase+' '+p.flight;label.style.cssText='color:#ffe4a4;font:750 11px/1.5 system-ui;overflow-wrap:anywhere';box.appendChild(label);}
+      for(const p of flights){const label=document.createElement('div');label.textContent=p.designation+' '+p.phase+' '+p.flight;label.style.cssText='color:#ffe4a4;font:750 11px/1.5 system-ui;overflow-wrap:anywhere';box.appendChild(label);}
       if(id==='02R'){const restriction=document.createElement('div');restriction.textContent='CIVIL RESTRICTED';restriction.style.cssText='font:800 9px/1.5 system-ui;color:#ffc5a5';box.appendChild(restriction);}
       rows.appendChild(box);
     }
@@ -1649,10 +1655,12 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
       const times=document.createElement('span');times.className='scheduleTimes';
       times.textContent=flightTimeCardLines(p);
       const surface=document.createElement('span');surface.className='surfaceTag';
-      surface.textContent=p.groundAtAirport?`${p.nearAirportName||p.nearAirport} · ${p.groundState||'GROUND'}`:
+      const estimatedRunway=radarAirport==='WSSS'?changiRunwayEstimate(p):null;
+      const runwayHint=estimatedRunway?' · RWY '+estimatedRunway.designation+' (TRACK ESTIMATE)':'';
+      surface.textContent=(p.groundAtAirport?`${p.nearAirportName||p.nearAirport} · ${p.groundState||'GROUND'}`:
         p.trafficPhase==='CLIMBING'?`${p.nearAirportName||p.nearAirport} · CLIMBING (DEPARTURE POSSIBLE)`:
         p.trafficPhase==='DESCENDING'?`${p.nearAirportName||p.nearAirport} · DESCENDING (ARRIVAL POSSIBLE)`:
-        (activityMode?'NEAR CHANGI · AIRBORNE (NOT TAXIING)':p.onGround?'ON GROUND · AIRPORT UNKNOWN':'AIRBORNE');
+        (activityMode?'NEAR CHANGI · AIRBORNE (NOT TAXIING)':p.onGround?'ON GROUND · AIRPORT UNKNOWN':'AIRBORNE'))+runwayHint;
       b.append(name,distance,routeLine,details,stats,surface,times,eta);
       b.onclick=()=>selectRadarPlane(p);
       list.appendChild(b);
@@ -1667,6 +1675,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
         ['Destination',planeDestination(selected)],
         ['Aircraft',planeType(selected)],
         ['Nearby airfield (inferred)',selected.nearAirportName?`${selected.nearAirportName} (${selected.nearAirport})`:'Not known'],
+        ['Estimated runway track',radarAirport==='WSSS'?(changiRunwayEstimate(selected)?.designation||'Unassigned'):'Not available'],
         ['Observed movement',selected.groundAtAirport?(selected.groundState||'ON GROUND'):selected.trafficPhase==='CLIMBING'?'CLIMBING (departure possible)':selected.trafficPhase==='DESCENDING'?'DESCENDING (arrival possible)':selected.onGround?'ON GROUND · AIRPORT UNKNOWN':'AIRBORNE'],
         ['Vertical rate',Number.isFinite(selected.verticalRateFpm)?selected.verticalRateFpm+' fpm':'—'],
         ['Departure latest',flightTimeStatus(selected,'departure')],

@@ -4854,7 +4854,7 @@ const jetTraffic={airport:'',age:0,clear:false,phase:'',plane:null,lights:null,l
  live:[],liveAt:0,liveAirport:'',liveRef:null,liveRunway:null,liveMeshes:[],liveModels:new Map(),
  nextLiveDraw:0,nextHud:0,announced:false,hideAt:0,arrivalId:'',arrivalLostAt:0,arrivalLandedAt:0,
  runwayOccupied:false,mode:'SIM',lastLiveStatus:'',changeAirportAt:0,arrivalCallsign:'',scenarioId:'SIM-JL01',lastTrackedPhase:'',lastTrackedSeen:0,
- primaryArrivalSeenAt:0,parallelScene:null,parallelGroup:null,parallelLabels:[],parallelRunwayX:300,parallelRunwayZ:115};
+ primaryArrivalSeenAt:0,stableTracks:new Map(),parallelScene:null,parallelGroup:null,parallelLabels:[],parallelRunwayX:300,parallelRunwayZ:115};
 function jetTrafficDispose(object){
  if(!object)return;
  if(object.userData?.trafficTag)object.userData.trafficTag.remove();
@@ -4875,11 +4875,35 @@ function jetTrafficFree(){
 // Published WSSS runway thresholds (CAAS). Three parallel runway strips.
 // 02C is playable; the other two are visual scenery. 3D spacing is compressed
 // to keep the three strips visible from the virtual cockpit, NOT a survey chart.
+// CAAS Singapore AIP AD 2.WSSS — 02 threshold and opposite runway ends.
+// The diagram shows staggered thresholds, NOT three equally parallel starts.
+// Direction 02 flies southwest -> northeast. Geographic ADS-B contacts are
+// projected onto these published 4,000 m x 60 m runway centre lines.
 const jetChangiRunways={
- '02L':{threshold:[1.34896389,103.97745000],opposite:[1.38225833,103.99150556],x:-310,z:-405},
+ '02L':{threshold:[1.34896389,103.97745000],opposite:[1.38225833,103.99150556],x:0,z:0},
  '02C':{threshold:[1.32875278,103.98496111],opposite:[1.36204722,103.99901667],x:0,z:0},
- '02R':{threshold:[1.32238611,103.99984722],opposite:[1.35568056,104.01390278],x:310,z:115}
+ '02R':{threshold:[1.32238611,103.99984722],opposite:[1.35568056,104.01390278],x:0,z:0}
 };
+// The game compresses airport-world metres so three runways fit the view.
+// ALL live plane positions and the painted runways use these SAME scales.
+const jetWSSSScale={across:0.30,along:0.60};
+const jetWSSSMetersPerDeg=111195;
+const jetWSSSOrigin=jetChangiRunways['02C'].threshold;
+const jetWSSSCourseDeg=23.01;
+function jetWSSSAlongCross(lat,lon,ref=jetWSSSOrigin){
+ const h=jetWSSSCourseDeg*Math.PI/180;
+ const east=(lon-ref[1])*jetWSSSMetersPerDeg*Math.cos(ref[0]*Math.PI/180);
+ const north=(lat-ref[0])*jetWSSSMetersPerDeg;
+ return {along:east*Math.sin(h)+north*Math.cos(h),cross:east*Math.cos(h)-north*Math.sin(h)};
+}
+for(const lane of Object.values(jetChangiRunways)){
+ const pos=jetWSSSAlongCross(...lane.threshold);
+ lane.x=pos.cross*jetWSSSScale.across;
+ lane.z=-pos.along*jetWSSSScale.along;
+ lane.length=4000*jetWSSSScale.along;
+ lane.heading02=jetWSSSCourseDeg;
+}
+
 const jetChangiRwyActivity={lastMs:0,byRunway:{}};
 function jetTrafficParallelFree(){
  if(jetTraffic.parallelGroup)jetTrafficDispose(jetTraffic.parallelGroup);
@@ -4892,105 +4916,87 @@ function jetTrafficParallelFree(){
 // Clear high scenery buildings/trees from protected runway and connecting taxiway
 // geometry. Never remove ground, sky, runway pavement or cockpit meshes.
 function jetChangiProtectedLocal(x,z,margin=0){
- const runways=[[-310,-405],[0,0],[310,115]];
- // Protect all 3 runway strips with a generous safety buffer so scenery
- // buildings cannot overlap the operational pavement in the 3D view.
- if(runways.some(([cx,cz])=>Math.abs(x-cx)<(86+margin)&&z>cz-2080-margin&&z<cz+1520+margin))return true;
- // North-south taxiway spines connecting the three runways.
- if((Math.abs(x+174)<42+margin||Math.abs(x-168)<42+margin)&&z>-2240-margin&&z<1380+margin)return true;
- // Cross-connectors between the runway systems.
- for(const cz of [-1840,-1270,-620,-250,100,660,1020]){
-  if(x>-395-margin&&x<395+margin&&Math.abs(z-cz)<42+margin)return true;
+ const runways=Object.values(jetChangiRunways);
+ if(runways.some(lane=>Math.abs(x-lane.x)<(86+margin) && z<lane.z+155+margin && z>lane.z-lane.length-155-margin))return true;
+ for(const xline of [jetChangiRunways['02L'].x*.51,jetChangiRunways['02R'].x*.51]){
+  if(Math.abs(x-xline)<49+margin && z>-3460-margin && z<200+margin)return true;
  }
- // Small buffer around the central operating area to prevent terminal roofs or
- // shed-like scenery from overhanging the playable runway view.
- if(x>-120-margin&&x<120+margin&&z>-260-margin&&z<420+margin)return true;
+ for(const zline of [-1330,-1400,-1720,-2050,-2080,-2270]){
+  if(x>jetChangiRunways['02L'].x-70-margin&&x<jetChangiRunways['02R'].x+70+margin&&Math.abs(z-zline)<52+margin)return true;
+ }
  return false;
 }
 function jetChangiClearObstacles(){
  if(!It?.scene||!_t)return 0;
  let cleared=0;
  It.scene.updateMatrixWorld?.(true);
- const protectedRoots=new Set([jetTraffic?.parallelGroup,jetTraffic?.plane,jetTraffic?.lights,...jetTraffic.liveModels.values()].filter(Boolean));
+ const protectedRoots=new Set([jetTraffic?.parallelGroup,jetTraffic?.plane,jetTraffic?.lights,
+   ...Array.from(jetTraffic.liveModels.values(),e=>e.group)].filter(Boolean));
  It.scene.traverse?.(node=>{
   if(!node?.isMesh||!node.visible||!node.geometry||protectedRoots.has(node))return;
   let parent=node.parent;
   while(parent&&parent!==It.scene){if(protectedRoots.has(parent))return;parent=parent.parent;}
-  const g=node.geometry;
-  if(!g.boundingBox)g.computeBoundingBox?.();
-  const bb=g.boundingBox;if(!bb)return;
-  const size=bb.max.clone().sub(bb.min),centre=bb.min.clone().add(bb.max).multiplyScalar(.5);
-  const wscale=node.getWorldScale?.(new K())||new K(1,1,1);
-  const h=Math.abs(size.y*wscale.y),hx=Math.abs(size.x*wscale.x),hz=Math.abs(size.z*wscale.z);
-  // Buildings, roofs, sheds and tree clusters only.
-  if(h<3||h>900||hx>5200||hz>5200)return;
-  const samples=[centre.clone()];
-  const dx=size.x*.5, dz=size.z*.5;
-  samples.push(new K(centre.x-dx,centre.y,centre.z-dz));
-  samples.push(new K(centre.x+dx,centre.y,centre.z-dz));
-  samples.push(new K(centre.x-dx,centre.y,centre.z+dz));
-  samples.push(new K(centre.x+dx,centre.y,centre.z+dz));
-  let hit=false;
-  for(const sample of samples){
-   const world=node.localToWorld(sample.clone());
-   if(!Number.isFinite(world.x)||!Number.isFinite(world.z))continue;
-   const local=Js(_t,world.x,world.z);
-   if(jetChangiProtectedLocal(local[0],local[1],Math.min(85,Math.max(hx,hz)*.18))){hit=true;break;}
+  // Never remove the game's fundamental terrain, clouds or pavement.
+  const mat=node.material,matName=String(mat?.name||''),objName=String(node.name||'');
+  if(/runway|taxi|ground|terrain|ocean|sky|road/i.test(matName+' '+objName))return;
+  const geo=node.geometry;
+  if(!geo.boundingBox)geo.computeBoundingBox?.();
+  const bb=geo.boundingBox;if(!bb)return;
+  const size=bb.max.clone().sub(bb.min);
+  const scale=node.getWorldScale?.(new K())||new K(1,1,1);
+  const h=Math.abs(size.y*scale.y),hx=Math.abs(size.x*scale.x),hz=Math.abs(size.z*scale.z);
+  if(h<3.0||h>1300||hx>8500||hz>8500)return;
+  const mid=bb.min.clone().add(bb.max).multiplyScalar(.5);
+  const coords=[];
+  for(const x of [bb.min.x,bb.max.x])for(const z of [bb.min.z,bb.max.z])for(const y of [bb.min.y,bb.max.y]){
+   const world=node.localToWorld(new K(x,y,z));
+   coords.push(Js(_t,world.x,world.z));
   }
-  if(hit){node.visible=false;cleared++;}
+  coords.push(Js(_t,...(()=>{const w=node.localToWorld(mid);return[w.x,w.z];})()));
+  if(coords.some(c=>jetChangiProtectedLocal(c[0],c[1],Math.min(120,Math.max(hx,hz)*.25)))){
+   node.visible=false;cleared++;
+  }
  });
  return cleared;
 }
-// Build continuous pavement, centreline and crossing stop bars. These game
-// taxiway links are schematic: they do not assert real taxi instructions.
+
 function jetChangiBuildTaxiNetwork(addBox,group){
- const apron=new Xt({color:0x333f48,roughness:.95});
- const asphalt=new Xt({color:0x46545e,roughness:.96});
- const centre=new be({color:0xffd455,depthWrite:false});
- const edge=new be({color:0x8ebad3,depthWrite:false});
- const white=new be({color:0xeef4f6,depthWrite:false});
- const red=new be({color:0xdd3238,depthWrite:false});
- const corridor=(-2210+1350)/2,span=1350-(-2210);
- // Western taxiway W side, central T/D service area and eastern A side.
- // Spines have room for large airliners to move and connect at four crossings.
- for(const x of [-174,168]){
-  addBox(x,corridor,39,span,.24,.37,apron);
-  addBox(x,corridor,33,span,.52,.14,asphalt);
-  for(let z=-2160;z<=1290;z+=120){addBox(x,z,1.0,28,.74,.08,centre);}
-  for(const dx of [-17,17])addBox(x+dx,corridor,.85,span,.68,.07,edge);
+ // All taxiways are illustrative. Use observed WSSS runway centres instead of
+ // hardcoded visual offsets; taxiways connect all three 02/20 pavements.
+ const asphalt=new Xt({color:0x414c55,roughness:.95});
+ const shoulder=new Xt({color:0x293c48,roughness:.97});
+ const yellow=new be({color:0xffd560,depthWrite:false});
+ const edge=new be({color:0x83bed7,depthWrite:false});
+ const left=jetChangiRunways['02L'].x,right=jetChangiRunways['02R'].x;
+ const west=left*.51,east=right*.51;
+ const minZ=-3400,maxZ=175,zC=(minZ+maxZ)/2,zL=maxZ-minZ;
+ for(const x of [west,east]){
+  addBox(x,zC,45,zL,.34,.29,shoulder);
+  addBox(x,zC,35,zL,.53,.11,asphalt);
+  for(let z=minZ+65;z<maxZ;z+=90)addBox(x,z,1.2,20,.70,.07,yellow);
+  for(const dx of [-19,19])addBox(x+dx,zC,.75,zL,.66,.05,edge);
  }
- // Physical taxiway connections across 02L, 02C and 02R. Runway crossing
- // positions are deliberately separate from the aircraft's initial 02C hold.
- for(const z of [-1270,-620,100,660]){
-  const x0=-356,x1=356,width=x1-x0,cx=(x0+x1)/2;
-  addBox(cx,z,width,40,.25,.30,apron);
-  addBox(cx,z,width,32,.54,.15,asphalt);
-  for(let x=x0+15;x<x1-5;x+=100)addBox(x,z,28,1.2,.76,.08,centre);
-  for(const dz of [-18,18])addBox(cx,z+dz,width,.8,.68,.06,edge);
-  // A stop bar sits before each crossing, on either approach. Yellow hold
-  // double-bars cannot be mistaken for a real green ATC clearance.
-  for(const x of [-370,-240,-65,65,240,370]){
-   if(Math.abs(x)>370)continue;
-   for(const shift of [-3,3])addBox(x+shift,z,1.15,30,.84,.08,white);
-  }
-  // Both parallel taxiway intersections have rounded-looking paved bulbs.
-  for(const x of [-174,168]){
-   const disk=new Tt(new an(23,23,.19,20),asphalt);
-   const c=qi(_t,x,z);disk.position.set(c[0],.66,c[1]);group.add(disk);
-   for(let zz of [-16,16])addBox(x,z+zz,40,.65,.86,.07,centre);
+ // Genuine stagger: western 02L does not connect at its southern edge where
+ // it has no pavement. Choose links on the shared physical runway sections.
+ for(const z of [-1330,-1720,-2080,-2270]){
+  addBox((left+right)/2,z,right-left+90,46,.31,.34,shoulder);
+  addBox((left+right)/2,z,right-left+90,34,.58,.13,asphalt);
+  for(let x=left+18;x<=right-10;x+=86)addBox(x,z,26,1.2,.79,.07,yellow);
+  for(const dz of [-20,20])addBox((left+right)/2,z+dz,right-left+85,.75,.71,.06,edge);
+  // Railway-like white bars in the game are a hold line; not ATC clearance.
+  for(const x of [left-31,west-35,-36,36,east+35,right+31]){
+   for(const dz of [-4,4])addBox(x,z+dz,22,1.0,.88,.06,edge);
   }
  }
- // Short connectors from the west runway to W spine, and the eastern A
- // spine to runway 3. Taxiways join the entire paved three-runway network.
- for(const z of [-1840,-250,1020]){
-  for(const [a,b] of [[-310,-174],[168,310]]){
-   const x=(a+b)/2;
-   addBox(x,z,Math.abs(a-b)+7,36,.28,.32,apron);
-   addBox(x,z,Math.abs(a-b)+7,30,.56,.16,asphalt);
-   for(let xx=Math.min(a,b);xx<=Math.max(a,b);xx+=58)addBox(xx,z,17,.85,.78,.07,centre);
+ // Provide runway-to-taxiway connectors near both ends of each shared strip.
+ for(const z of [-1400,-2050]){
+  for(const [from,to] of [[left,west],[west,0],[0,east],[east,right]]){
+   const w=Math.abs(to-from)+8,cx=(from+to)/2;
+   addBox(cx,z,w,39,.37,.28,shoulder);addBox(cx,z,w,31,.61,.13,asphalt);
+   for(let x=Math.min(from,to)+14;x<Math.max(from,to);x+=55)addBox(x,z,20,.8,.82,.05,yellow);
   }
  }
- group.userData.taxiwayNetwork='Schematic continuous W/T/A taxiways, game only';
+ group.userData.taxiwayNetwork='Three interconnected Changi taxiways (SCHEMATIC, NOT FOR NAVIGATION)';
 }
 
 function jetTrafficParallelMake(){
@@ -5008,22 +5014,21 @@ function jetTrafficParallelMake(){
  };
  // Original 02C remains the playable runway. 02L/02R are raised visual
  // pavement surfaces with accurate relative west/east order and threshold stagger.
- for(const id of ['02L','02R']){
-  const lane=jetChangiRunways[id],z=lane.z-280;
-  addBox(lane.x,z,84,3200,.16,.46,shoulder);
-  addBox(lane.x,z,61,3175,.51,.37,pavement);
-  // Continuous edges and centreline dashes along the full runway.
-  for(const dx of [-29,29])addBox(lane.x+dx,z,1.6,3110,.88,.09,edge);
-  for(let tick=-1560;tick<=1230;tick+=112)addBox(lane.x,lane.z+tick,2.0,37,.92,.08,centre);
-  // Threshold piano keys and touchdown zone bars (schematic, 3D geometry).
-  for(const dz of [30,45])for(const off of [-23,-15,-7,7,15,23])
-   addBox(lane.x+off,lane.z+dz,3.5,12,.94,.08,centre);
-  for(const dz of [-190,-410,-800])for(const dx of [-22,22])
-   addBox(lane.x+dx,lane.z+dz,3.0,39,.94,.08,centre);
-  // Low-profile runway edge lights, evenly spaced along both sides.
+ for(const id of ['02L','02C','02R']){
+  const lane=jetChangiRunways[id],len=lane.length,z=lane.z-len/2;
+  // 02 threshold = beginning of pavement, 20 opposite = end. This matters
+  // for tracked arrivals: 3D touchdown must occur at the actual strip edge.
+  addBox(lane.x,z,85,len+20,.17,.43,shoulder);
+  addBox(lane.x,z,61,len,.49,.34,pavement);
+  for(const dx of [-29,29])addBox(lane.x+dx,z,1.55,len-10,.88,.08,edge);
+  for(let tick=-65;tick>-len+55;tick-=83)addBox(lane.x,lane.z+tick,2.1,30,.93,.06,centre);
+  for(const dz of [-26,-41])for(const off of [-22,-15,-8,8,15,22])
+   addBox(lane.x+off,lane.z+dz,3.2,10,.98,.07,centre);
+  for(const dz of [-180,-320,-520])for(const dx of [-22,22])
+   addBox(lane.x+dx,lane.z+dz,3.0,30,.95,.07,centre);
   const lamp=new be({color:0xe9f5ff});
-  for(let tick=-1530;tick<=1250;tick+=245)for(const dx of [-37,37])
-   addBox(lane.x+dx,lane.z+tick,.65,1.2,1.12,.35,lamp);
+  for(let tick=-25;tick>-len+20;tick-=126)for(const dx of [-37,37])
+   addBox(lane.x+dx,lane.z+tick,.6,1.2,1.06,.32,lamp);
  }
  jetChangiBuildTaxiNetwork(addBox,group);
  const host=document.getElementById('ui')||document.body;
@@ -5063,21 +5068,21 @@ function jetTrafficThreeRunwayBoardTick(dt){
   if(!r)continue;
   const vr=Number(a.verticalRate)||0,alt=Number(a.altFt)||0,spd=Number(a.speedKt)||0;
   let phase='';
-  if(a.onGround&&spd>=20)phase=spd>=85?'ROLL?':'GROUND';
-  else if(!a.onGround&&alt<5500&&(a.phase==='DESCENDING'||vr<-200))phase='ARR?';
-  else if(!a.onGround&&alt<5500&&(a.phase==='CLIMBING'||vr>200))phase='DEP?';
-  if(phase)by[r.id].push({name:jetTrafficCallsign(a),phase,d:Math.abs(r.along)});
+  if(a.onGround&&spd>=20)phase=spd>=85?'ROLL?':'TAXI';
+  else if(!a.onGround&&alt<9000&&(a.phase==='DESCENDING'||vr<-200))phase='ARR?';
+  else if(!a.onGround&&alt<9000&&(a.phase==='CLIMBING'||vr>200))phase='DEP?';
+  if(phase)by[r.id].push({name:jetTrafficCallsign(a),phase,d:Math.abs(r.distanceToThreshold),direction:r.designation});
  }
  const wrap=board.querySelector('.jc-runway-lines');if(!wrap)return;
  wrap.replaceChildren();
  for(const id of ['02L','02C','02R']){
   const row=document.createElement('div');
   row.style.cssText='border-top:1px solid #29485d;padding:3px 0;line-height:1.25';
-  const nearby=by[id].sort((a,b)=>a.d-b.d).slice(0,2);
+  const nearby=by[id].sort((a,b)=>a.d-b.d).slice(0,4);
   const top=document.createElement('strong');top.style.color=id==='02C'?'#93fff0':'#e8eefb';
   top.textContent='RWY '+id+(id==='02R'?'  ⚠':'');row.appendChild(top);
   const details=document.createElement('div');details.style.color=nearby.length?'#ffe7a4':'#9cb6c9';
-  details.textContent=nearby.length?nearby.map(a=>a.phase+' '+a.name).join(' · '):'No matched contact';row.appendChild(details);
+  details.textContent=nearby.length?nearby.map(a=>a.direction+' '+a.phase+' '+a.name).join(' · '):'No matched contact';row.appendChild(details);
   wrap.appendChild(row);
  }
 }
@@ -5096,26 +5101,24 @@ function jetTrafficParallelLabelsTick(){
 }
 function jetTrafficParallelTrack(a,lat,lon){
  if(jetTrafficActiveAirport()!=='WSSS'||!Number.isFinite(lat)||!Number.isFinite(lon))return null;
- if((a.altFt!=null&&Number(a.altFt)>6500)||Number(a.km)>18)return null;
- const head=Number(a.heading),spd=Number(a.speedKt)||0;
- // A moving flight near these parallel strips must have a reciprocal
- // 02/20 track. ADS-B does not contain a runway assignment.
- if(Number.isFinite(head)&&spd>55){
-  const delta=Math.min(Math.abs(((head-23+540)%360)-180),Math.abs(((head-203+540)%360)-180));
-  if(delta>37)return null;
- }
- const options=Object.entries(jetChangiRunways).map(([id,r])=>{
-  const lat0=r.threshold[0],eastScale=111.195*Math.cos(lat0*Math.PI/180);
-  const ex=(r.opposite[1]-r.threshold[1])*eastScale,ny=(r.opposite[0]-lat0)*111.195;
-  const length=Math.hypot(ex,ny)||1,ux=ex/length,uy=ny/length;
-  const east=(lon-r.threshold[1])*eastScale,north=(lat-lat0)*111.195;
-  return{id,x:r.x,z:r.z,along:east*ux+north*uy,cross:east*uy-north*ux,
-   score:Math.abs(east*uy-north*ux)};
- }).filter(r=>r.along>=-11&&r.along<=6).sort((a,b)=>a.score-b.score);
+ const head=Number(a.heading),speed=Number(a.speedKt)||0;
+ const d02=Math.abs(((head-jetWSSSCourseDeg+540)%360)-180);
+ const d20=Math.abs(((head-(jetWSSSCourseDeg+180)+540)%360)-180);
+ if(Number.isFinite(head)&&speed>50&&Math.min(d02,d20)>32)return null;
+ const dir=Number.isFinite(head)&&d20<d02?'20':'02';
+ const options=Object.entries(jetChangiRunways).map(([id,lane])=>{
+  const p=jetWSSSAlongCross(lat,lon,lane.threshold);
+  // WSSS actual runway length 4,000m, eligible approach tracks up to 18km
+  // outside a threshold and 4km beyond for missed-approach detection.
+  const dist=dir==='02'? -p.along : p.along-4000;
+  return{id,dir,designation:dir==='02'?id:({'02L':'20R','02C':'20C','02R':'20L'}[id]),
+   runway:lane,along:p.along,cross:p.cross,distanceToThreshold:dist,score:Math.abs(p.cross)};
+ }).filter(p=>p.along>=-18000&&p.along<=22000).sort((p,q)=>p.score-q.score);
  const best=options[0];
- // 0.65km cross-track gate avoids incorrectly assigning nearby regional traffic.
- return best&&best.score<=.65?best:null;
+ if(!best||best.score>(a.onGround?250:620))return null;
+ return best;
 }
+
 function jetTrafficAircraftAirborne(){
  const p=E.plane;if(!p)return false;
  const alt=Number(p.y)||0;
@@ -5136,7 +5139,7 @@ function jetTrafficCompleteAirborneTransition(){
 function jetTrafficStart(){
  jetTrafficFree();jetTraffic.airport=pt.from;jetTraffic.age=0;
  jetTraffic.clear=false;jetTraffic.phase='final';jetTraffic.nextHud=0;jetTraffic.announced=false;
- jetTraffic.live=[];jetTraffic.liveAirport='';jetTraffic.liveRef=null;jetTraffic.liveAt=0;
+ jetTraffic.live=[];jetTraffic.liveAirport='';jetTraffic.liveRef=null;jetTraffic.liveAt=0;jetTraffic.stableTracks.clear();
  jetTraffic.arrivalId='';jetTraffic.arrivalCallsign='';jetTraffic.arrivalLostAt=0;jetTraffic.arrivalLandedAt=0;
  jetTraffic.mode='SIM';jetTrafficMakeObjects();jetTrafficShowHud();
 }
@@ -5219,6 +5222,17 @@ function jetTrafficAccept(data){
    verticalRate:Number(a.verticalRate)||0,seenPos:Number(a.seenPos)||0,
    onGround:!!a.onGround,phase:String(a.trafficPhase||'').toUpperCase(),
    km:Number(a.km)||0}));
+ const present=new Set();
+ for(const plane of jetTraffic.live){
+  if(!plane.id)continue;present.add(plane.id);
+  const r=jetTrafficParallelTrack(plane,plane.lat,plane.lon);
+  let track=jetTraffic.stableTracks.get(plane.id);
+  if(!track){track={id:plane.id,firstSeen:Date.now()};jetTraffic.stableTracks.set(plane.id,track);}
+  track.lastSeen=Date.now();track.callsign=plane.name;track.grounded=plane.onGround;
+  track.speedKt=plane.speedKt;track.altFt=plane.altFt;track.phase=plane.phase;
+  if(r && (plane.speedKt>40 || !track.runway))track.runway=r.id;
+ }
+ for(const [id,track] of jetTraffic.stableTracks){if(Date.now()-(track.lastSeen||0)>90000)jetTraffic.stableTracks.delete(id);}
  jetTraffic.nextHud=0;jetTraffic.nextLiveDraw=0;
  return true;
 }
@@ -5570,44 +5584,65 @@ function jetTrafficBuildLivePlane(a){
 }
 function jetTrafficPosition(a,now){
  const lat0=jetTraffic.liveRef[0],lon0=jetTraffic.liveRef[1];
- // Keep models moving through the 60-second reporting window; previous 16-s
- // cap made them appear stationary until the next fetch.
  const elapsed=Math.max(0,Math.min(80,(now-jetTraffic.liveAt)/1000+(a.seenPos||0)));
- let km=Math.max(0,a.speedKt)*1.852*elapsed/3600;km=Math.min(km,a.onGround?.65:8.5);
- const heading=(a.heading||0)*Math.PI/180;
- const lat=a.lat+km*Math.cos(heading)/111.195;
- const lon=a.lon+km*Math.sin(heading)/(111.195*Math.max(.15,Math.cos(lat0*Math.PI/180)));
- const east=(lon-lon0)*111.195*Math.cos(lat0*Math.PI/180),north=(lat-lat0)*111.195;
+ const velocityKm=Math.max(0,a.speedKt)*1.852*elapsed/3600;
+ const deltaKm=Math.min(velocityKm,a.onGround?1.2:8.5);
+ const h=(Number(a.heading)||0)*Math.PI/180;
+ const lat=a.lat+deltaKm*Math.cos(h)/111.195;
+ const lon=a.lon+deltaKm*Math.sin(h)/(111.195*Math.max(.15,Math.cos(lat0*Math.PI/180)));
+ const east=(lon-lon0)*111195*Math.cos(lat0*Math.PI/180);
+ const north=(lat-lat0)*111195;
  const arrival=jetTraffic.liveAirport===pt.dest&&(E.phase==='taxiIn'||E.phase==='approach');
  const course=Number(arrival?pt.arrCrs:pt.depCrs)||0;
  const bearing=course*Math.PI/180;
  const along=east*Math.sin(bearing)+north*Math.cos(bearing);
  const side=east*Math.cos(bearing)-north*Math.sin(bearing);
- const isTaxi=E.phase==='taxi',matched=isTaxi&&a.id===jetTraffic.arrivalId;
- const approach=jetTrafficPossibleArrival(a);
- // Use published geographic runway alignments to put a descending aircraft
- // on the correct *visual* strip where its observed track is close enough.
- const runwayTrack=jetTrafficActiveAirport()==='WSSS'&&(approach||a.onGround||a.phase==='CLIMBING'||a.phase==='DESCENDING')?jetTrafficParallelTrack(a,lat,lon):null;
- let x,z;
- if(runwayTrack&&(!a.onGround||runwayTrack.along>=-.3&&runwayTrack.along<=3.9)){
-  x=runwayTrack.x+Math.max(-96,Math.min(96,runwayTrack.cross*150));
-  z=runwayTrack.z+Math.max(-1800,Math.min(2600,-runwayTrack.along*255));
- }else if(matched&&!a.onGround){
-  x=Math.max(-160,Math.min(160,side*150));
-  z=Math.max(120,Math.min(2050,Math.hypot(north,east)*235));
- }else if(matched&&a.onGround){
-  x=Math.max(-180,Math.min(180,side*190));
-  z=Math.max(-1550,Math.min(200,-along*255));
+ const runway=jetTrafficActiveAirport()==='WSSS'?jetTrafficParallelTrack(a,lat,lon):null;
+ const stable=jetTraffic.stableTracks.get(a.id);
+ let x,z,height,stage='',estimated=false;
+ if(runway){
+  // Every eligible flight uses the SAME real-world 02 threshold and heading.
+  // Project longitudinal distance to runway strip, including the approach
+  // outside the threshold. For 20 arrivals, track runs from the opposite end.
+  const lane=runway.runway;
+  x=lane.x+Math.max(-125,Math.min(125,runway.cross*jetWSSSScale.across));
+  z=lane.z-runway.along*jetWSSSScale.along;
+  const trackArrival=(!a.onGround && (a.phase==='DESCENDING'||a.verticalRate<-200) && a.speedKt>65);
+  const toThreshold=Math.max(0,runway.distanceToThreshold);
+  if(a.onGround){
+   height=3.7;stage=a.speedKt>45?'ROLLOUT / GROUND':'GROUND';
+   if(stable)stable.sawGround=true;
+  }else if(trackArrival && toThreshold<14500){
+   // 3 degree descent in the same local-scale coordinate system as runway.
+   // Touchdown is an animated estimate, not a verified ATC event. Keep contact
+   // tied to runway rather than flying through its far end at high altitude.
+   const geometricHeight=3.8+toThreshold*jetWSSSScale.along*.0524;
+   const reported=Number(a.altFt);
+   const nearThreshold=toThreshold<260&&Number.isFinite(reported)&&reported<520;
+   const runwayProgress=runway.dir==='02'?runway.along:4000-runway.along;
+   const estimateTouch=nearThreshold && runwayProgress>=-20 && runwayProgress<3950;
+   height=estimateTouch?3.7:Math.max(3.7,Math.min(650,geometricHeight));
+   estimated=estimateTouch;
+   stage=estimateTouch?'TOUCHDOWN EST':'APPROACH';
+   if(stable){stable.approaching=true;if(estimateTouch)stable.estimatedTouch=true;}
+  }else{
+   height=Math.max(8,Math.min(800,(Number(a.altFt)||0)*.3048*.48));
+   stage=a.phase==='CLIMBING'?'DEPARTING':'OVERFLIGHT';
+  }
+  // After a near-threshold ADS-B loss do not extrapolate the aircraft out of
+  // the airport indefinitely. The 3D contact remains tied to its reported
+  // identity; the UI marks projected states as estimates.
  }else{
-  x=side*350;z=(arrival?(_t.thrB-900):0)-along*350;
+  x=side*.35;z=(arrival?(_t.thrB-900):0)-along*.35;
+  height=a.onGround?3.7:Math.max(8,Math.min(780,(Number(a.altFt)||0)*.3048*.48));
+  stage=a.onGround?'GROUND':a.phase==='DESCENDING'?'INBOUND':a.phase==='CLIMBING'?'DEPARTING':'AIRBORNE';
  }
  const pos=qi(_t,x,z);
- const height=a.onGround?3.4:(runwayTrack||matched?
-   Math.max(10,Math.min(340,Number(a.altFt||0)*.075)):
-   Math.max(12,Math.min(780,Number(a.altFt||0)*.3048*.48)));
- const yaw=-(_t.depRot||0)-(((a.heading-course+540)%360)-180)*Math.PI/180;
- return {x:pos[0],y:height,z:pos[1],yaw,runway:runwayTrack?.id||null};
+ const yaw=-(_t.depRot||0)-(((Number(a.heading||course)-course+540)%360)-180)*Math.PI/180;
+ return{x:pos[0],y:height,z:pos[1],yaw,runway:runway?.designation||null,
+  runwayBase:runway?.id||null,stage,estimated};
 }
+
 function jetTrafficDrawLiveContacts(dt){
  const phase=E.phase,active=['taxi','takeoff','approach','taxiIn'].includes(phase);
  if(!active||!jetTrafficLiveFresh()||!It?.scene||!_t){jetTrafficClearModels();return;}
@@ -5615,9 +5650,9 @@ function jetTrafficDrawLiveContacts(dt){
  if(!jetTraffic.scene)jetTraffic.scene=It.scene;
  const now=Date.now();
  const prioritized=jetTraffic.live.filter(a=>a.id&&Number.isFinite(a.lat)&&Number.isFinite(a.lon))
-  .filter(a=>(a.km<=14&&(a.onGround||a.altFt!=null&&a.altFt<7000)))
-  .sort((a,b)=>(a.id===jetTraffic.arrivalId?-5:jetTrafficIsSingapore(a)?-2:a.onGround?0:1)-
-   (b.id===jetTraffic.arrivalId?-5:jetTrafficIsSingapore(b)?-2:b.onGround?0:1)||a.km-b.km).slice(0,12);
+  .filter(a=>(a.km<=25&&(a.onGround||a.altFt!=null&&a.altFt<9000)))
+  .sort((a,b)=>(a.id===jetTraffic.arrivalId?-5:a.phase==='DESCENDING'?-4:jetTrafficIsSingapore(a)?-2:a.onGround?0:1)-
+   (b.id===jetTraffic.arrivalId?-5:b.phase==='DESCENDING'?-4:jetTrafficIsSingapore(b)?-2:b.onGround?0:1)||a.km-b.km).slice(0,18);
  const visible=new Set();
  const cameraCanvas=document.querySelector('#game canvas');
  const rect=cameraCanvas?.getBoundingClientRect();
@@ -5626,7 +5661,7 @@ function jetTrafficDrawLiveContacts(dt){
   // Never drop the one matched flight from the 3D scene merely because it is
   // farther than the generic camera proximity culling threshold.
   if(a.id!==jetTraffic.arrivalId&&
-   Math.hypot(target.x-(E.plane?.x||0),target.z-(E.plane?.z||0))>3800)continue;
+   Math.hypot(target.x-(E.plane?.x||0),target.z-(E.plane?.z||0))>6000)continue;
   visible.add(a.id);
   let entry=jetTraffic.liveModels.get(a.id);
   if(!entry){
@@ -5648,7 +5683,7 @@ function jetTrafficDrawLiveContacts(dt){
   const tag=entry.group.userData.trafficTag;
   const badge=entry.group.userData.airlineBadge;
   if(tag){
-   tag.textContent=(isTracked?'▶ ':'✈ ')+jetTrafficCallsign(a)+(target.runway?' · '+target.runway+' EST':'')+(a.onGround?' · GND':a.phase==='DESCENDING'?' · ARR?':a.phase==='CLIMBING'?' · DEP?':' · '+Math.round(a.altFt||0)+' FT');
+   tag.textContent=(isTracked?'▶ ':'✈ ')+jetTrafficCallsign(a)+(target.runway?' · RWY '+target.runway+'?':'')+' · '+target.stage+(target.estimated?' (EST)':'');
    tag.style.borderColor=isTracked?'#ffe18b':jetTrafficIsSingapore(a)?'#d6b357':a.onGround?'#ffcd68':'#36d7f5';
    tag.style.color=isTracked?'#fff0b1':jetTrafficIsSingapore(a)?'#fff1bf':a.onGround?'#ffd782':'#b5faff';
    try{
