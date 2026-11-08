@@ -1,5 +1,5 @@
 // Jetline Captain /api/radar — live volunteer ADS-B positions, NOT simulator traffic.
-// Endpoint: /api/radar?airport=WSSS  (known airports in airports.json only)
+// Endpoint: /api/radar?airport=WSSS or /api/radar?airport=EGLL&lat=...&lon=...
 'use strict';
 const AIRPORTS = require('../airports.json');
 const SOURCE='https://api.adsb.lol';
@@ -25,18 +25,16 @@ module.exports=async function handler(req,res){
   const known=icao==='SGALL'?SG_OVERVIEW:(SG_AIRFIELDS[icao]||null)|| (Object.prototype.hasOwnProperty.call(AIRPORTS,icao)?AIRPORTS[icao]:null);
   let airport=known;
   if(!known){
-    // Extra regional airfields supplied by the server's OurAirports catalogue.
-    // Region bounds prevent this public endpoint being used for arbitrary global queries.
+    // Worldwide airport locations are supplied from the public-domain international
+    // airport directory on the radar page. This is a display-only geographic query.
     const lat=Number(req.query?.lat),lon=Number(req.query?.lon);
     const name=String(req.query?.name||icao).replace(/[<>]/g,'').slice(0,80);
-    const allowed= /^(?:[A-Z0-9][A-Z0-9-]{1,18})$/.test(icao)
+    const allowed=/^[A-Z0-9]{3,5}$/.test(icao)
       && Number.isFinite(lat)&&Number.isFinite(lon)
-      && ((lat>=5.0&&lat<=21.0&&lon>=97.0&&lon<=106.0)
-        || (lat>=-12.0&&lat<=7.0&&lon>=94.0&&lon<=143.0)
-        || (lat>=1.0&&lat<=1.6&&lon>=103.5&&lon<=104.2));
+      && lat>=-85&&lat<=85&&lon>=-180&&lon<=180;
     if(allowed)airport={lat,lon,name};
   }
-  if(!airport)return res.status(400).json({error:'Unknown airport or invalid regional coordinates.'});
+  if(!airport)return res.status(400).json({error:'Unknown airport or invalid airport coordinates.'});
   // The provider point endpoint's radius unit is *nautical miles*.
   // Request ~101.9 km (55 nautical miles), then enforce an EXACT 100.0 km haversine radius below.
   const url=`${SOURCE}/v2/point/${airport.lat}/${airport.lon}/55`;
@@ -84,7 +82,12 @@ module.exports=async function handler(req,res){
       const verticalRateFpm=rawRate!=null&&Number.isFinite(Number(rawRate))?Math.round(Number(rawRate)):null;
       // Nearest Singapore airfield is approximate association, not verified
       // departure/arrival destination. Do NOT infer taxiway or clearance status.
-      const nearAirfields=Object.entries(SG_AIRFIELDS).map(([code,field])=>({code,field,km:distanceKm(field.lat,field.lon,a.lat,a.lon)})).sort((x,y)=>x.km-y.km);
+      const nearAirfields=Object.entries(SG_AIRFIELDS).map(([code,field])=>({code,field,km:distanceKm(field.lat,field.lon,a.lat,a.lon)}));
+      // Outside Singapore, associate low-altitude/ground positions with the selected
+      // airport only when geographically nearby. This is an approximation, never
+      // a confirmed airport departure, stand or runway assignment.
+      if(icao!=='SGALL'&&!SG_AIRFIELDS[icao])nearAirfields.push({code:icao,field:{name:airport.name,groundRadiusKm:airport.type==='large_airport'?7:4.5,nearRadiusKm:21},km:dist});
+      nearAirfields.sort((x,y)=>x.km-y.km);
       const near=nearAirfields[0],nearAirport=near?.code||null;
       const groundAtAirport=!!(onGround&&near&&near.km<=near.field.groundRadiusKm&&Number.isFinite(age)&&age<=100);
       const groundAtChangi=groundAtAirport&&nearAirport==='WSSS';
