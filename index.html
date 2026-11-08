@@ -315,6 +315,11 @@
       <div id="radarRunwayStatus" role="status" style="font-size:12px;color:#f4cf82;margin:3px 0 8px">RUNWAY: awaiting airport selection</div>
        <div id="radarGameMatch" role="status" style="color:#ffe0a1;font-size:12px;line-height:1.35;margin:4px 0">Game traffic matching: awaiting taxi sequence</div>
       <div id="radarStatus" role="status">Select an airport to request real aircraft positions.</div>
+      <section id="jcChangiRunways" aria-label="Changi three runway estimated live activity" style="display:none;margin:7px 0 11px;padding:7px 9px;border:1px solid #347e96;border-radius:10px;background:#071a30e8">
+        <div style="font:850 12px system-ui;color:#8ce9f5;margin-bottom:6px">CHANGI · 02L/20R | 02C/20C | 02R/20L · LIVE TRACK ESTIMATES</div>
+        <div id="jcChangiRunwayRows" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px"></div>
+        <div style="font:10px/1.4 system-ui;color:#b4cee0;margin-top:6px">ARR? and DEP? indicate possible approach/departure tracks, <strong>not verified runway clearance or landing</strong>. 02R/20L unavailable for civil use through 24 Dec 2026 under CAAS AIP SUP 151/2026.</div>
+      </section>
       <div id="radarGroundDiagnostic" role="status" style="font-size:12px;color:#ffd18b;margin:3px 0 10px;line-height:1.5;display:none"></div>
       <div class="radarContent">
         <div class="radarRadar">
@@ -1548,8 +1553,54 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
         ' · clearly simulated; not an ADS-B aircraft and not added to live radar contacts.';
     }else el.textContent='No confirmed inbound selected · game runway status is estimated.';
   }
+  function changiRunwayEstimate(p){
+    if(!p||!Number.isFinite(Number(p.lat))||!Number.isFinite(Number(p.lon)))return null;
+    if(p.altFt!=null&&Number(p.altFt)>6500)return null;
+    const head=Number(p.heading),speed=Number(p.speedKt)||0;
+    if(Number.isFinite(head)&&speed>55){
+      const delta=Math.min(Math.abs(((head-23+540)%360)-180),Math.abs(((head-203+540)%360)-180));
+      if(delta>37)return null;
+    }
+    const opts=SG_AIRFIELDS.WSSS.runways.map(r=>{
+      const a=r.a,b=r.b,lat0=a[0],kx=111.195*Math.cos(lat0*Math.PI/180);
+      const dx=(b[1]-a[1])*kx,dy=(b[0]-a[0])*111.195,len=Math.hypot(dx,dy)||1;
+      const ux=dx/len,uy=dy/len;
+      const east=(Number(p.lon)-a[1])*kx,north=(Number(p.lat)-a[0])*111.195;
+      return{id:r.id.split('/')[0],along:east*ux+north*uy,cross:east*uy-north*ux};
+    }).filter(r=>r.along>=-11&&r.along<=6).sort((a,b)=>Math.abs(a.cross)-Math.abs(b.cross));
+    return opts[0]&&Math.abs(opts[0].cross)<=.65?opts[0]:null;
+  }
+  function showChangiRunwayActivity(){
+    const section=$('jcChangiRunways');if(!section)return;
+    section.style.display=['WSSS','SGALL'].includes(radarAirport)?'block':'none';
+    if(!['WSSS','SGALL'].includes(radarAirport))return;
+    const rows=$('jcChangiRunwayRows');if(!rows)return;
+    rows.replaceChildren();
+    const by={'02L':[],'02C':[],'02R':[]};
+    for(const p of radarData?.aircraft||[]){
+      const r=changiRunwayEstimate(p);if(!r)continue;
+      const spd=Number(p.speedKt)||0,alt=Number(p.altFt)||0,vr=Number(p.verticalRate)||0;
+      let phase='';
+      if(p.onGround&&spd>=20)phase=spd>=85?'ROLL?':'GROUND';
+      else if(!p.onGround&&alt<5500&&(p.trafficPhase==='DESCENDING'||vr<-200))phase='ARR?';
+      else if(!p.onGround&&alt<5500&&(p.trafficPhase==='CLIMBING'||vr>200))phase='DEP?';
+      if(phase)by[r.id].push({phase,flight:String(p.callsign||p.hex||'UNKNOWN').trim(),dist:Math.abs(r.along)});
+    }
+    for(const id of ['02L','02C','02R']){
+      const box=document.createElement('div');
+      box.style.cssText='min-width:0;border:1px solid #315d73;border-radius:7px;background:#102942;padding:6px';
+      const title=document.createElement('strong');title.textContent='RWY '+id;
+      title.style.cssText='display:block;color:#e8f5ff;font:850 12px system-ui';box.appendChild(title);
+      const flights=by[id].sort((a,b)=>a.dist-b.dist).slice(0,3);
+      if(!flights.length){const label=document.createElement('div');label.textContent='No matched contact';label.style.cssText='color:#a7bac8;font:10px/1.5 system-ui;overflow-wrap:anywhere';box.appendChild(label);}
+      for(const p of flights){const label=document.createElement('div');label.textContent=p.phase+' '+p.flight;label.style.cssText='color:#ffe4a4;font:750 11px/1.5 system-ui;overflow-wrap:anywhere';box.appendChild(label);}
+      if(id==='02R'){const restriction=document.createElement('div');restriction.textContent='CIVIL RESTRICTED';restriction.style.cssText='font:800 9px/1.5 system-ui;color:#ffc5a5';box.appendChild(restriction);}
+      rows.appendChild(box);
+    }
+  }
   function renderRadar(){
     updateGameRadarMatch();
+    showChangiRunwayActivity();
     const flights=radarFlights();
     const taxiMode=radarAirport==='WSSS'&&$('radarFilter').value==='TAXI';
     const activityMode=radarAirport==='WSSS'&&$('radarFilter').value==='CHANGI';
