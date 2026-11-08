@@ -4715,17 +4715,17 @@ function hdAutoTune(seconds,frames){
 // A height budget protects a portion of the forward runway view on short phones.
 const jcMobilePanel=Math.min(t,e)<=520&&Math.max(t,e)<=1100&&(t<=520||((navigator.maxTouchPoints||0)>0)||(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches));
 if(jcMobilePanel&&!E.__mobilePanelAutoSized){E.__mobilePanelAutoSized=!0;E.panelMax=!0;if(Mt&&Mt.setPanelMax)Mt.setPanelMax(!0)}
-if(pe.W=t,pe.H=e,pe.landscape=e/t<1.15,pe.landscape){let i=Math.min(e/Ri.h,t*(E.panelMax?.62:.52*kt("panelSize")/.62)/Ri.w);if(jcMobilePanel&&!E.panelMax)i=Math.min(i,.45*t/Ri.w);pe.s=i,pe.bx=t-Ri.w*i,pe.by=(e-Ri.h*i)/2,pe.world=[0,0,pe.bx+4,e]}else{
+if(pe.W=t,pe.H=e,pe.landscape=e/t<1.15,pe.landscape){let i=Math.min(e/Ri.h,t*(E.panelMax?.62:.52*kt("panelSize")/.62)/Ri.w);if(jcMobilePanel&&!E.panelMax)i=Math.min(i,.55*t/Ri.w);pe.s=i,pe.bx=t-Ri.w*i,pe.by=(e-Ri.h*i)/2,pe.world=[0,0,pe.bx+4,e]}else{
   let i=E.panelMax?(jcMobilePanel?.85:.72):kt("panelSize")+Math.min(1,Math.max(0,(700-e)/400))*Math.max(0,.62-kt("panelSize"));
   let s=t/Ri.w;
   if(jcMobilePanel&&!E.panelMax){
     // Mobile Panel MIN: cockpit + its BRAKE / FLAPS / SPOILER strip must
-    // occupy no more than the lower 45% of the game viewport.
+    // occupy no more than the lower 55% of the game viewport.
     // The three-button strip is 40px high with a 7px gap; reserve 48px
     // before scaling the native 390 x 546 cockpit uniformly (no distortion).
     // A 97%-width cap is retained only when it is smaller than this budget.
     const widthScale=.97*t/Ri.w;
-    const cockpitHeightBudget=Math.max(1,e*.45-48);
+    const cockpitHeightBudget=Math.max(1,e*.55-48);
     const heightScale=cockpitHeightBudget/Ri.h;
     s=Math.min(widthScale,heightScale);
   }else if(Ri.h*s>e*i){s=e*i/Ri.h}
@@ -6955,7 +6955,7 @@ window.__holdHud={update};
    const left=Math.max(6,Math.round((ui.clientWidth-width)/2));
    // Place directly above the native cockpit: the 48px reserved in Is()
    // includes this 40px strip and 7px gap. Avoid a fixed 132px floor that
-   // otherwise forces the strip out of the allocated lower 45% on short phones.
+   // otherwise forces the strip out of the allocated lower 55% on short phones.
    const top=Math.max(0,Math.round(fcu.offsetTop-height-7));
    const geometry=`${left}:${top}:${width}:${height}`;
    if(geometry!==lastGeometry){
