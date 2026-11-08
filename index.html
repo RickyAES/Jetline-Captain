@@ -180,6 +180,20 @@
     #radarDetail .scheduleSource{font-size:11px;color:#9ec9dd;margin-top:6px;line-height:1.4}
     @media(max-width:650px){.radarSide{max-height:min(37dvh,320px)}.radarScheduleActions{padding:7px}}
 
+
+    #routeShade{position:fixed;inset:0;z-index:35;display:none;align-items:center;justify-content:center;background:#020c20d9;padding:10px;backdrop-filter:blur(5px)}
+    #routeShade.show{display:flex}
+    #routePanel{box-sizing:border-box;width:min(800px,100%);max-height:96dvh;overflow:auto;padding:15px;border-radius:15px;border:1px solid #46ccea;background:linear-gradient(145deg,#163464,#08152f);box-shadow:0 16px 55px #000b}
+    .routeTitleRow{display:flex;align-items:center;justify-content:space-between;gap:9px}
+    .routeGrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin:8px 0}
+    .routeField select{box-sizing:border-box;width:100%;margin-top:7px;color:#eefaff;background:#061833;border:1px solid #4b83a8;border-radius:9px;min-height:190px;padding:4px;font:700 12px/1.4 system-ui}
+    .routeField option{padding:6px 4px;white-space:normal}
+    .routeSelected{font:800 12px/1.5 system-ui;color:#96f5e5;margin-top:7px;min-height:24px}
+    .routeLandmarks{border:1px solid #3b7b90;border-radius:8px;color:#dcecf7;background:#0a2840;padding:9px;font:650 12px/1.5 system-ui}
+    .routeFeedback{color:#8cefff;min-height:20px;font:700 12px/1.5 system-ui;margin-top:7px}
+    .routeFeedback.warn{color:#ffd18a}
+    .routeDisclaimer{font-size:11px;color:#a9c4d7}
+    @media(max-width:640px){#routePanel{padding:12px} .routeGrid{grid-template-columns:1fr;gap:6px} .routeField select{min-height:118px;max-height:155px}#routePanel p{font-size:11px}}
   </style>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -192,6 +206,7 @@
     <div class="right">
       <span class="pilots"><span class="dot" id="liveDot"></span><span id="liveLabel">OFFLINE MODE</span></span>
       <button class="pill" id="rankingOpen" type="button">🏆 RANKING</button>
+      <button class="pill" id="routeOpen" type="button">✈ AIRPORTS</button>
       <button class="pill" id="radarOpen" type="button">📡 RADAR</button>
       <button class="pill" id="fuelOpen" type="button" aria-label="Show simulated aircraft fuel">⛽ FUEL</button>
       <button class="pill toolbutton" id="settingsOpen" type="button" aria-label="General Settings" title="General Settings"><span class="toolicon">⚙</span><span class="tooltext">SETTINGS</span></button>
@@ -203,6 +218,26 @@
   </header>
   <iframe id="gameFrame" title="Jetline Captain flight simulator" allow="fullscreen" allowfullscreen></iframe>
 
+  <div id="routeShade" aria-hidden="true">
+    <section id="routePanel" role="dialog" aria-modal="true" aria-labelledby="routeTitle">
+      <div class="routeTitleRow"><h2 id="routeTitle">✈ WORLD FLIGHT ROUTE</h2><button id="routeClose" class="close" type="button" aria-label="Close flight route selection">×</button></div>
+      <p>Search the same airport directory used by live radar. Pick any two ICAO airports, then apply the route to your flight. Detailed runway data is used when published; otherwise a practice runway is labelled simulated.</p>
+      <div class="routeGrid">
+        <div class="routeField"><label for="routeDepSearch">FROM · Departure airport</label>
+          <input id="routeDepSearch" type="search" placeholder="Search city, ICAO or country" autocomplete="off" spellcheck="false">
+          <select id="routeDepOptions" size="7" aria-label="Available departure airports"></select>
+          <div id="routeDepLabel" class="routeSelected">Select departure</div></div>
+        <div class="routeField"><label for="routeArrSearch">TO · Destination airport</label>
+          <input id="routeArrSearch" type="search" placeholder="Search city, ICAO or country" autocomplete="off" spellcheck="false">
+          <select id="routeArrOptions" size="7" aria-label="Available destination airports"></select>
+          <div id="routeArrLabel" class="routeSelected">Select destination</div></div>
+      </div>
+      <div id="routeLandmarks" class="routeLandmarks" aria-live="polite">Airport landmarks appear in the 3D scenery for the selected route.</div>
+      <div id="routeFeedback" class="routeFeedback" role="status" aria-live="polite"></div>
+      <div class="actions"><button class="action" id="routeApply" type="button">APPLY AIRPORTS TO FLIGHT</button><button class="action secondary" id="routeRadar" type="button">OPEN DESTINATION RADAR</button></div>
+      <p class="routeDisclaimer">Landmark scenery depicts representative city/country attractions available in the game, not verified georeferenced models of every landmark. Radar aircraft positions are live when coverage exists; simulated runway and traffic logic remain separate.</p>
+    </section>
+  </div>
   <div id="shade" aria-hidden="true">
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="heading"><h2 id="modalTitle">Pilot Cloud</h2><button class="close" id="closeModal" type="button" aria-label="Close">×</button></div>
@@ -1007,7 +1042,7 @@
         else airports[code]={...a,...airports[code]};
       }
       worldAirportsStatus=`${added} international airports added`;
-      rebuildAirportOptions();
+      rebuildAirportOptions();if(routeOpen)routeRender();
     }catch(e){
       worldAirportsStatus='Worldwide directory unavailable; original airports retained';
       console.warn('Jetline international airports:',e);
@@ -1049,7 +1084,7 @@
         airports.SGALL={name:'Singapore Airports · all runways',lat:1.3600,lon:103.9300,country:'SG',remote:false};
         originalAirportCodes.clear();
         for(const code of Object.keys(base))originalAirportCodes.add(code);
-        rebuildAirportOptions();showAirportRunway();
+        rebuildAirportOptions();showAirportRunway();if(routeOpen)routeRender();
         loadWorldAirports();
       }catch(e){$('radarCatalogStatus').textContent='Base airport database could not be loaded.';console.warn(e);}
     }
@@ -1066,7 +1101,7 @@
         if(!airports[code])airports[code]=a;
         else airports[code]={...airports[code],...a,remote:false};
       }
-      airportCatalogueLoaded=true;rebuildAirportOptions();showAirportRunway();
+      airportCatalogueLoaded=true;rebuildAirportOptions();showAirportRunway();if(routeOpen)routeRender();
     }catch(e){
       $('radarCatalogStatus').textContent=`Extended Indonesia/Thailand airport list unavailable (${e.message}); the existing airports and Seletar still work.`;
       console.warn('Airport catalogue fetch failed',e);
@@ -1998,13 +2033,132 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }catch{}}
   function gameInfo(){try{return frame.contentWindow?.__game?.info?.()||null}catch{return null}}
 
+
+  // WORLD ROUTE PICKER. Uses exactly the same dictionary as the RADAR airport UI.
+  // Airport runway details come from OurAirports when available. Fictional runway
+  // geometry is explicitly flagged SIMULATED within the game when missing.
+  const routeDraft={dep:'',arr:''};
+  let routeOpen=false;
+  function routeGameChoice(){
+    const selected=flightApi()?.routeSelection?.();
+    return {dep:String(selected?.dep||gameInfo()?.rwys?.dep||'WSSS').toUpperCase(),
+      arr:String(selected?.arr||gameInfo()?.rwys?.arr||'WMKK').toUpperCase()};
+  }
+  function routeMatches(code,a,query){
+    return (code+' '+(a?.name||'')+' '+(a?.municipality||'')+' '+(a?.iata||'')+' '+(a?.country||''))
+      .toLowerCase().includes(query);
+  }
+  function routeOptions(side){
+    const select=$('route'+side+'Options'),query=String($('route'+side+'Search').value||'').trim().toLowerCase();
+    const current=routeDraft[side==='Dep'?'dep':'arr'];
+    const entries=Object.entries(airports).filter(([code,a])=>code!=='SGALL'&&
+      /^[A-Z0-9]{4}$/.test(code)&&Number.isFinite(Number(a?.lat))&&Number.isFinite(Number(a?.lon))&&routeMatches(code,a,query));
+    if(!query)entries.sort((x,y)=>(x[0]===current?-1:y[0]===current?1:0)||
+      (x[1]?.type==='large_airport'?-1:0)-(y[1]?.type==='large_airport'?-1:0)||x[0].localeCompare(y[0]));
+    else entries.sort((x,y)=>(x[0]===query.toUpperCase()?-1:y[0]===query.toUpperCase()?1:0)||
+      (x[0].startsWith(query.toUpperCase())?-1:y[0].startsWith(query.toUpperCase())?1:0)||x[0].localeCompare(y[0]));
+    const shown=entries.slice(0,130);
+    if(airports[current]&&!shown.some(([code])=>code===current))shown.unshift([current,airports[current]]);
+    select.replaceChildren();
+    for(const [code,a] of shown){
+      const option=document.createElement('option');option.value=code;
+      option.textContent=`${code} · ${String(a.name||code).slice(0,56)}${a.municipality?' — '+a.municipality:''}`;
+      select.appendChild(option);
+    }
+    if(shown.some(([code])=>code===current))select.value=current;
+    $('route'+side+'Label').textContent=airports[current]?`${current} · ${airports[current].name}`:'Choose airport';
+  }
+  function routeLandscape(){
+    const native=flightApi(),landmarks=native?.landmarkInfo?.();
+    const dep=routeDraft.dep,arr=routeDraft.arr;
+    const descriptive=code=>{
+      const a=airports[code];
+      return a?`${a.name||code}${a.municipality?', '+a.municipality:''}${a.country?' · '+a.country:''}`:code;
+    };
+    $('routeLandmarks').textContent=`FROM ${dep} · ${descriptive(dep)}  ✈  TO ${arr} · ${descriptive(arr)}. `+
+      'In-game landmarks adapt to each selected airport and its country; additional scenic attractions appear where models exist.'+
+      (landmarks&&landmarks.visible?.length?` · Currently rendered: ${landmarks.visible.map(x=>x.id).filter(Boolean).join(', ')}`:'');
+  }
+  function routeRender(){routeOptions('Dep');routeOptions('Arr');routeLandscape();}
+  function routeFeedback(message,warning=false){const el=$('routeFeedback');el.textContent=message;el.classList.toggle('warn',!!warning)}
+  async function routeOpenPicker(){
+    routeOpen=true;
+    const current=routeGameChoice();routeDraft.dep=current.dep;routeDraft.arr=current.arr;
+    $('routeDepSearch').value='';$('routeArrSearch').value='';
+    $('routeShade').classList.add('show');$('routeShade').setAttribute('aria-hidden','false');
+    routeFeedback('Loading shared airport directory…');
+    await loadRadarAirports();routeRender();
+    routeFeedback('Search by ICAO, airport name, city or country.');
+  }
+  function routeClosePicker(){routeOpen=false;$('routeShade').classList.remove('show');$('routeShade').setAttribute('aria-hidden','true')}
+  $('routeOpen').onclick=routeOpenPicker;
+  $('routeClose').onclick=routeClosePicker;
+  $('routeShade').addEventListener('pointerdown',e=>{if(e.target===$('routeShade'))routeClosePicker()});
+  for(const side of ['Dep','Arr']){
+    $('route'+side+'Search').addEventListener('input',()=>routeOptions(side));
+    $('route'+side+'Options').addEventListener('change',e=>{
+      routeDraft[side==='Dep'?'dep':'arr']=e.target.value;
+      routeRender();routeFeedback('Selected '+e.target.value+'. Apply to update the flight.');
+    });
+  }
+  async function routeAirportDetails(code){
+    const a=airports[code];if(!a)return null;
+    let runways=SG_AIRFIELDS[code]?.runways||runwayLookup.get(code)||a.runways||[];
+    if(!runways.length){
+      try{
+        const controller=new AbortController(),id=setTimeout(()=>controller.abort(),8500);
+        try{
+          const response=await fetch('/api/airport-runways?airport='+encodeURIComponent(code),{signal:controller.signal});
+          if(response.ok){const data=await response.json();runways=(data.runways||[]).filter(r=>Array.isArray(r.a)&&Array.isArray(r.b));runwayLookup.set(code,runways)}
+        }finally{clearTimeout(id)}
+      }catch(e){console.warn('Runway lookup for '+code,e?.message||e)}
+    }
+    return {code,name:a.name||code,lat:Number(a.lat),lon:Number(a.lon),country:a.country||'',runways};
+  }
+  $('routeApply').onclick=async()=>{
+    const dep=routeDraft.dep,arr=routeDraft.arr;
+    if(!dep||!arr||dep===arr||!airports[dep]||!airports[arr]){routeFeedback('Choose two different airports.',true);return}
+    const api=flightApi();
+    if(!api?.registerRouteAirport||!api?.chooseRouteAirports){routeFeedback('Game still loading. Open the route picker after the game menu appears.',true);return}
+    const selection=api.routeSelection?.();
+    if(selection?.state!=='intro'&&selection?.state!=='end'){
+      routeFeedback('Abort or finish the current flight before changing the route.',true);return;
+    }
+    const apply=$('routeApply');apply.disabled=true;routeFeedback('Checking published runway details…');
+    try{
+      const details=await Promise.all([routeAirportDetails(dep),routeAirportDetails(arr)]);
+      if(details.some(x=>!x))throw new Error('Airport directory entry unavailable');
+      const results=details.map(x=>api.registerRouteAirport(x));
+      if(results.some(x=>!x?.ok))throw new Error(results.find(x=>!x?.ok)?.error||'Could not register airport');
+      const chosen=api.chooseRouteAirports(dep,arr);
+      if(!chosen?.ok)throw new Error(chosen?.error||'Could not update flight');
+      radarManualAirport=false;
+      if(airports[arr]){
+        chooseRadarAirport(arr,false);radarData=null;radarLastFetchMs=0;
+        $('radarFilter').value=arr==='WSSS'?'CHANGI':'ALL';enableRadarModes(arr);
+      }
+      const generated=results.filter(x=>x.runwaySource==='GAME SIMULATED').map(x=>x.code);
+      routeFeedback('Applied '+dep+' → '+arr+'. '+(generated.length?'SIMULATED runway data: '+generated.join(', ')+'. ':'')+
+        'Landmark scenery updated. '+(chosen.savedFlightDifferent?'START NEW FLIGHT will replace the old route.':'You can start or resume this route.'));
+      routeClosePicker();
+    }catch(error){routeFeedback('Unable to apply route: '+error.message,true)}
+    finally{apply.disabled=false}
+  };
+  $('routeRadar').onclick=()=>{
+    const code=routeDraft.arr;
+    if(!airports[code]){routeFeedback('Select destination airport first.',true);return}
+    radarManualAirport=false;
+    routeClosePicker();chooseRadarAirport(code,false);
+    $('radarOpen').click();
+  };
+
   // Automatic ADS-B for the active departure/arrival airport (not just open RADAR).
   // The same real contacts drive radar dots and the game's approximate 3D models.
   let taxiRadarFlightAirport='',taxiRadarLastMs=0,taxiRadarFetching=false,taxiRadarLive=null;
   function taxiFlightAirport(){
     const info=gameInfo();
-    if(!info||info.st!=='play'||!['taxi','takeoff','approach','taxiIn'].includes(info.phase))return null;
-    const arrival=info.phase==='approach'||info.phase==='taxiIn';
+    if(!info||info.st!=='play'||!['taxi','takeoff','route','approach','taxiIn'].includes(info.phase))return null;
+    const arrival=info.phase==='route'||info.phase==='approach'||info.phase==='taxiIn';
     const code=String(arrival?info.rwys?.arr:info.rwys?.dep||'').toUpperCase();
     if(!/^[A-Z0-9]{4}$/.test(code))return null;
     const existing=airports[code]||SG_AIRFIELDS[code];
