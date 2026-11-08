@@ -6610,58 +6610,113 @@ window.__holdHud={update};
 
 
 <style id="jet-taxi-ui-style">
-/* Dedicated left-side taxi control rail, clear of bottom throttle and ECAM/MCDU. */
-#jet-taxi-box{display:none;position:absolute;z-index:29;left:8px;top:118px;bottom:auto;
- width:102px;max-width:27vw;box-sizing:border-box;padding:6px;
- border:1px solid #57c4e5;border-radius:10px;background:rgba(5,18,37,.92);
- box-shadow:0 3px 12px #0008;color:#e4f7ff;font:10px/1.24 Menlo,Consolas,monospace;
- pointer-events:auto;touch-action:manipulation}
-#jet-taxi-box .jet-taxi-status{color:#a2ffe0;font-weight:900;font-size:10px;white-space:normal}
-#jet-taxi-box .jet-taxi-route{color:#c7e1f1;font-size:9px;padding:3px 0 6px;overflow-wrap:anywhere}
-#jet-taxi-box .jet-taxi-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-#jet-taxi-box button{touch-action:none;user-select:none;min-width:0;background:#264462;
- border:1px solid #80bdd7;border-radius:6px;color:#f0fbff;
- font:900 11px Menlo,monospace;min-height:37px;cursor:pointer;pointer-events:auto}
-#jet-taxi-box button[data-dir="-1"]{grid-column:1}
-#jet-taxi-box button[data-dir="1"]{grid-column:2}
-#jet-taxi-box .jet-taxi-brake{grid-column:span 2;border-color:#d8b17b;color:#ffe5b9}
-#jet-taxi-box button[data-on="1"]{background:#3b6d8c;border-color:#a7ecff}
-@media(max-width:520px){#jet-taxi-box{top:116px;left:5px;width:90px;padding:4px}
- #jet-taxi-box .jet-taxi-status{font-size:9px}#jet-taxi-box .jet-taxi-route{font-size:8px}
- #jet-taxi-box button{min-height:33px;font-size:10px}}
+/* Separate two-column taxi control stacks, leaving centre runway and thrust free. */
+#jet-taxi-box{display:none;position:absolute;inset:0;z-index:29;pointer-events:none;
+ color:#e4f7ff;font:10px/1.25 Menlo,Consolas,monospace;box-sizing:border-box}
+#jet-taxi-box .jet-taxi-status,#jet-taxi-box .jet-taxi-route{position:absolute;
+ left:10px;max-width:min(210px,52vw);padding:4px 7px;border-radius:6px;
+ background:rgba(5,18,37,.85);pointer-events:none;overflow:hidden;text-overflow:ellipsis}
+#jet-taxi-box .jet-taxi-status{top:110px;white-space:nowrap;color:#a2ffe0;font-weight:900}
+#jet-taxi-box .jet-taxi-route{top:135px;white-space:normal;color:#c7e1f1;font-size:9px}
+#jet-taxi-box .jet-taxi-actions{position:absolute;inset:0;pointer-events:none}
+#jet-taxi-box .jet-taxi-side{position:absolute;top:clamp(250px,35vh,350px);
+ display:flex;flex-direction:column;gap:7px;width:86px;pointer-events:none}
+#jet-taxi-box .jet-taxi-side.left{left:8px}
+#jet-taxi-box .jet-taxi-side.right{right:8px}
+#jet-taxi-box button{display:flex;justify-content:center;align-items:center;box-sizing:border-box;
+ min-height:44px;width:100%;padding:4px 3px;cursor:pointer;pointer-events:auto;
+ touch-action:none;user-select:none;-webkit-user-select:none;
+ background:rgba(31,65,93,.95);color:#f0fbff;border:1px solid #80bdd7;
+ border-radius:9px;font:900 11px/1.1 Menlo,Consolas,monospace;box-shadow:0 3px 8px #0007}
+#jet-taxi-box .jet-taxi-brake{border-color:#e1bb7f;color:#ffe4b7;background:rgba(80,55,23,.95)}
+#jet-taxi-box button[data-on="1"]{background:#3d7991;border-color:#c9f7ff;box-shadow:0 0 10px #7ceeff77}
+#jet-taxi-box .jet-taxi-brake[data-on="1"]{background:#a15e2e;border-color:#ffd99c}
+@media(max-width:520px){
+ #jet-taxi-box .jet-taxi-status{top:105px;font-size:9px}
+ #jet-taxi-box .jet-taxi-route{top:127px;font-size:8px}
+ #jet-taxi-box .jet-taxi-side{top:clamp(220px,40vh,360px);width:74px;gap:6px}
+ #jet-taxi-box .jet-taxi-side.left{left:5px}
+ #jet-taxi-box .jet-taxi-side.right{right:5px}
+ #jet-taxi-box button{min-height:43px;font-size:10px}
+}
 @media(max-height:500px) and (orientation:landscape){
- #jet-taxi-box{top:66px;left:5px;width:min(270px,42vw);max-width:none;padding:4px 5px}
- #jet-taxi-box .jet-taxi-status{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ #jet-taxi-box .jet-taxi-status{top:51px;left:6px;font-size:9px}
  #jet-taxi-box .jet-taxi-route{display:none}
- #jet-taxi-box .jet-taxi-actions{display:flex;gap:4px;margin-top:3px}
- #jet-taxi-box button{min-height:27px;font-size:10px;flex:1;grid-column:auto!important}
+ #jet-taxi-box .jet-taxi-side{top:clamp(94px,25vh,128px);width:76px;gap:5px}
+ #jet-taxi-box button{min-height:38px;font-size:10px}
+ /* Centre the small navigation map so it does not sit over right-side brake/steer. */
+ #jet-taxi-route-map{left:50%!important;right:auto!important;top:40px!important;transform:translateX(-50%)!important}
 }
 </style>
 <script>if(window.STRINGS){Object.assign(window.STRINGS.en,{"atc.taxiOut":"TAXI TO RUNWAY {rwy}. HOLD SHORT AND LINE UP.","atc.taxiGate":"VACATE RUNWAY. TAXI TO PARKING AT {apt}."});}</script>
-<script id="jet-taxi-ui" data-fix="2026-11-mobile-steering">
+<script id="jet-taxi-ui" data-fix="2026-11-split-brakes-left-right">
 (()=>{
+ 'use strict';
  const root=document.getElementById('ui');if(!root)return;
- const box=document.createElement('div');box.id='jet-taxi-box';box.setAttribute('role','group');box.setAttribute('aria-label','Taxi guidance and steering');
- box.innerHTML='<div class="jet-taxi-status">TAXI TO RUNWAY</div><div class="jet-taxi-route">THR ↑ to move · arrows steer</div><div class="jet-taxi-actions"><button type="button" data-dir="-1" aria-label="Steer left">◀ LEFT</button><button type="button" class="jet-taxi-brake" data-brake="1">BRAKE</button><button type="button" data-dir="1" aria-label="Steer right">RIGHT ▶</button></div>';
+ const box=document.createElement('div');
+ box.id='jet-taxi-box';box.setAttribute('role','group');
+ box.setAttribute('aria-label','Taxi steering and two independent brake touch buttons');
+ box.innerHTML=`
+  <div class="jet-taxi-status">TAXI TO RUNWAY</div>
+  <div class="jet-taxi-route">THR ↑ to move · steer left / right</div>
+  <div class="jet-taxi-actions">
+   <div class="jet-taxi-side left">
+    <button type="button" class="jet-taxi-brake" data-brake="L" aria-label="Left brake" aria-pressed="false">BRAKE</button>
+    <button type="button" data-dir="-1" aria-label="Steer left" aria-pressed="false">◀ LEFT</button>
+   </div>
+   <div class="jet-taxi-side right">
+    <button type="button" class="jet-taxi-brake" data-brake="R" aria-label="Right brake" aria-pressed="false">BRAKE</button>
+    <button type="button" data-dir="1" aria-label="Steer right" aria-pressed="false">RIGHT ▶</button>
+   </div>
+  </div>`;
  root.append(box);
- const drive=(key,v)=>{window[key]=v};
  const buttons=[...box.querySelectorAll('button')];
- for(const b of buttons){
-  const key=b.dataset.brake?'__jetTaxiBrake':'__jetTaxiSteer',value=b.dataset.brake?1:Number(b.dataset.dir);
-  b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();try{b.setPointerCapture(e.pointerId)}catch{}drive(key,value);b.dataset.on='1'});
-  for(const type of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(type,()=>{drive(key,0);b.dataset.on='0'});
+ // Store touch pointers per button. Releasing one brake must not cancel a
+ // second brake still held, and braking can occur while steering.
+ const pressed=new Map();let sequence=0;
+ function sync(){
+   const held=[...pressed.values()];
+   window.__jetTaxiBrake=held.some(x=>x.b.dataset.brake)?1:0;
+   const turns=held.filter(x=>x.b.dataset.dir).sort((a,b)=>a.order-b.order);
+   window.__jetTaxiSteer=turns.length?Number(turns[turns.length-1].b.dataset.dir):0;
+   buttons.forEach(b=>{
+     const on=held.some(x=>x.b===b);
+     b.dataset.on=on?'1':'0';b.setAttribute('aria-pressed',String(on));
+   });
  }
- window.addEventListener('blur',()=>{window.__jetTaxiSteer=0;window.__jetTaxiBrake=0;buttons.forEach(b=>b.dataset.on='0')});
+ function press(b,key){pressed.set(key,{b,order:++sequence});sync()}
+ function release(key){if(pressed.delete(key))sync()}
+ function clear(){pressed.clear();sync()}
+ for(const b of buttons){
+   b.addEventListener('pointerdown',e=>{
+     if(e.button!==undefined&&e.button!==0&&e.pointerType==='mouse')return;
+     e.preventDefault();e.stopPropagation();
+     try{b.setPointerCapture(e.pointerId)}catch{}
+     press(b,'p'+e.pointerId);
+   });
+   for(const event of ['pointerup','pointercancel','lostpointercapture'])
+     b.addEventListener(event,e=>{e.preventDefault();e.stopPropagation();release('p'+e.pointerId)});
+   b.addEventListener('keydown',e=>{
+     if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();press(b,'k'+buttons.indexOf(b))}
+   });
+   b.addEventListener('keyup',e=>{
+     if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();release('k'+buttons.indexOf(b))}
+   });
+   b.addEventListener('blur',()=>release('k'+buttons.indexOf(b)));
+   b.addEventListener('click',e=>{e.stopPropagation()});
+ }
+ window.addEventListener('blur',clear);
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)clear()});
  function update(){
-  let s=null;try{s=window.__game?.info?.()}catch{};
-  const active=s?.st==='play'&&['taxi','taxiIn'].includes(s.phase)&&!s?.mcdu?.open;
-  if(!active){if(box.style.display!=='none')box.style.display='none';
-    window.__jetTaxiSteer=0;window.__jetTaxiBrake=0;
-    buttons.forEach(b=>b.dataset.on='0');return;}
-  if(box.style.display!=='block')box.style.display='block';
-  const t=s.taxi||{},f=Number.isFinite(t.headingError)?t.headingError:0;
-  box.querySelector('.jet-taxi-status').textContent=s.phase==='taxi'?`TAXI OUT · ${t.airport||''} RWY ${t.runway||''}`:`TAXI IN · ${t.airport||''} TO GATE`;
-  box.querySelector('.jet-taxi-route').textContent=`${Math.abs(f)<12?'STRAIGHT':f>0?'RIGHT '+f+'°':'LEFT '+Math.abs(f)+'°'} · ${t.distance||0} m · ${t.speedKt||0} kt`;
+   let s=null;try{s=window.__game?.info?.()}catch{}
+   const active=s?.st==='play'&&['taxi','taxiIn'].includes(s.phase)
+     &&!s?.mcdu?.open&&!window.__game?.mcduIsOpen?.();
+   if(!active){if(box.style.display!=='none')box.style.display='none';clear();return;}
+   if(box.style.display!=='block')box.style.display='block';
+   const t=s.taxi||{},f=Number.isFinite(t.headingError)?t.headingError:0;
+   box.querySelector('.jet-taxi-status').textContent=s.phase==='taxi'
+     ?`TAXI OUT · ${t.airport||''} RWY ${t.runway||''}`:`TAXI IN · ${t.airport||''} TO GATE`;
+   box.querySelector('.jet-taxi-route').textContent=`${Math.abs(f)<12?'STRAIGHT':f>0?'RIGHT '+f+'°':'LEFT '+Math.abs(f)+'°'} · ${t.distance||0} m · ${t.speedKt||0} kt`;
  }
  setInterval(update,300);update();
 })();
