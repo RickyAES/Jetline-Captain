@@ -4888,6 +4888,93 @@ function jetTrafficParallelFree(){
  jetTraffic.parallelLabels=[];
  const board=document.getElementById('jc-changi-3-rwy-board');if(board)board.remove();
 }
+
+// Clear high scenery buildings/trees from protected runway and connecting taxiway
+// geometry. Never remove ground, sky, runway pavement or cockpit meshes.
+function jetChangiProtectedLocal(x,z,margin=0){
+ const runways=[[-310,-405],[310,115]];
+ if(runways.some(([cx,cz])=>Math.abs(x-cx)<(62+margin)&&z>cz-1940-margin&&z<cz+1390+margin))return true;
+ if((Math.abs(x+175)<27+margin||Math.abs(x-168)<27+margin)&&z>-2210-margin&&z<1300+margin)return true;
+ for(const cz of [-1270,-620,100,660]){
+  if(x>-365-margin&&x<366+margin&&Math.abs(x)>90&&Math.abs(z-cz)<29+margin)return true;
+ }
+ return false;
+}
+function jetChangiClearObstacles(){
+ if(!It?.scene||!_t)return 0;
+ let cleared=0;
+ It.scene.updateMatrixWorld?.(true);
+ const protectedRoots=new Set([jetTraffic?.parallelGroup,jetTraffic?.plane,jetTraffic?.lights,...jetTraffic.liveModels.values()].filter(Boolean));
+ It.scene.traverse?.(node=>{
+  if(!node?.isMesh||!node.visible||!node.geometry||protectedRoots.has(node))return;
+  let parent=node.parent;
+  while(parent&&parent!==It.scene){if(protectedRoots.has(parent))return;parent=parent.parent;}
+  const g=node.geometry;
+  if(!g.boundingBox)g.computeBoundingBox?.();
+  const bb=g.boundingBox;if(!bb)return;
+  const size=bb.max.clone().sub(bb.min),centre=bb.min.clone().add(bb.max).multiplyScalar(.5);
+  const wscale=node.getWorldScale?.(new K())||new K(1,1,1);
+  const h=Math.abs(size.y*wscale.y),hx=Math.abs(size.x*wscale.x),hz=Math.abs(size.z*wscale.z);
+  if(h<7||h>450||hx>850||hz>850)return;
+  const world=node.localToWorld(centre);
+  if(!Number.isFinite(world.x)||!Number.isFinite(world.z))return;
+  const local=Js(_t,world.x,world.z);
+  if(jetChangiProtectedLocal(local[0],local[1],Math.min(40,Math.max(hx,hz)*.45))){node.visible=false;cleared++;}
+ });
+ return cleared;
+}
+// Build continuous pavement, centreline and crossing stop bars. These game
+// taxiway links are schematic: they do not assert real taxi instructions.
+function jetChangiBuildTaxiNetwork(addBox,group){
+ const apron=new Xt({color:0x333f48,roughness:.95});
+ const asphalt=new Xt({color:0x46545e,roughness:.96});
+ const centre=new be({color:0xffd455,depthWrite:false});
+ const edge=new be({color:0x8ebad3,depthWrite:false});
+ const white=new be({color:0xeef4f6,depthWrite:false});
+ const red=new be({color:0xdd3238,depthWrite:false});
+ const corridor=(-2210+1350)/2,span=1350-(-2210);
+ // Western taxiway W side, central T/D service area and eastern A side.
+ // Spines have room for large airliners to move and connect at four crossings.
+ for(const x of [-174,168]){
+  addBox(x,corridor,39,span,.24,.37,apron);
+  addBox(x,corridor,33,span,.52,.14,asphalt);
+  for(let z=-2160;z<=1290;z+=120){addBox(x,z,1.0,28,.74,.08,centre);}
+  for(const dx of [-17,17])addBox(x+dx,corridor,.85,span,.68,.07,edge);
+ }
+ // Physical taxiway connections across 02L, 02C and 02R. Runway crossing
+ // positions are deliberately separate from the aircraft's initial 02C hold.
+ for(const z of [-1270,-620,100,660]){
+  const x0=-356,x1=356,width=x1-x0,cx=(x0+x1)/2;
+  addBox(cx,z,width,40,.25,.30,apron);
+  addBox(cx,z,width,32,.54,.15,asphalt);
+  for(let x=x0+15;x<x1-5;x+=100)addBox(x,z,28,1.2,.76,.08,centre);
+  for(const dz of [-18,18])addBox(cx,z+dz,width,.8,.68,.06,edge);
+  // A stop bar sits before each crossing, on either approach. Yellow hold
+  // double-bars cannot be mistaken for a real green ATC clearance.
+  for(const x of [-370,-240,-65,65,240,370]){
+   if(Math.abs(x)>370)continue;
+   for(const shift of [-3,3])addBox(x+shift,z,1.15,30,.84,.08,white);
+  }
+  // Both parallel taxiway intersections have rounded-looking paved bulbs.
+  for(const x of [-174,168]){
+   const disk=new Tt(new an(23,23,.19,20),asphalt);
+   const c=qi(_t,x,z);disk.position.set(c[0],.66,c[1]);group.add(disk);
+   for(let zz of [-16,16])addBox(x,z+zz,40,.65,.86,.07,centre);
+  }
+ }
+ // Short connectors from the west runway to W spine, and the eastern A
+ // spine to runway 3. Taxiways join the entire paved three-runway network.
+ for(const z of [-1840,-250,1020]){
+  for(const [a,b] of [[-310,-174],[168,310]]){
+   const x=(a+b)/2;
+   addBox(x,z,Math.abs(a-b)+7,36,.28,.32,apron);
+   addBox(x,z,Math.abs(a-b)+7,30,.56,.16,asphalt);
+   for(let xx=Math.min(a,b);xx<=Math.max(a,b);xx+=58)addBox(xx,z,17,.85,.78,.07,centre);
+  }
+ }
+ group.userData.taxiwayNetwork='Schematic continuous W/T/A taxiways, game only';
+}
+
 function jetTrafficParallelMake(){
  if(!It?.scene||!_t||jetTrafficActiveAirport()!=='WSSS')return;
  if(jetTraffic.parallelScene===It.scene&&jetTraffic.parallelGroup)return;
@@ -4901,23 +4988,26 @@ function jetTrafficParallelMake(){
   const point=qi(_t,x,z);mesh.position.set(point[0],y,point[1]);
   mesh.rotation.y=rot;group.add(mesh);return mesh;
  };
- // The original 02C runway and its taxiway remain untouched and playable.
- // 02L is staggered north/west; 02R is east/right, matching the CAAS threshold order.
+ // Original 02C remains the playable runway. 02L/02R are raised visual
+ // pavement surfaces with accurate relative west/east order and threshold stagger.
  for(const id of ['02L','02R']){
-  const lane=jetChangiRunways[id];
-  const z=lane.z-295;
-  addBox(lane.x,z,75,3140,.24,.50,shoulder);
-  addBox(lane.x,z,59,3125,.52,.45,pavement);
-  for(const side of [-28,28])addBox(lane.x+side,z,1.8,3080,.80,.13,edge);
-  for(let tick=-1630;tick<=1150;tick+=92)addBox(lane.x,lane.z+tick,2.7,34,.83,.13,centre);
-  for(const wing of [-1,1])for(const offset of [8,17])
-   addBox(lane.x+wing*offset,lane.z+42,3,47,.86,.14,centre);
-  for(const side of [-1,1])addBox(lane.x+side*25,lane.z-148,4,60,.86,.13,centre);
-  // Scenery-only taxiway connections. They are not routing or ATC clearances.
-  const innerX=id==='02L'?-150:155;
-  addBox(innerX,lane.z-880,Math.abs(lane.x)+40,29,.27,.3,shoulder);
-  addBox(innerX,lane.z-880,Math.abs(lane.x)+40,22,.52,.18,taxiMat);
+  const lane=jetChangiRunways[id],z=lane.z-280;
+  addBox(lane.x,z,84,3200,.16,.46,shoulder);
+  addBox(lane.x,z,61,3175,.51,.37,pavement);
+  // Continuous edges and centreline dashes along the full runway.
+  for(const dx of [-29,29])addBox(lane.x+dx,z,1.6,3110,.88,.09,edge);
+  for(let tick=-1560;tick<=1230;tick+=112)addBox(lane.x,lane.z+tick,2.0,37,.92,.08,centre);
+  // Threshold piano keys and touchdown zone bars (schematic, 3D geometry).
+  for(const dz of [30,45])for(const off of [-23,-15,-7,7,15,23])
+   addBox(lane.x+off,lane.z+dz,3.5,12,.94,.08,centre);
+  for(const dz of [-190,-410,-800])for(const dx of [-22,22])
+   addBox(lane.x+dx,lane.z+dz,3.0,39,.94,.08,centre);
+  // Low-profile runway edge lights, evenly spaced along both sides.
+  const lamp=new be({color:0xe9f5ff});
+  for(let tick=-1530;tick<=1250;tick+=245)for(const dx of [-37,37])
+   addBox(lane.x+dx,lane.z+tick,.65,1.2,1.12,.35,lamp);
  }
+ jetChangiBuildTaxiNetwork(addBox,group);
  const host=document.getElementById('ui')||document.body;
  for(const id of ['02L','02C','02R']){
   const lane=jetChangiRunways[id],el=document.createElement('div');
@@ -4927,6 +5017,7 @@ function jetTrafficParallelMake(){
   host.appendChild(el);jetTraffic.parallelLabels.push({x:lane.x,z:lane.z-170,id,el});
  }
  It.scene.add(group);jetTraffic.parallelGroup=group;
+ jetTraffic.changiClearedCount=jetChangiClearObstacles();
  jetTrafficThreeRunwayBoard();
 }
 function jetTrafficThreeRunwayBoard(){
@@ -4935,7 +5026,7 @@ function jetTrafficThreeRunwayBoard(){
  el=document.createElement('div');el.id='jc-changi-3-rwy-board';
  el.setAttribute('aria-label','Changi three runways estimated traffic');
  el.style.cssText='position:absolute;right:5px;top:clamp(76px,17vh,135px);z-index:19;pointer-events:none;width:min(172px,42vw);box-sizing:border-box;padding:5px 6px;border-radius:8px;border:1px solid #58cce6;background:#061526d9;color:#ecf6fc;font:700 10px/1.35 system-ui,sans-serif;text-shadow:0 1px #000;display:none';
- el.innerHTML='<div style="font-weight:900;color:#83ecfa;font-size:10px;letter-spacing:.04em;margin-bottom:3px">WSSS · 3 RUNWAYS</div><div class="jc-runway-lines"></div><div style="color:#b1cfdd;font-size:8px;margin-top:3px">ARR? / DEP? = radar track estimates</div>';
+ el.innerHTML='<div style="font-weight:900;color:#83ecfa;font-size:10px;letter-spacing:.04em;margin-bottom:3px">WSSS · 3 RUNWAYS</div><div class="jc-runway-lines"></div><div style="color:#b1cfdd;font-size:8px;margin-top:3px">ARR? / DEP? = track estimates · taxiways schematic</div>';
  (document.getElementById('ui')||document.body).appendChild(el);
  return el;
 }
@@ -5077,22 +5168,18 @@ function jetTrafficApplyLivery(group,a){
  const isSIA=jetTrafficIsSingapore(a);
  data.airline=isSIA?'SINGAPORE_AIRLINES':'GENERIC';
  data.callsign=jetTrafficCallsign(a);
- const setHex=(mat,hex)=>{if(mat?.color)mat.color.setHex(hex);};
- setHex(data.bodyMat,isSIA?0xf7fbff:(a?.onGround?0xffd87c:0x38d8ff));
- setHex(data.bellyMat,isSIA?0x102d5e:(a?.onGround?0xffb85c:0x9deaff));
- setHex(data.wingMat,isSIA?0xdee7ef:(a?.onGround?0xffb85c:0x9deaff));
- setHex(data.tailMat,isSIA?0x123f82:0x264f79);
- setHex(data.engineMat,isSIA?0x183760:0x264f79);
- setHex(data.stripeGoldMat,isSIA?0xd8a52c:0x264f79);
- setHex(data.stripeBlueMat,isSIA?0x0f3d82:0x264f79);
- if(data.airlineBadge){
+ // The 3D materials remain painted in their true aircraft colours whether
+ // on ground or airborne; visual traffic state is communicated by label.
+ if(data.airlineBadge && data.liveryKey!==(data.callsign+'|'+data.airline)){
+  data.liveryKey=data.callsign+'|'+data.airline;
   data.airlineBadge.textContent=isSIA?'SINGAPORE AIRLINES':'LIVE '+data.callsign;
   data.airlineBadge.style.borderColor=isSIA?'#d6b357':'#36d7f5';
   data.airlineBadge.style.color=isSIA?'#fff1bf':'#b5faff';
   data.airlineBadge.style.background=isSIA?'#17284ae8':'#061a33e8';
  }
+ if(data.landingGear)data.landingGear.visible=!!a.onGround||
+  (Number.isFinite(a.altFt)&&a.altFt<2000&&a.phase!=='CLIMBING');
 }
-
 function jetTrafficAccept(data){
  if(!data||!Array.isArray(data.aircraft))return false;
  const airport=String(data.airport||'').toUpperCase(),active=jetTrafficActiveAirport();
@@ -5331,38 +5418,133 @@ function jetTrafficDrawND(ctx,width,height,state,project,view){
  ctx.restore();
 }
 
+// A350-family inspired high-detail THREE-D geometry. 3D mesh, not a photo
+// billboard; decals are only markings mounted on the volumetric aircraft.
 function jetTrafficBuildLivePlane(a){
- const group=new me(),onGround=!!a.onGround;
- const bodyMat=new Xt({color:0xf7fbff,roughness:.42,metalness:.18});
- const bellyMat=new Xt({color:0x102d5e,roughness:.46,metalness:.12});
- const wingMat=new Xt({color:0xdfe7ef,roughness:.48,metalness:.14});
- const tailMat=new Xt({color:0x123f82,roughness:.44,metalness:.14});
- const engineMat=new Xt({color:0x183760,roughness:.52,metalness:.12});
- const stripeBlueMat=new Xt({color:0x0f3d82,roughness:.38,metalness:.12});
- const stripeGoldMat=new Xt({color:0xd8a52c,roughness:.34,metalness:.16});
- const navRed=new be({color:0xff535b}),navGreen=new be({color:0x37ff9c});
- const body=new Tt(new Ae(3.7,3.5,34),bodyMat);body.position.y=4.0;group.add(body);
- const belly=new Tt(new Ae(3.9,1.2,31),bellyMat);belly.position.set(0,2.3,0);group.add(belly);
- const nose=new Tt(new Ae(3.5,2.1,5.6),new Xt({color:0xf7fbff,roughness:.32,metalness:.20}));nose.position.set(0,5.2,-15.2);group.add(nose);
- const wings=new Tt(new Ae(37,0.75,5.5),wingMat);wings.position.set(0,4.1,-1.4);group.add(wings);
- const tailFin=new Tt(new Ae(1.5,8.5,6.2),tailMat);tailFin.position.set(0,8.2,13.5);group.add(tailFin);
- const stab=new Tt(new Ae(12.5,0.65,4.2),wingMat);stab.position.set(0,6.9,14.2);group.add(stab);
- const stripeBlue=new Tt(new Ae(3.85,0.33,26),stripeBlueMat);stripeBlue.position.set(0,4.55,-1.6);group.add(stripeBlue);
- const stripeGold=new Tt(new Ae(3.86,0.22,26),stripeGoldMat);stripeGold.position.set(0,4.07,-1.6);group.add(stripeGold);
- const tailGold=new Tt(new Ae(0.3,2.9,4.5),stripeGoldMat);tailGold.position.set(-0.4,8.7,13.4);group.add(tailGold);
- for(const x of [-8.5,8.5]){
-  const engine=new Tt(new Ae(3.2,2.6,7.4),engineMat);engine.position.set(x,2.2,-2.8);group.add(engine);
+ const group=new me();
+ const isSIA=jetTrafficIsSingapore(a);
+ const white=new Xt({color:0xf4f6f7,metalness:.18,roughness:.39});
+ const silver=new Xt({color:0xb6c7d2,metalness:.45,roughness:.45});
+ const navy=new Xt({color:isSIA?0x0e2853:0x27648a,metalness:.23,roughness:.38});
+ const gold=new Xt({color:isSIA?0xc99b39:0x4cb8de,metalness:.32,roughness:.36});
+ const dark=new Xt({color:0x12263a,metalness:.15,roughness:.48});
+ const wing=new Xt({color:isSIA?0xe5eaf0:0xa9d6e5,metalness:.25,roughness:.45});
+ const black=new Xt({color:0x1b222b,roughness:.95});
+ function add(geo,mat,x=0,y=0,z=0){const m=new Tt(geo,mat);m.position.set(x,y,z);group.add(m);return m;}
+ // Volumetric 46m fuselage, carefully tapered fore/aft ends.
+ const fuselage=add(new an(2.45,2.45,43,24,1),white,0,5.05,0);
+ fuselage.rotation.x=Math.PI/2;
+ const nose=add(new Nn(1,18,12),white,0,5.05,-23.0);nose.scale.set(2.45,2.45,6.1);
+ const rear=add(new Nn(1,18,12),white,0,5.05,21.8);rear.scale.set(2.26,2.35,6.6);
+ const cone=add(new Nn(1,14,10),white,0,5.10,26.5);cone.scale.set(1.30,1.5,5.0);
+ // Sculpted swept wings: each is a true tapered prism with thickness and dihedral.
+ function sculptWing(sign,span,lead0,lead1,chord0,chord1,y0,dihedral,mat){
+  const geo=new Ae(1,1,1);const pos=geo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+   const u=pos.getX(i)+.5,v=pos.getZ(i)+.5,top=pos.getY(i);
+   const x=sign*(2.0+span*u),z=lead0+(lead1-lead0)*u+v*(chord0+(chord1-chord0)*u);
+   const y=y0+dihedral*u+top*(.60-.43*u);
+   pos.setXYZ(i,x,y,z);
+  }
+  pos.needsUpdate=true;geo.computeVertexNormals();return add(geo,mat);
  }
- const port=new Tt(new Ae(1.4,.7,1.6),navRed);port.position.set(-18,4.0,-2);group.add(port);
- const star=new Tt(new Ae(1.4,.7,1.6),navGreen);star.position.set(18,4.0,-2);group.add(star);
+ for(const sign of [-1,1]){
+  sculptWing(sign,31,-10,2.5,16,4.5,4.35,4.4,wing);
+  sculptWing(sign,10,14.2,19.8,11,4.0,7.5,1.3,wing);
+  // Curved upright wingtip fence, echoing the A350 swept tip.
+  const tip=add(new Nn(1,8,8),navy,sign*32.5,9.25,5.1);
+  tip.scale.set(.6,2.7,1.6);tip.rotation.z=-sign*.25;
+ }
+ // Tapered vertical tail, thick enough to have two painted sides.
+ const fin=new Ae(1,1,1),fp=fin.attributes.position;
+ for(let i=0;i<fp.count;i++){
+  const u=fp.getY(i)+.5,v=fp.getZ(i)+.5,t=fp.getX(i);
+  fp.setXYZ(i,t*(1.2-.45*u),7.1+u*12,15.5+u*6.3+v*(12.2-u*7.0));
+ }
+ fp.needsUpdate=true;fin.computeVertexNormals();add(fin,navy);
+ // TWO turbine engines with dark inlet cores and rounded nacelles.
+ for(const sign of [-1,1]){
+  const x=sign*9.4,z=-4.0;
+  const nacelle=add(new an(2.05,1.8,6.5,18,1),white,x,1.9,z);
+  nacelle.rotation.x=Math.PI/2;
+  const inlet=add(new an(1.88,1.88,.24,18),silver,x,1.91,z-3.15);inlet.rotation.x=Math.PI/2;
+  const fan=add(new an(1.53,1.53,.10,18),dark,x,1.91,z-3.28);fan.rotation.x=Math.PI/2;
+  add(new Ae(.7,1.3,2.7),silver,x,3.25,z);
+ }
+ // Continuous airline navy and thin gold fuselage bands, both sides.
+ for(const sign of [-1,1]){
+  add(new Ae(.09,.56,37),navy,sign*2.48,5.22,-.5);
+  add(new Ae(.10,.20,37),gold,sign*2.49,4.82,-.5);
+ }
+ // Photographic reference: dark passenger windows and dark cockpit glazing.
+ if(isSIA){
+  const glassMat=new be({color:0x14335f});
+  for(const sign of [-1,1]){
+   for(let z=-18;z<=18;z+=2.15){const win=add(new Nn(1,7,5),glassMat,sign*2.38,5.9,z);win.scale.set(.09,.20,.28);}
+   const pit=add(new Nn(1,10,8),dark,sign*1.28,6.12,-26.3);
+   pit.scale.set(.40,.40,1.42);pit.rotation.y=sign*.22;
+  }
+ }
+ // Landing gear wheels are real 3D cylinders, deployed when on ground or
+ // when the ADS-B aircraft is below the game's indicative approach height.
+ const gear=new me();gear.name='JC_3D_LANDING_GEAR';group.add(gear);
+ const strutMat=new Xt({color:0xa5aeb7,metalness:.65,roughness:.35});
+ function wheelset(x,z,dual){
+  const leg=new Tt(new an(.23,.27,3.6,9),strutMat);leg.position.set(x,2.05,z);gear.add(leg);
+  for(const d of (dual?[-.78,.78]:[0])){
+   const tyre=new Tt(new an(.79,.79,.56,12),black);tyre.rotation.z=Math.PI/2;tyre.position.set(x+d,.63,z);gear.add(tyre);
+  }
+ }
+ wheelset(0,-23.7,false);wheelset(-4.3,3.6,true);wheelset(4.3,3.6,true);
  group.userData={source:'LIVE_ADSB',callsign:jetTrafficCallsign(a),icao24:a.id,approximate:true,
-  bodyMat,bellyMat,wingMat,tailMat,engineMat,stripeBlueMat,stripeGoldMat};
+  airline:isSIA?'SINGAPORE_AIRLINES':'OTHER',bodyMat:white,bellyMat:white,wingMat:wing,
+  tailMat:navy,engineMat:white,stripeGoldMat:gold,stripeBlueMat:navy,landingGear:gear};
+ // Tail badge and airline lettering are textures on the actual fuselage/tail
+ // surface. Drawn via CanvasTexture; never a free-standing 2D aircraft image.
+ if(isSIA){
+  function decalCanvas(kind){
+   const canvas=document.createElement('canvas');canvas.width=kind==='name'?768:384;canvas.height=kind==='name'?128:384;
+   const ctx=canvas.getContext('2d');if(!ctx)return null;
+   ctx.clearRect(0,0,canvas.width,canvas.height);
+   if(kind==='name'){
+    ctx.fillStyle='#153363';ctx.font='bold 49px Arial';
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('SINGAPORE AIRLINES',385,66);
+   }else{
+    // Gold bird-like emblem based on the user supplied SIA photograph.
+    ctx.strokeStyle='#e7bc65';ctx.fillStyle='#e7bc65';ctx.lineWidth=19;ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(58,160);ctx.bezierCurveTo(116,95,189,64,296,34);
+    ctx.bezierCurveTo(246,93,211,140,182,191);ctx.bezierCurveTo(158,218,142,238,108,248);
+    ctx.lineTo(82,233);ctx.quadraticCurveTo(119,193,150,155);ctx.quadraticCurveTo(95,184,58,160);ctx.fill();
+    ctx.strokeStyle='#123a74';ctx.lineWidth=13;
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(112+i*20,187+i*5);ctx.lineTo(222+i*13,89+i*13);ctx.stroke();}
+    ctx.strokeStyle='#e7bc65';ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(78,241);ctx.lineTo(123,278);ctx.lineTo(203,278);ctx.stroke();
+   }
+   return new li(canvas);
+  }
+  const nameTex=decalCanvas('name'),tailTex=decalCanvas('tail');
+  if(nameTex){
+   const mat=new be({map:nameTex,transparent:true,depthWrite:false,side:2});
+   for(const sign of [-1,1]){
+    const title=add(new Ge(17.5,2.55),mat,sign*2.20,6.45,-8.2);
+    title.rotation.y=sign*Math.PI/2;
+   }
+  }
+  if(tailTex){
+   const mat=new be({map:tailTex,transparent:true,depthWrite:false,side:2});
+   for(const sign of [-1,1]){
+    const emblem=add(new Ge(7.4,7.3),mat,sign*.76,13.45,23.5);
+    emblem.rotation.y=sign*Math.PI/2;
+   }
+  }
+ }
  const label=document.createElement('div');label.className='jc-live-flight-tag';
- label.setAttribute('aria-hidden','true');label.style.cssText='position:absolute;z-index:14;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:#061a33e8;color:#b5faff;border:1px solid #36d7f5;border-radius:5px;padding:2px 4px;font:800 10px system-ui;text-shadow:0 1px #000;display:none';
+ label.setAttribute('aria-hidden','true');
+ label.style.cssText='position:absolute;z-index:14;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:#061a33e8;color:#b5faff;border:1px solid #36d7f5;border-radius:5px;padding:2px 4px;font:800 10px system-ui;text-shadow:0 1px #000;display:none';
  (document.getElementById('ui')||document.body).appendChild(label);
  group.userData.trafficTag=label;
  const badge=document.createElement('div');badge.className='jc-live-airline-tag';
- badge.setAttribute('aria-hidden','true');badge.style.cssText='position:absolute;z-index:13;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:#17284ae8;color:#fff1bf;border:1px solid #d6b357;border-radius:999px;padding:1px 6px;font:700 9px system-ui;display:none';
+ badge.setAttribute('aria-hidden','true');
+ badge.style.cssText='position:absolute;z-index:13;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:#17284ae8;color:#fff1bf;border:1px solid #d6b357;border-radius:999px;padding:1px 6px;font:700 9px system-ui;display:none';
  (document.getElementById('ui')||document.body).appendChild(badge);
  group.userData.airlineBadge=badge;
  jetTrafficApplyLivery(group,a);
@@ -5416,8 +5598,8 @@ function jetTrafficDrawLiveContacts(dt){
  const now=Date.now();
  const prioritized=jetTraffic.live.filter(a=>a.id&&Number.isFinite(a.lat)&&Number.isFinite(a.lon))
   .filter(a=>(a.km<=14&&(a.onGround||a.altFt!=null&&a.altFt<7000)))
-  .sort((a,b)=>(a.id===jetTraffic.arrivalId?-2:a.onGround?0:1)-
-   (b.id===jetTraffic.arrivalId?-2:b.onGround?0:1)||a.km-b.km).slice(0,28);
+  .sort((a,b)=>(a.id===jetTraffic.arrivalId?-5:jetTrafficIsSingapore(a)?-2:a.onGround?0:1)-
+   (b.id===jetTraffic.arrivalId?-5:jetTrafficIsSingapore(b)?-2:b.onGround?0:1)||a.km-b.km).slice(0,12);
  const visible=new Set();
  const cameraCanvas=document.querySelector('#game canvas');
  const rect=cameraCanvas?.getBoundingClientRect();
