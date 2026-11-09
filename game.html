@@ -5148,7 +5148,7 @@ function jetTrafficThreeRunwayBoardTick(dt){
  if(!board||jetTrafficActiveAirport()!=='WSSS'||E.state!=='play'){
   if(board)board.style.display='none';return;
  }
- board.style.display='block';
+ board.style.display='block'; // CSS only reveals it when its mode-specific RWY INFO button is opened.
  jetChangiRwyActivity.lastMs+=Math.max(0,Number(dt)||0);
  if(jetChangiRwyActivity.lastMs<1.2)return;
  jetChangiRwyActivity.lastMs=0;
@@ -5169,21 +5169,21 @@ function jetTrafficThreeRunwayBoardTick(dt){
  const sia=surface.filter(jetTrafficIsSingapore);
  const summary=document.createElement('div');
  summary.style.cssText='padding:4px 0;border-top:1px solid #426478;color:#ffe9ac;font:800 9px/1.4 system-ui';
- summary.textContent='ADS-B GROUND '+surface.length+' · SIA '+sia.length;
+ summary.textContent='GROUND '+surface.length+'  ·  SIA '+sia.length+'  ·  POSITIONED';
  wrap.appendChild(summary);
  const names=document.createElement('div');
  names.style.cssText='font:650 9px/1.3 system-ui;color:#bbebfa;word-break:break-word';
  names.textContent=sia.length?sia.slice(0,5).map(a=>jetTrafficCallsign(a)+(a.speedKt<3?' STOPPED':' TAXI')).join(' · '):
-  'No positioned SIA ground aircraft reported';
+  'No SIA ground positions reported';
  wrap.appendChild(names);
  for(const id of ['02L','02C','02R']){
   const row=document.createElement('div');
-  row.style.cssText='border-top:1px solid #29485d;padding:3px 0;line-height:1.25';
-  const nearby=by[id].sort((a,b)=>a.d-b.d).slice(0,4);
+  row.className='jc-runway-entry';row.style.cssText='border-top:1px solid #29485d;padding:6px 2px;line-height:1.3;display:grid;grid-template-columns:60px minmax(0,1fr);gap:7px;align-items:start';
+  const ranked=by[id].sort((a,b)=>a.d-b.d);const nearby=ranked.slice(0,2);
   const top=document.createElement('strong');top.style.color=id==='02C'?'#93fff0':'#e8eefb';
   top.textContent='RWY '+id+(id==='02R'?'  ⚠':'');row.appendChild(top);
   const details=document.createElement('div');details.style.color=nearby.length?'#ffe7a4':'#9cb6c9';
-  details.textContent=nearby.length?nearby.map(a=>a.direction+' '+a.phase+' '+a.name).join(' · '):'No matched contact';row.appendChild(details);
+  details.className='jc-runway-contacts';details.textContent=nearby.length?nearby.map(a=>a.direction+' '+a.phase+' '+a.name).join(' / ')+(ranked.length>2?' +'+(ranked.length-2)+' more':''):'No matching traffic';row.appendChild(details);
   wrap.appendChild(row);
  }
 }
@@ -5534,8 +5534,8 @@ function jetTrafficRefreshHud(){
    (dep?(dep.onGround?'ON RUNWAY '+Math.round(dep.speedKt)+' KT':'CLIMB '+Math.round(dep.altFt||0)+' FT'):'POSITION NOT CURRENT')+
    ' · GAME WAIT, NOT ATC CLEARANCE';
  }else if(jetTraffic.clear){
-  status.textContent='🟢 GAME LINEUP AVAILABLE · RWY '+(pt.depRwy||'02C')+' · NOT ATC CLEARANCE';
-  radar.textContent=jetTrafficLiveFresh()?'📡 NO MATCHED CONFLICT ON PLAYER RUNWAY · SIMULATED CLEARANCE':'📡 ADS-B UNAVAILABLE · SIMULATED CLEARANCE';
+  status.textContent='🟢 RWY '+(pt.depRwy||'02C')+' · GAME LINEUP · NOT ATC CLEARANCE';
+  radar.textContent=jetTrafficLiveFresh()?'📡 No matching runway conflict (estimated)':'📡 ADS-B unavailable · game estimate only';
  }else if(arr){
   status.textContent='🔴 HOLD SHORT · ARRIVAL '+jetTrafficCallsign(arr)+' · 02C/20C';
   radar.textContent='📡 SAME ADS-B ARRIVAL '+jetTrafficCallsign(arr)+' · '+Math.round(arr.altFt||0)+' FT · ESTIMATED RUNWAY';
@@ -6437,7 +6437,29 @@ function jcSurfaceDraw(force=false){
  const pilotLbl=overlay.querySelector('#jc-map-pilot');pilotLbl.textContent=`YOU · ${Math.round((E.plane.v||0)*wn)} KT`;
  overlay.querySelector('.jc-map-hint').textContent=isWSSS?'WSSS 3 runways · taxiways schematic':'Game runway layout · geometry may be simulated';
 }
+let jcDesktopRunwayOpen=false;
+function jcDesktopRunwayToggle(next){
+ jcDesktopRunwayOpen=next==null?!jcDesktopRunwayOpen:!!next;
+ document.body.classList.toggle('jc-desktop-runway-open',jcDesktopRunwayOpen);
+ const btn=document.getElementById('jc-desktop-runways-btn');
+ if(btn){btn.textContent=jcDesktopRunwayOpen?'✕ CLOSE RWY INFO':'☷ RWY INFO';btn.setAttribute('aria-expanded',String(jcDesktopRunwayOpen));}
+}
+function jcDesktopRunwayUiTick(){
+ let btn=document.getElementById('jc-desktop-runways-btn');
+ if(!btn){
+  btn=document.createElement('button');btn.type='button';btn.id='jc-desktop-runways-btn';
+  btn.textContent='☷ RWY INFO';btn.setAttribute('data-ui','true');
+  btn.setAttribute('aria-expanded','false');btn.setAttribute('aria-label','Show Changi runway traffic details');
+  btn.addEventListener('pointerdown',ev=>ev.stopPropagation());
+  btn.addEventListener('click',ev=>{ev.preventDefault();ev.stopPropagation();jcDesktopRunwayToggle()});
+  document.body.appendChild(btn);
+ }
+ const show=E.state==='play'&&!jcPanelIsMobile()&&jetTrafficActiveAirport()==='WSSS'&&!je.open;
+ btn.style.display=show?'block':'none';
+ if(!show&&jcDesktopRunwayOpen)jcDesktopRunwayToggle(false);
+}
 function jcAirportUiTick(){
+ jcDesktopRunwayUiTick();
  if(!document.getElementById('jc-global-map-button')){
   const button=document.createElement('button');button.type='button';button.id='jc-global-map-button';
   button.setAttribute('data-ui','true');button.textContent='▣ RUNWAY MAP';
@@ -8836,6 +8858,36 @@ body.jc-mobile-panel.jc-scene-min #jc-mini-runways-btn[aria-expanded="true"] {
  body.jc-mobile-panel.jc-scene-min #jc-flight-min-overlay .jc-min-buttons {grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;}
  body.jc-mobile-panel.jc-scene-min #jc-flight-min-overlay button {min-height:27px;font-size:9px;padding:2px 1px;}
  body.jc-mobile-panel.jc-scene-min.jc-runway-details-visible #jc-changi-3-rwy-board {top:42px!important;max-height:42dvh!important;}
+}
+</style>
+
+<style id="jc-desktop-runway-clean-20261109">
+/* Desktop cockpit stays docked on the RIGHT. These traffic controls live on the LEFT scene only. */
+#jc-desktop-runways-btn {display:none;position:fixed;left:10px;top:calc(23vh + 41px);z-index:48;
+ border:1px solid #57bcd8;border-radius:8px;background:#0b2b3def;color:#dcfaff;
+ padding:7px 10px;font:800 11px system-ui,sans-serif;box-shadow:0 4px 11px #0008;cursor:pointer;max-width:210px;}
+body.jc-desktop-layout #jc-changi-3-rwy-board {display:none!important;visibility:hidden!important;pointer-events:none!important;}
+body.jc-desktop-layout.jc-desktop-runway-open:not(.jc-mcdu-expanded) #jc-changi-3-rwy-board {
+ display:block!important;visibility:visible!important;pointer-events:auto!important;
+ position:fixed!important;left:10px!important;right:auto!important;top:calc(23vh + 81px)!important;
+ width:min(244px,35vw)!important;max-width:calc(53vw - 20px)!important;
+ max-height:min(52vh,470px)!important;overflow-y:auto!important;z-index:49!important;
+ border:1px solid #60bdd6!important;border-radius:10px!important;
+ background:rgba(5,20,35,.97)!important;box-shadow:0 7px 22px #000b!important;
+ padding:9px 10px!important;font-size:10px!important;line-height:1.35!important;}
+#jc-changi-3-rwy-board .jc-runway-entry{min-width:0;}
+#jc-changi-3-rwy-board .jc-runway-contacts{overflow-wrap:anywhere;white-space:normal;}
+body.jc-desktop-layout #ui.playing #jet-runway-traffic {
+ left:29%!important;top:clamp(68px,13vh,112px)!important;
+ max-width:min(310px,29vw)!important;width:auto!important;
+ font:800 10px/1.25 system-ui,sans-serif!important;z-index:35!important;}
+body.jc-desktop-layout #ui.playing #jet-runway-traffic .jc-signal {
+ padding:5px 8px!important;font-size:10px!important;border-radius:7px!important;box-shadow:0 2px 8px #0008!important;}
+body.jc-desktop-layout #ui.playing #jet-runway-traffic .jc-live {display:none!important;}
+body.jc-mcdu-expanded #jc-desktop-runways-btn {display:none!important;}
+@media (max-height:550px){
+ body.jc-desktop-layout.jc-desktop-runway-open #jc-changi-3-rwy-board{max-height:39vh!important;top:calc(23vh + 63px)!important;}
+ #jc-desktop-runways-btn{padding:4px 7px;font-size:10px;top:calc(23vh + 33px);}
 }
 </style>
 </body>

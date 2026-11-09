@@ -527,7 +527,7 @@
   // LIVE AIRPORT RADAR — a separate Vercel function proxies the provider (no browser CORS).
   // Never generate mock aircraft when the feed is empty or unavailable.
   let airports={}, radarAirport='SGALL', radarOpenState=false, radarManualAirport=false;
-  let radarData=null, radarSelected=null, radarBusy=false, radarPoll=null, radarRequestId=0, radarAnim=0, radarLastFetchMs=0;
+  let radarData=null, radarSelected=null, radarBusy=false, radarPoll=null, radarRequestId=0, radarAnim=0, radarLastFetchMs=0, radarLastFailMs=0;
   let radarScale=25;
   const radarZoomSteps=[5,10,15,25,50,75,100], radarTrails=new Map();
   // Verified points are stored in radarTrails. The following animated trail is
@@ -1168,7 +1168,8 @@ function airportETA(p){
 function animatedPlane(p){
   if(!p||!Number.isFinite(Number(p.lat))||!Number.isFinite(Number(p.lon)))return p;
   const now=Date.now();
-  const elapsed=Math.min(55,Math.max(0,(now-radarLastFetchMs)/1000));
+  // Avoid long dead-reckoning flyovers when a provider report is stale.
+  const elapsed=Math.min(p.groundAtAirport?3:8,Math.max(0,(now-radarLastFetchMs)/1000));
   const speed=Number(p.speedKt),heading=Number(p.heading);
   const hasMovement=Number.isFinite(speed)&&speed>0.5&&Number.isFinite(heading);
   // Actual knot-derived movement; no artificial time acceleration or slowdown.
@@ -1309,7 +1310,7 @@ function drawAircraftTrail(ctx,p,g,now){
       radarLastPaint=now;
       drawRadar();
     }
-    if(now-radarLastEtaUpdate>3000){radarLastEtaUpdate=now;updateRadarArrivalEstimates();}
+    if(now-radarLastEtaUpdate>1000){radarLastEtaUpdate=now;updateRadarArrivalEstimates();}
     radarAnim=requestAnimationFrame(radarFrame);
   }
   function openRadar(){
@@ -1334,9 +1335,12 @@ function drawAircraftTrail(ctx,p,g,now){
     cancelAnimationFrame(radarAnim);
     radarLastPaint=0;
     radarAnim=requestAnimationFrame(radarFrame);
+    // Check every second. Fresh provider snapshots are requested at most every
+    // three seconds, while the canvas continuously interpolates each frame.
     clearInterval(radarPoll);radarPoll=setInterval(()=>{
-      if(document.visibilityState==='visible'&&radarOpenState)loadRadar();
-    },60000);
+      if(document.visibilityState==='visible'&&radarOpenState&&!radarBusy&&
+        Date.now()-radarLastFetchMs>=3000&&Date.now()-radarLastFailMs>=9000)loadRadar();
+    },1000);
   }
   function closeRadar(){
     radarOpenState=false;radarRequestId++;
@@ -1389,14 +1393,14 @@ function drawAircraftTrail(ctx,p,g,now){
       if(!Array.isArray(d?.aircraft)||d?.airport?.icao!==requested)throw new Error('Unexpected radar data');
       if(id!==radarRequestId||requested!==radarAirport||!radarOpenState)return;
       radarData=d;
-      radarLastFetchMs=Date.now();
+      radarLastFetchMs=Date.now();radarLastFailMs=0;
       const activeFlight=taxiFlightAirport();
       if(activeFlight?.code===requested)deliverAirportRadar(d,activeFlight);
       const stamp=Date.parse(d.asOf||d.fetchedAt);
       const when=Number.isFinite(stamp)?new Date(stamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}):'unknown time';
       const groundReports=requested==='WSSS'?d.aircraft.filter(p=>p.groundAtChangi).length:0;
       const stoppedReports=requested==='WSSS'?d.aircraft.filter(p=>p.stopped).length:0;
-      radarStatus(`LIVE ADS-B · ${d.aircraft.length} aircraft within 100 km · ${requested==='WSSS'?groundReports+' Changi ground reports ('+stoppedReports+' stopped) · ':''}Viewing ${radarScale} km · Feed ${when} · Refresh every 60 s`);
+      radarStatus(`LIVE ADS-B · ${d.aircraft.length} aircraft within 100 km · ${requested==='WSSS'?groundReports+' Changi ground reports ('+stoppedReports+' stopped) · ':''}Viewing ${radarScale} km · Feed ${when} · Animated every second · ADS-B fetch ~3 s`);
       const liveKeys=new Set();
       for(const p of d.aircraft){
         const key=p.hex||p.callsign;if(!key)continue;liveKeys.add(key);
@@ -1412,8 +1416,13 @@ function drawAircraftTrail(ctx,p,g,now){
       renderRadar();
     }catch(e){
       if(id===radarRequestId){
-        radarData=null;radarTrails.clear();radarAnimatedTrails.clear();radarDisplayStates.clear();$('radarGroundDiagnostic').style.display='none';
-        radarStatus(`NO LIVE DATA — ${e.message}. Check /api/radar?airport=${requested} if this continues. No simulated aircraft are shown.`,true);
+        radarLastFailMs=Date.now();
+        // Do not blank every airplane on a transient network failure. Leave the last
+        // observations on the map only briefly, and clearly identify stale data.
+        if(!radarData||Date.now()-radarLastFetchMs>20000){
+          radarData=null;radarTrails.clear();radarAnimatedTrails.clear();radarDisplayStates.clear();$('radarGroundDiagnostic').style.display='none';
+        }
+        radarStatus(`ADS-B temporarily unavailable — ${e.message}. Reconnecting; displayed data may be delayed.`,true);
         renderRadar();
       }
     }finally{radarBusy=false;$('radarRefresh').disabled=false;}
@@ -2154,7 +2163,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
 
   // Automatic ADS-B for the active departure/arrival airport (not just open RADAR).
   // The same real contacts drive radar dots and the game's approximate 3D models.
-  let taxiRadarFlightAirport='',taxiRadarLastMs=0,taxiRadarFetching=false,taxiRadarLive=null;
+  let taxiRadarFlightAirport='',taxiRadarLastMs=0,taxiRadarFetching=false,taxiRadarLive=null,taxiRadarBackoffMs=0;
   function taxiFlightAirport(){
     const info=gameInfo();
     if(!info||info.st!=='play'||!['taxi','takeoff','route','approach','taxiIn'].includes(info.phase))return null;
@@ -2183,11 +2192,11 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     const current=taxiFlightAirport();
     if(!current||taxiRadarFetching||document.visibilityState==='hidden')return;
     const stamp=Date.now();
-    if(current.code===taxiRadarFlightAirport&&stamp-taxiRadarLastMs<27000)return;
+    if(current.code===taxiRadarFlightAirport&&stamp-taxiRadarLastMs<Math.max(2800,taxiRadarBackoffMs))return;
     taxiRadarFetching=true;taxiRadarFlightAirport=current.code;taxiRadarLastMs=stamp;
     try{
       // Reuse the radar modal's fresh dataset if its airport matches the game.
-      if(radarData?.airport?.icao===current.code&&stamp-radarLastFetchMs<16000){
+      if(radarData?.airport?.icao===current.code&&stamp-radarLastFetchMs<2600){
         taxiRadarLive=radarData;deliverAirportRadar(radarData,current);return;
       }
       const url='/api/radar?'+new URLSearchParams({airport:current.code,lat:String(current.lat),
@@ -2196,7 +2205,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
       if(!resp.ok||!Array.isArray(d?.aircraft)||d?.airport?.icao!==current.code)
         throw new Error(d?.error||'ADS-B positions unavailable');
       if(taxiFlightAirport()?.code!==current.code)return; // Ignore stale airport response.
-      taxiRadarLive=d;
+      taxiRadarLive=d;taxiRadarBackoffMs=0;
       deliverAirportRadar(d,current);
       if(radarOpenState&&radarAirport===current.code&&!radarBusy){
         radarData=d;radarLastFetchMs=Date.now();
@@ -2208,11 +2217,14 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
       }renderRadar();
       }
     }catch(e){
-      taxiRadarLive=null;console.warn('Airport 3D ADS-B sync:',e?.message||e);
+      taxiRadarBackoffMs=Math.min(30000,taxiRadarBackoffMs?taxiRadarBackoffMs*2:6000);
+      console.warn('Airport 3D ADS-B sync:',e?.message||e);
       // Never invent live contacts; game clearly labels its separate SIM fallback.
     }finally{taxiRadarFetching=false;}
   }
-  setInterval(syncTaxiRadar,3200);
+  // Synchronize the airport/game cache on a one-second tick. Network reads
+  // occur ~every 3 s, with exponential backoff if the ADS-B provider fails.
+  setInterval(syncTaxiRadar,1000);
   setInterval(()=>{if(radarOpenState)updateGameRadarMatch();},1500);
   frame.addEventListener('load',()=>{taxiRadarLastMs=0;taxiRadarFlightAirport='';});
 
