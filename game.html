@@ -4697,8 +4697,13 @@ const jcPanelStorageKey='jetline-captain.mobile-panel-mode.v1';
 let jcPanelMode=(()=>{try{const v=localStorage.getItem(jcPanelStorageKey);return ['65','55','essential'].includes(v)?v:'65'}catch{return '65'}})();
 let jcPanelLastMode='';
 function jcPanelIsMobile(){
+ // Do not interpret desktop browser window shape as a phone. Desktop browsers
+ // (including touch laptops) must retain the original right-hand flight deck.
  const w=window.innerWidth,h=window.innerHeight;
- return w<=650||((navigator.maxTouchPoints||0)>0&&Math.min(w,h)<=520);
+ const coarse=!!(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches);
+ const touch=coarse||((navigator.maxTouchPoints||0)>0 &&
+                   !(window.matchMedia&&window.matchMedia('(pointer:fine)').matches));
+ return w<=650 || (touch&&Math.min(w,h)<=540&&Math.max(w,h)<=1150);
 }
 function jcPanelSetMode(mode,save=false){
  if(!['65','55','essential'].includes(mode))mode='65';
@@ -4772,7 +4777,11 @@ function hdAutoTune(seconds,frames){
 // Panel MAX still uses the native large layout; Panel MIN now also reclaims
 // the unused SIDE margins in portrait. Scale is UNIFORM: no stretched gauges.
 // A height budget protects a portion of the forward runway view on short phones.
-const jcMobilePanel=Math.min(t,e)<=520&&Math.max(t,e)<=1100&&(t<=520||((navigator.maxTouchPoints||0)>0)||(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches));
+const jcMobilePanel=jcPanelIsMobile();
+const jcDesktopDock=!jcMobilePanel&&(
+ t>=900 || (t>=720&&window.matchMedia&&window.matchMedia('(pointer:fine)').matches)
+);
+document.body.classList.toggle('jc-desktop-layout',!!jcDesktopDock);
 if(jcMobilePanel){
  if(!E.__mobilePanelAutoSized){E.__mobilePanelAutoSized=true}
  E.panelMax=jcPanelMode!=='essential';
@@ -4790,7 +4799,17 @@ if(jcMobilePanel){
  pe.W=t;pe.H=e;pe.landscape=e/t<1.15;
  pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;
  pe.world=jcPanelMode==='essential'?[0,0,t,e]:[0,0,t,Math.max(1,pe.by+8*s)];
+}else if(jcDesktopDock){
+ // DESKTOP: the real cockpit ALWAYS occupies the RIGHT side, regardless of
+ // browser aspect ratio and any previously saved mobile 65/55/Essential mode.
+ // Leave the runway/airport view on the left. Scale uniformly, never squeeze.
+ const panelShare=t>=1500?.34:t>=1100?.40:.44;
+ const i=Math.max(.36,Math.min((e-14)/Ri.h,t*panelShare/Ri.w));
+ pe.W=t;pe.H=e;pe.landscape=true;
+ pe.s=i;pe.bx=t-Ri.w*i;pe.by=Math.max(0,(e-Ri.h*i)/2);
+ pe.world=[0,0,Math.max(1,pe.bx+4),e];
 }else if(pe.W=t,pe.H=e,pe.landscape=e/t<1.15){
+ // Preserve the native right-side docking on smaller wide screens.
  const i=Math.min(e/Ri.h,t*(E.panelMax?.62:.52*kt('panelSize')/.62)/Ri.w);
  pe.s=i;pe.bx=t-Ri.w*i;pe.by=(e-Ri.h*i)/2;pe.world=[0,0,pe.bx+4,e];
 }else{
@@ -6165,6 +6184,12 @@ function jcMinControlTick(){
  if(Date.now()-jcControlsLast<170)return;jcControlsLast=Date.now();
  jcQuickControlsTick();
  const mobile=jcMobileSceneryOnly();
+ // A desktop resize may follow a phone-like window: never retain mobile-only
+ // control surfaces/classes when returning to the side-by-side desktop view.
+ if(!jcPanelIsMobile()){
+  document.body.classList.remove('jc-panel-controls','jc-scene-min');
+  document.getElementById('ui')?.classList.remove('jc-scene-min');
+ }
  // Both the 3D panel mesh and DOM-based cockpit displays must be hidden.
  // This class is removed automatically when the player presses PANEL MAX.
  const uiRoot=document.getElementById('ui');
@@ -8597,6 +8622,17 @@ body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir]
  #jc-cockpit-quick-controls button{min-height:32px;font-size:10px;padding:2px}
  body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side{bottom:calc(47px + env(safe-area-inset-bottom))!important;width:62px!important}
  body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir]{min-height:34px!important}
+}
+</style>
+
+<style id="jc-desktop-right-dock-fix">
+/* Desktop-only controls are keyed to a class set by the same responsive
+   layout decision as the cockpit renderer, not just the CSS pixel width.
+   This avoids breaking touch phones in landscape (e.g. 932 x 430). */
+body.jc-desktop-layout #jc-cockpit-quick-controls,
+body.jc-desktop-layout #jc-flight-min-overlay,
+body.jc-desktop-layout #jc-panel-view-modes {
+ display:none!important;visibility:hidden!important;pointer-events:none!important;
 }
 </style>
 </body>
