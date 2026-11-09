@@ -5619,7 +5619,8 @@ function jetTrafficDrawND(ctx,width,height,state,project,view){
  ctx.clip();
  jetTrafficDrawWSSSNDRunways(ctx,project,width,height);
  const paint=(a,simulated=false)=>{
-  const target=simulated?{x:jetTraffic.plane?.position?.x,z:jetTraffic.plane?.position?.z}:jetTrafficPosition(a,Date.now());
+  const target=simulated?{x:jetTraffic.plane?.position?.x,z:jetTraffic.plane?.position?.z}:
+   (jetTraffic.liveModels.get(a.id)||jetTrafficPosition(a,Date.now()));
   if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.z))return;
   let [x,y]=project(target.x,target.z);
   if(!Number.isFinite(x)||!Number.isFinite(y))return;
@@ -5839,11 +5840,16 @@ function jetTrafficPosition(a,now){
  // ADS-B positions can be 20-90s old while the radar endpoint remains cached.
  // The previous 80-second dead reckoning moved 150kt aircraft >6km, often past
  // Changi's 4km runway. Near final, project at most 6s (<0.5km at 150kt).
- // After 35s with no fresh position report, use the last *reported* point.
- const age=Math.max(0,(now-jetTraffic.liveAt)/1000+(Number(a.seenPos)||0));
- const maxSeconds=a.onGround?(a.id===jetTraffic.departureId?8:5):
-  (finalCandidate?(rawBefore<4500?6:12):15);
- const elapsed=age>35?0:Math.min(age,maxSeconds);
+ // ADS-B updates are irregular. Keep a short, decelerating prediction tail:
+ // no 6-second hard stop followed by a multi-second visual catch-up. The
+ // final-path projection is still capped under ~10 seconds, not an unlimited
+ // dead-reckoning landing or an invented radar fix.
+ const age=Math.max(0,(now-jetTraffic.liveAt)/1000+Math.max(0,Number(a.seenPos)||0));
+ const baseSeconds=a.onGround?(a.id===jetTraffic.departureId?6:3.5):
+  (finalCandidate?(rawBefore<4500?5.5:9):10);
+ const tailSeconds=a.onGround?2:finalCandidate?3.5:4;
+ const tailTime=Math.max(0,age-baseSeconds);
+ const elapsed=Math.min(age,baseSeconds)+tailSeconds*(1-Math.exp(-tailTime/3.4));
  const velocityKm=Math.max(0,a.speedKt)*1.852*elapsed/3600;
  const stopped=!!a.onGround&&a.speedKt<3;
  const deltaKm=stopped?0:Math.min(velocityKm,a.onGround?.35:finalCandidate?.80:1.8);
@@ -5980,9 +5986,52 @@ function jetTrafficPosition(a,now){
   runwayBase:runway?.id||null,stage,estimated};
 }
 
+function jetTrafficSmoothMotion(entry,target,a,dt,now){
+ // Pure spatial update driven by the latest radar-derived pose, not new flights.
+ // World scale differs from meters; near Changi the long-runway axis is 0.60.
+ const step=Math.max(.001,Math.min(.06,Number(dt)||.016));
+ const age=Math.max(0,(now-jetTraffic.liveAt)/1000+Math.max(0,Number(a.seenPos)||0));
+ const moving=!(a.onGround&&a.speedKt<3);
+ const worldScale=jetTrafficActiveAirport()==='WSSS'?.60:.35;
+ const speed=moving?Math.min(120,Math.max(0,Number(a.speedKt)||0)*.514444*worldScale):0;
+ // When provider fixes are stale, gradually reduce visual velocity rather
+ // than letting an aircraft continue far past the 3D runway indefinitely.
+ const coastStart=a.onGround?5:9,coastEnd=a.onGround?11:17;
+ const coast=age<=coastStart?1:age>=coastEnd?0:
+  Math.pow((coastEnd-age)/(coastEnd-coastStart),2)*(3-2*(coastEnd-age)/(coastEnd-coastStart));
+ const velocityBlend=1-Math.exp(-step*2.3);
+ const desiredX=-Math.sin(target.yaw)*speed*coast;
+ const desiredZ=-Math.cos(target.yaw)*speed*coast;
+ entry.vx=(Number(entry.vx)||0)+(desiredX-(Number(entry.vx)||0))*velocityBlend;
+ entry.vz=(Number(entry.vz)||0)+(desiredZ-(Number(entry.vz)||0))*velocityBlend;
+ entry.x+=entry.vx*step;entry.z+=entry.vz*step;
+ // Correct towards radar positions without a sudden jump at each 3-second poll.
+ // Bound reconciliation speed so even a stale/recovered sample eases into place.
+ const errorX=target.x-entry.x,errorZ=target.z-entry.z;
+ const gain=1-Math.exp(-step*1.35);
+ let correctionX=errorX*gain,correctionZ=errorZ*gain;
+ const magnitude=Math.hypot(correctionX,correctionZ);
+ const correctionLimit=(Math.max(6,speed*1.2)+14)*step;
+ if(magnitude>correctionLimit){const ratio=correctionLimit/magnitude;correctionX*=ratio;correctionZ*=ratio;}
+ entry.x+=correctionX;entry.z+=correctionZ;
+ // A slow approach to an observed altitude prevents vertical snaps/teleports.
+ entry.y+=(target.y-entry.y)*(1-Math.exp(-step*(a.onGround?3.6:2.0)));
+ const difference=((target.yaw-entry.yaw+Math.PI*3)%(Math.PI*2))-Math.PI;
+ entry.yaw+=difference*(1-Math.exp(-step*2.4));
+ // Keep rollout estimates inside their known physical runway length. This
+ // safeguard is only for rollout, not a forced touchdown or runway assignment.
+ if(target.stage==='ROLLOUT EST'&&target.runwayBase&&jetChangiRunways[target.runwayBase]){
+  const lane=jetChangiRunways[target.runwayBase];
+  const loc=Js(_t,entry.x,entry.z);
+  const endZ=lane.z-lane.length;
+  const boundedZ=Math.max(endZ+18,Math.min(lane.z-18,loc[1]));
+  if(boundedZ!==loc[1]){const world=qi(_t,loc[0],boundedZ);entry.x=world[0];entry.z=world[1];}
+ }
+}
+
 function jetTrafficDrawLiveContacts(dt){
  const phase=E.phase,active=['taxi','takeoff','approach','taxiIn'].includes(phase);
- if(!active||!jetTrafficLiveFresh()||!It?.scene||!_t){jetTrafficClearModels();return;}
+ if(!active||!jetTrafficLiveFresh()||!It?.scene||!_t){window.__jcTrafficSoundContacts=[];jetTrafficClearModels();return;}
  if(jetTraffic.scene&&jetTraffic.scene!==It.scene)jetTrafficClearModels();
  if(!jetTraffic.scene)jetTraffic.scene=It.scene;
  const now=Date.now();
@@ -6010,11 +6059,14 @@ function jetTrafficDrawLiveContacts(dt){
    a.onGround?-350:jetTrafficIsSingapore(a)?-300:0);
   runwayRank.set(a.id,n);return n;
  };
- const capacity=window.innerWidth<700?16:24;
+ // Prioritize the nearest and runway-relevant planes before spending GPU time.
+ // Detailed A350 models have many meshes; drawing 24 at once caused low FPS.
+ const capacity=window.innerWidth<700?9:14;
  const prioritized=jetTraffic.live.filter(a=>a.id&&Number.isFinite(a.lat)&&Number.isFinite(a.lon))
   .filter(a=>a.km<=30&&(a.onGround||(a.altFt!=null&&a.altFt<9000)))
   .sort((a,b)=>rank(a)-rank(b)||a.km-b.km).slice(0,capacity);
  const visible=new Set();
+ const trafficAudio=[]; // only matched contacts become audio emitters
  const cameraCanvas=document.querySelector('#game canvas');
  const rect=cameraCanvas?.getBoundingClientRect();
  for(const a of prioritized){
@@ -6025,6 +6077,12 @@ function jetTrafficDrawLiveContacts(dt){
   if(!Number.isFinite(target.x)||!Number.isFinite(target.y)||!Number.isFinite(target.z))continue;
   const camDist=Math.hypot(target.x-ui.position.x,target.y-ui.position.y,target.z-ui.position.z);
   if(camDist>Math.min(ui.far||14000,18000)-90)continue;
+  // A model outside the actual camera frustum cannot be seen. Skip all its
+  // wing, window and engine draw calls instead of slowing approach frames.
+  const projectedTraffic=ui.position.clone().set(target.x,target.y+7,target.z).project(ui);
+  if(!Number.isFinite(projectedTraffic.x)||!Number.isFinite(projectedTraffic.y)||
+   projectedTraffic.z<-.98||projectedTraffic.z>1.08||
+   Math.abs(projectedTraffic.x)>1.45||Math.abs(projectedTraffic.y)>1.65)continue;
   visible.add(a.id);
   let entry=jetTraffic.liveModels.get(a.id);
   // Airline may be blank in one ADS-B update and acquire a callsign in the
@@ -6034,14 +6092,19 @@ function jetTrafficDrawLiveContacts(dt){
   }
   if(!entry){
    const group=jetTrafficBuildLivePlane(a);group.position.set(target.x,target.y,target.z);group.rotation.y=target.yaw;
-   entry={group,x:target.x,y:target.y,z:target.z,yaw:target.yaw};jetTraffic.liveModels.set(a.id,entry);
+   entry={group,x:target.x,y:target.y,z:target.z,yaw:target.yaw,vx:0,vz:0};jetTraffic.liveModels.set(a.id,entry);
   }
-  const k=Math.min(1,Math.max(.02,(Number(dt)||.016)*2.7));
-  entry.x+=(target.x-entry.x)*k;entry.y+=(target.y-entry.y)*k;entry.z+=(target.z-entry.z)*k;
-  const d=((target.yaw-entry.yaw+Math.PI*3)%(Math.PI*2))-Math.PI;
-  entry.yaw+=d*k;
+  jetTrafficSmoothMotion(entry,target,a,dt,now);
   entry.group.position.set(entry.x,entry.y,entry.z);entry.group.rotation.y=entry.yaw;
   entry.group.userData.callsign=jetTrafficCallsign(a);
+  // Nearby observed aircraft are audible in the existing Sound mixer. Audio
+  // is attached to the same ICAO24 IDs and same smoothed 3D positions as radar.
+  const listener=E.plane||ui.position;
+  const range=Math.hypot(entry.x-listener.x,entry.y-(listener.y||0),entry.z-listener.z);
+  if(range<2200&&(!a.onGround||a.speedKt>=5)){
+   trafficAudio.push({id:a.id,distance:range,speedKt:a.speedKt,onGround:a.onGround,
+    phase:a.phase,pan:Math.max(-1,Math.min(1,(entry.x-ui.position.x)/Math.max(90,range*.72)))});
+  }
   entry.group.userData.onGround=a.onGround;
   entry.group.userData.reportedSpeedKt=a.speedKt;
   entry.group.userData.visualRunway=target.runway;
@@ -6088,6 +6151,8 @@ function jetTrafficDrawLiveContacts(dt){
   jetTrafficDispose(entry.group);jetTraffic.liveModels.delete(key);
  }}
  jetTraffic.liveMeshes=Array.from(jetTraffic.liveModels.values(),e=>e.group);
+ // Immediately replace audio targets, never replaying stale/unmatched flights.
+ window.__jcTrafficSoundContacts=trafficAudio.sort((a,b)=>a.distance-b.distance).slice(0,3);
 }
 
 // Jetline Captain mobile full scenery / airport surface map.
@@ -6396,7 +6461,7 @@ function jcSurfaceDraw(force=false){
  let rendered=0;
  for(const a of live){
   let pos;
-  try{pos=jetTrafficPosition(a,t)}catch{continue;}
+  try{pos=jetTraffic.liveModels.get(a.id)||jetTrafficPosition(a,t)}catch{continue;}
   if(!pos)continue;
   const local=Js(_t,pos.x,pos.z),x=local?.[0],z=local?.[1];
   if(!Number.isFinite(x)||!Number.isFinite(z))continue;
@@ -6483,7 +6548,7 @@ function jetTrafficSkyTick(dt){
  // Aircraft are matched to THIS airport and this phase; no invented random fly-bys.
  if(['taxi','takeoff','approach','taxiIn'].includes(E.phase)){
   jetTrafficDrawLiveContacts(dt);
- }else if(jetTraffic.liveModels.size){jetTrafficClearModels();}
+ }else if(jetTraffic.liveModels.size){window.__jcTrafficSoundContacts=[];jetTrafficClearModels();}
 }
 function jetTrafficTick(dt){
  if(!jetTraffic.airport)return;
@@ -7296,7 +7361,7 @@ window.__holdHud={update};
   for(const k of ['music','engine'])if(typeof saved[k]==='boolean')prefs[k]=saved[k];
   for(const k of ['musicVolume','engineVolume'])if(Number.isFinite(saved[k]))prefs[k]=Math.max(0,Math.min(100,saved[k]));
  }}catch{}
- const api={ctx:null,master:null,musicGain:null,ambientBus:null,challengeBus:null,engineBus:null,engineNoise:null,engineFilter:null,engineTone:null,noiseBuffer:null,unlocked:false,currentMode:'OFF',error:'',prefs};
+ const api={ctx:null,master:null,musicGain:null,ambientBus:null,challengeBus:null,engineBus:null,trafficBus:null,trafficVoices:new Map(),engineNoise:null,engineFilter:null,engineTone:null,noiseBuffer:null,unlocked:false,currentMode:'OFF',error:'',prefs};
  window.__jcFlightAudio=api;
  let tickInterval=null, nextAmbient=0,nextChallenge=0, ambientStep=0,challengeStep=0;
  const hz=midi=>440*Math.pow(2,(midi-69)/12);
@@ -7305,10 +7370,10 @@ window.__holdHud={update};
  const panel=document.createElement('div');panel.id='jc-audio-panel';
  panel.setAttribute('role','group');panel.setAttribute('aria-label','Jetline sound settings');
  panel.innerHTML=`<div class="split"><div class="title">🎵 FLIGHT SOUND</div><button type="button" id="jc-audio-close">CLOSE</button></div>
-   <div class="small">Original aviation action soundtrack · Driving electronic drums · Airborne engine sound</div>
+   <div class="small">Original aviation soundtrack · Cockpit engines · Nearby radar aircraft engines</div>
    <div class="split"><span class="vlabel">Background / Challenge music</span><button type="button" id="jc-music-on">ON</button></div>
    <label class="small" for="jc-music-volume">Music volume</label><input id="jc-music-volume" type="range" min="0" max="100" step="5">
-   <div class="split"><span class="vlabel">Airborne engine</span><button type="button" id="jc-engine-on">ON</button></div>
+   <div class="split"><span class="vlabel">Cockpit + nearby aircraft engines</span><button type="button" id="jc-engine-on">ON</button></div>
    <label class="small" for="jc-engine-volume">Engine volume</label><input id="jc-engine-volume" type="range" min="0" max="100" step="5">
    <div class="split"><span class="small">Now playing</span><span class="mode" id="jc-audio-mode">Ready</span></div>
    <div class="small" id="jc-audio-info">Audio begins after your first click or tap. The game's own MUTE also controls these sounds.</div>`;
@@ -7340,10 +7405,10 @@ window.__holdHud={update};
   if(!AC){api.error='Web Audio is not supported in this browser.';return null}
   try{
    const c=new AC(),m=c.createGain();m.gain.value=0;m.connect(c.destination);api.ctx=c;api.master=m;
-   const music=c.createGain(),amb=c.createGain(),cha=c.createGain(),eng=c.createGain();
-   amb.gain.value=0;cha.gain.value=0;eng.gain.value=0;
-   amb.connect(music);cha.connect(music);music.connect(m);eng.connect(m);
-   api.musicGain=music;api.ambientBus=amb;api.challengeBus=cha;api.engineBus=eng;
+   const music=c.createGain(),amb=c.createGain(),cha=c.createGain(),eng=c.createGain(),traffic=c.createGain();
+   amb.gain.value=0;cha.gain.value=0;eng.gain.value=0;traffic.gain.value=0;
+   amb.connect(music);cha.connect(music);music.connect(m);eng.connect(m);traffic.connect(m);
+   api.musicGain=music;api.ambientBus=amb;api.challengeBus=cha;api.engineBus=eng;api.trafficBus=traffic;
    // Create a self-contained continuous engine bed: filtered air rush and turbine whine.
    const buffer=c.createBuffer(1,Math.floor(c.sampleRate*2),c.sampleRate),arr=buffer.getChannelData(0);
    for(let i=0;i<arr.length;i++)arr[i]=Math.random()*2-1;
@@ -7490,6 +7555,52 @@ window.__holdHud={update};
    }
  }
 
+ function trafficVoice(c,id){
+   let voice=api.trafficVoices.get(id);if(voice)return voice;
+   // The jet-engine sound is entirely synthesized (turbine + filtered airflow).
+   const amp=c.createGain();amp.gain.value=0;
+   const pan=c.createStereoPanner?c.createStereoPanner():null;
+   if(pan){amp.connect(pan);pan.connect(api.trafficBus)}else amp.connect(api.trafficBus);
+   const tone=c.createOscillator();tone.type='sawtooth';tone.frequency.value=105;
+   const low=c.createBiquadFilter();low.type='lowpass';low.frequency.value=730;
+   const tg=c.createGain();tg.gain.value=.12;tone.connect(low);low.connect(tg);tg.connect(amp);
+   const air=c.createBufferSource();air.buffer=api.noiseBuffer;air.loop=true;
+   const wash=c.createBiquadFilter();wash.type='bandpass';wash.frequency.value=960;wash.Q.value=.55;
+   const ag=c.createGain();ag.gain.value=.52;air.connect(wash);wash.connect(ag);ag.connect(amp);
+   tone.start();air.start();
+   voice={id,amp,pan,tone,low,air,wash,tg,ag,last:Date.now()};
+   api.trafficVoices.set(id,voice);return voice;
+ }
+ function trafficSounds(c,now,enabled){
+   const targets=enabled?(window.__jcTrafficSoundContacts||[]).slice(0,3):[];
+   const activeIds=new Set();
+   for(const contact of targets){
+    if(!contact?.id||activeIds.has(contact.id))continue;
+    activeIds.add(contact.id);
+    const v=trafficVoice(c,contact.id);
+    v.last=Date.now();
+    const range=Math.max(0,Number(contact.distance)||0);
+    // 3-D attenuation: loud beside a runway, gentle on a distant final.
+    const falloff=1/(1+Math.pow(range/180,1.65));
+    const thrust=contact.onGround?Math.min(1,Math.max(.22,(contact.speedKt||0)/85)):
+     contact.phase==='CLIMBING'?.94:contact.phase==='DESCENDING'?.62:.72;
+    v.amp.gain.setTargetAtTime(Math.min(.34,.36*falloff*thrust),now,.24);
+    v.tone.frequency.setTargetAtTime(95+135*thrust,now,.20);
+    v.low.frequency.setTargetAtTime(510+950*thrust,now,.24);
+    v.wash.frequency.setTargetAtTime(660+1400*thrust,now,.25);
+    if(v.pan)v.pan.pan.setTargetAtTime(clamp(Number(contact.pan)||0,-1,1)*.7,now,.25);
+   }
+   for(const [id,v] of api.trafficVoices){
+    if(activeIds.has(id))continue;
+    v.amp.gain.setTargetAtTime(0,now,.19);
+    if(Date.now()-v.last>3500){
+     try{v.tone.stop();v.air.stop();v.tone.disconnect();v.air.disconnect();
+      v.amp.disconnect();v.pan?.disconnect();v.low.disconnect();v.wash.disconnect();
+      v.tg.disconnect();v.ag.disconnect();}catch{}
+     api.trafficVoices.delete(id);
+    }
+   }
+ }
  function update(){
    // Stack the SOUND button above the existing USB THRUST button to avoid overlap.
    const tca=document.getElementById('jc-tca-toggle');
@@ -7526,9 +7637,12 @@ window.__holdHud={update};
      voice(c,api.challengeBus,now+.22,77,.33,.10,'lead');
    }else if(!danger){currentIntense=false;}
    const enginesOn=!!(info.engine1||info.engine2);
-   const airborne=active&&info.airborne&&!info.onGround&&enginesOn;
+   // Engine noise continues during powered taxi as well as airborne flight.
+   const powered=active&&enginesOn;
    const n1=clamp((Number(info.n1)||22)/100,0,1);
-   const engineLevel=prefs.engine&&airborne?(.035+.12*n1)*prefs.engineVolume/100:0;
+   const engineLevel=prefs.engine&&powered?(.027+.115*n1)*prefs.engineVolume/100:0;
+   api.trafficBus.gain.setTargetAtTime(prefs.engine&&active?(.78*prefs.engineVolume/100):0,now,.25);
+   trafficSounds(c,now,prefs.engine&&active&&!mute&&!hidden);
    api.engineBus.gain.setTargetAtTime(engineLevel,now,.24);
    api.engineFilter.frequency.setTargetAtTime(420+1900*n1,now,.18);
    api.engineToneFilter.frequency.setTargetAtTime(360+1100*n1,now,.18);
@@ -7536,12 +7650,12 @@ window.__holdHud={update};
    $('jc-audio-mode').textContent=api.currentMode;
    const hint=panel.querySelector('#jc-audio-info');
    if(mute)hint.textContent='Game is muted. Unmute it to hear the soundtrack and engine.';
-   else hint.textContent='116 BPM rhythmic cruise mix; 148 BPM high-energy challenge mix during takeoff, approach, ATC holds and emergencies. Engine and cockpit alerts remain audible.';
+   else hint.textContent='Powered cockpit engines and nearby radar-tracked aircraft are audible. Jet sound gets louder as aircraft approach, then fades as they depart. Tap to unlock sound if your browser is silent.';
  }
  setInterval(update,350);
  document.addEventListener('visibilitychange',()=>{if(!api.ctx)return;if(document.hidden)api.ctx.suspend().catch(()=>{});else if(api.unlocked)api.ctx.resume().catch(()=>{})});
  api.activate=activate;
- api.debug=()=>({unlocked:api.unlocked,audioState:api.ctx?.state||'not created',music:prefs.music,engine:prefs.engine,mode:api.currentMode,error:api.error});
+ api.debug=()=>({unlocked:api.unlocked,audioState:api.ctx?.state||'not created',music:prefs.music,engine:prefs.engine,trafficVoices:api.trafficVoices.size,mode:api.currentMode,error:api.error});
  renderUI();
 })();
 </script>
