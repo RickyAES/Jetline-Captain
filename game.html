@@ -5109,7 +5109,12 @@ function jetTrafficParallelMake(){
   // 02 threshold = beginning of pavement, 20 opposite = end. This matters
   // for tracked arrivals: 3D touchdown must occur at the actual strip edge.
   addBox(lane.x,z,85,len+20,.17,.43,shoulder);
-  addBox(lane.x,z,61,len,.49,.34,pavement);
+  const ndPavement=addBox(lane.x,z,61,len,.49,.34,pavement);
+  // The navigation display reads the EXACT world-space corners of this mesh.
+  // Never calculate a separate runway bearing for the ND.
+  ndPavement.userData.jetNDPavement=id;
+  if(!jetTraffic.ndPavements)jetTraffic.ndPavements=new Map();
+  jetTraffic.ndPavements.set(id,ndPavement);
   for(const dx of [-29,29])addBox(lane.x+dx,z,1.55,len-10,.88,.08,edge);
   for(let tick=-65;tick>-len+55;tick-=83)addBox(lane.x,lane.z+tick,2.1,30,.93,.06,centre);
   for(const dz of [-26,-41])for(const off of [-22,-15,-8,8,15,22])
@@ -5564,32 +5569,84 @@ function jetTrafficRefreshHud(){
 // aircraft shown to the player. Bearing/distance text is reported relative to the airport.
 // Shared WSSS runway geometry for Navigation Display: identical world points
 // to the 3D runway meshes and live traffic (no extra or mirrored runway model).
-function jetTrafficDrawWSSSNDRunways(ctx,project,width,height){
- if(jetTrafficActiveAirport()!=='WSSS'||!_t||typeof project!=='function')return;
- const labels={'02L':'20R','02C':'20C','02R':'20L'};
- ctx.save();
+// Render the navigation display from the SAME runways that are visible in 3D.
+// Departure uses the three actual Changi THREE.js pavement meshes. Arrival
+// uses the simulator's physically rendered destination runway at route.thrB.
+// Previously the ND always drew the three departure runways near world z=0,
+// even when the aircraft was approaching the arrival runway kilometres away.
+function jetTrafficNDRunwayGeometry(state){
+ if(jetTrafficActiveAirport()!=='WSSS'||!_t)return [];
+ if((state.phase==='approach'||state.phase==='taxiIn')&&state.route){
+  const l=state.route;
+  const start=Number(l.thrB),end=Number(l.endB);
+  if(!Number.isFinite(start)||!Number.isFinite(end))return [];
+  const designation=String(pt.ils?.rwy||l.arrRwy||'RWY').toUpperCase();
+  // World x=0: the destination runway rendered by the core game engine.
+  const half=Math.max(15,Number(qs?.wid||60)/2);
+  return [{id:designation,opposite:jetTrafficReciprocalRunway(designation),
+   corners:[[-half,start],[half,start],[half,end],[-half,end]],
+   centerStart:[0,start],centerEnd:[0,end],source:'destination-scenery'}];
+ }
+ const names={'02L':'20R','02C':'20C','02R':'20L'};
+ const runways=[];
  for(const [id,lane] of Object.entries(jetChangiRunways)){
-  const p=(x,z)=>{const w=qi(_t,x,z);return project(w[0],w[1]);};
-  const lo=lane.z,hi=lane.z-lane.length,half=27;
-  const a=p(lane.x-half,lo),b=p(lane.x+half,lo),c=p(lane.x+half,hi),d=p(lane.x-half,hi);
-  if(![...a,...b,...c,...d].every(Number.isFinite))continue;
-  const boundsX=[a[0],b[0],c[0],d[0]],boundsY=[a[1],b[1],c[1],d[1]];
-  if(Math.max(...boundsX)<-35||Math.min(...boundsX)>width+35||Math.max(...boundsY)<-35||Math.min(...boundsY)>height+35)continue;
-  ctx.fillStyle=id==='02C'?'rgba(110,220,240,.18)':'rgba(154,195,212,.14)';
-  ctx.strokeStyle=id==='02C'?'#8ef1fc':'#a7c7d7';
-  ctx.lineWidth=id==='02C'?2.1:1.4;
-  ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.lineTo(...c);ctx.lineTo(...d);ctx.closePath();
-  ctx.fill();ctx.stroke();
-  const th=p(lane.x,lo),far=p(lane.x,hi);
+  const mesh=jetTraffic.ndPavements?.get(id);
+  // Read the physical mesh's local corners through the THREE scene graph,
+  // including the actual position and rotation used in scenery rendering.
+  let corners=null,start=null,end=null;
+  if(mesh&&mesh.parent&&typeof mesh.localToWorld==='function'&&typeof K==='function'){
+   mesh.updateWorldMatrix?.(true,false);
+   const halfW=30.5,halfD=lane.length/2;
+   const world=(x,z)=>{
+    const p=mesh.localToWorld(new K(x,0,z));return[p.x,p.z];
+   };
+   corners=[world(-halfW,halfD),world(halfW,halfD),
+    world(halfW,-halfD),world(-halfW,-halfD)];
+   start=world(0,halfD);end=world(0,-halfD);
+  }else{
+   // Pre-first-render fallback uses exactly the same transform as addBox.
+   const p=(x,z)=>qi(_t,x,z),z0=lane.z,z1=z0-lane.length;
+   corners=[p(lane.x-30.5,z0),p(lane.x+30.5,z0),
+    p(lane.x+30.5,z1),p(lane.x-30.5,z1)];
+   start=p(lane.x,z0);end=p(lane.x,z1);
+  }
+  runways.push({id,opposite:names[id],corners,centerStart:start,centerEnd:end,
+   source:mesh?'three-scene':'three-fallback'});
+ }
+ return runways;
+}
+function jetTrafficReciprocalRunway(id){
+ const m=/^(\d{1,2})([LCR]?)$/.exec(String(id||'').replace(/^RWY\s*/i,''));
+ if(!m)return '';
+ const value=(Number(m[1])+18)%36||36;
+ const side={L:'R',R:'L',C:'C','':''}[m[2]];
+ return String(value).padStart(2,'0')+side;
+}
+function jetTrafficDrawWSSSNDRunways(ctx,project,width,height,state){
+ if(jetTrafficActiveAirport()!=='WSSS'||!_t||typeof project!=='function')return;
+ const strips=jetTrafficNDRunwayGeometry(state);
+ ctx.save();
+ for(const strip of strips){
+  const pts=strip.corners.map(c=>project(c[0],c[1]));
+  if(pts.some(c=>!Array.isArray(c)||c.length<2||!c.every(Number.isFinite)))continue;
+  const xx=pts.map(c=>c[0]),yy=pts.map(c=>c[1]);
+  if(Math.max(...xx)<-35||Math.min(...xx)>width+35||Math.max(...yy)<-35||Math.min(...yy)>height+35)continue;
+  const primary=strip.id==='02C'||strip.source==='destination-scenery';
+  ctx.fillStyle=primary?'rgba(110,220,240,.18)':'rgba(154,195,212,.14)';
+  ctx.strokeStyle=primary?'#8ef1fc':'#a7c7d7';
+  ctx.lineWidth=primary?2.1:1.4;
+  ctx.beginPath();ctx.moveTo(...pts[0]);for(let i=1;i<pts.length;i++)ctx.lineTo(...pts[i]);
+  ctx.closePath();ctx.fill();ctx.stroke();
+  const th=project(...strip.centerStart),far=project(...strip.centerEnd);
   ctx.setLineDash([4,5]);ctx.beginPath();ctx.moveTo(...th);ctx.lineTo(...far);ctx.stroke();ctx.setLineDash([]);
   const label=(pos,value)=>{
-   if(pos[0]<12||pos[0]>width-12||pos[1]<14||pos[1]>height-14)return;
+   if(!value||pos[0]<12||pos[0]>width-12||pos[1]<14||pos[1]>height-14)return;
    const text=String(value);ctx.font='700 9px monospace';
    const tw=ctx.measureText(text).width;
    ctx.fillStyle='rgba(0,20,35,.88)';ctx.fillRect(pos[0]-tw/2-3,pos[1]-15,tw+6,13);
    ctx.fillStyle='#dff9ff';ctx.fillText(text,pos[0]-tw/2,pos[1]-5);
   };
-  label(th,id);label(far,labels[id]);
+  label(th,strip.id);label(far,strip.opposite);
  }
  ctx.restore();
 }
@@ -5617,7 +5674,7 @@ function jetTrafficDrawND(ctx,width,height,state,project,view){
  if(mode==='arc')ctx.rect(2,48,width-4,Math.max(25,height-85));
  else ctx.arc(cx,cy,rim-4,0,Math.PI*2);
  ctx.clip();
- jetTrafficDrawWSSSNDRunways(ctx,project,width,height);
+ jetTrafficDrawWSSSNDRunways(ctx,project,width,height,state);
  const paint=(a,simulated=false)=>{
   const target=simulated?{x:jetTraffic.plane?.position?.x,z:jetTraffic.plane?.position?.z}:
    (jetTraffic.liveModels.get(a.id)||jetTrafficPosition(a,Date.now()));
