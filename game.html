@@ -4691,7 +4691,12 @@ NTAA|TAHITI|04|-17.55|-149.61|-1|2.4|0.6|0
  let depRecord=_l(n.dep,Xs(n)),arrRecord=_l(n.arr,ps(n));
  Bl.len=depRecord&&depRecord.len?Me(depRecord.len*.3048,900,5000):1800;
  qs.len=arrRecord&&arrRecord.len?Me(arrRecord.len*.3048,900,5000):3000;
- let i=M4(t,kt,Tn.meta.seed,n),s=B0(n.arr),o=ps(n),r=Xs(n),a=C4(t,e,kt,i.engFail,{snowOk:h0(n.dep)||h0(n.arr)});i.engFail=a.em==="engFail"?a.eng:0,a.k.extraStorms&&(i.storms=Math.min(10,i.storms+a.k.extraStorms));let l=u4(Bn(e+17),{wp:i.wp,storms:i.storms,glideDeg:3,lenK:i.lenK,diff:i.diff,finalName:("FF"+o).slice(0,5),vorIdent:s.vor.ident,depRot:TM(n)});return e4(l,{dep:n.dep,arr:n.arr,depRwy:r,arrRwy:o},f3),l.depRwy=r,l.arrRwy=o,l.dest=s.icao,l.from=n.dep,l.site=s.site||null,l.depSite=B0(n.dep).site||null,B4(l,a,e),k4(l,a.app),{lv:i,R:l,sc:a}}function TM(n){let t=Zi(n.dep,Xs(n)),e=Zi(n.arr,ps(n));return t==null||e==null?0:(((t-e)%360+540)%360-180)*Math.PI/180}function xM(n){let{R:t,lv:e}=pp(n,E.level,fp(E.level,n));return Object.assign(m3(t,ze),{diff:e.diff})}function mp(){let n=E.plane;return E.state==="intro"||E.state==="end"||E.state==="play"&&n&&n.onGround&&E.phase==="takeoff"&&n.v<3}function IM(n){return mp()?n.dep===n.arr?"m.e.samearpt":(E.plan={dep:n.dep,arr:n.arr,diff:n.diff,fixes:n.fixes||null,seed:n.seed||0,depRwy:n.depRwy||null,arrRwy:n.arrRwy||null},$e.diff=E.plan.diff,ni=sr(),Rs=!0,ii(),ee("plan_sync",E.plan.dep+"-"+E.plan.arr+":"+E.plan.diff+":"+_t.wps.length),Mt.banner(Bt("banner.planSynced"),1.2),yo("fpln"),null):"m.e.onground"}function RM(){return E.genN++,(E.genN*7919+104729)%50021+1}var ni=sr(),yi=document.getElementById("game"),Ye=null,td=!1;try{Ye=new q1({antialias:!0,preserveDrawingBuffer:pi,powerPreference:"high-performance"})}catch{td=!0}var Ga=Ye?Ye.domElement:document.createElement("canvas");Ga.setAttribute("data-game-scene","");yi.appendChild(Ga);Ye&&(Ye.outputColorSpace=ke,Ye.toneMapping=o0,Ye.shadowMap.enabled=!0,Ye.shadowMap.type=hh,Ye.autoClear=!1);var Ap={},yM=Bn(ni),It=Ye?f4(kt,Ap,yM):null,ui=new vn(60,1,.5,14e3),Ba=It?X4(It):null,wt=c5(E),Mt=g5(E,Bt,{commSnap:()=>Q3(),countryName:n=>N5(n,u0),onGear:()=>tc(!0),onFlaps:()=>ec(!0),onAp:()=>Oo(!0,1),onAp2:()=>Oo(!0,2),onFcuBtn:n=>id(n,!0),onEfis:n=>bp(n,!0),onFullscreen:()=>Pp(),onAthr:()=>Up(!0),onEng:n=>nr(n,!0),onMcdu:()=>yo(),onMute:()=>ka(!wt.muted),onReplay:()=>ii(),onNext:()=>bM(),onLevel:n=>_M(n),onApt:(n,t)=>NM(n,t),onPanel:()=>Ql(!E.panelMax,!0),onAcct:(n,t,e)=>xp(n,t,e),acctInfo:()=>Ep(),onSetting:n=>gp(n),onSave:()=>za(!0),onContinue:()=>Tp(),onPause:()=>vo(!E.userPaused,"button"),onResume:()=>vo(!1,"button"),onRestartFlight:()=>Mp(),onQuit:()=>Sp()}),je=I5(E,Bt,{preview:n=>xM(n),sync:n=>IM(n),genSeed:()=>RM(),syncOk:()=>mp(),tap:()=>{wt.unlock(),wt.play("tap",.35),E.state==="play"&&fn()},edit:()=>ee("fms",E.fms?E.fms.edits:0),opened:()=>{Mt.hideHint(),E.hintShownFor=null},closed:()=>{}});function yo(n){wt.unlock(),wt.play("tap"),je.show(n||je.page),ee("mcdu",je.page)}function Ka(n){E.level=Me(n,1,bn);{let t=r3(E.level);E.plan.dep=t[0],E.plan.arr=t[1],E.plan.seed=0,E.plan.depRwy=E.plan.arrRwy=null}ni=sr(),Rs=!0,Mt.setLevel(E.level,bn,E.unlocked),Mn.current()&&Mn.save({lastLevel:E.level})}function Ql(n,t){E.panelMax=!!n,Mt.setPanelMax(E.panelMax),Bi=!0,Is(),t&&(wt.unlock(),wt.play("tap",.4),ee("panel",E.panelMax?"max":"min"),Mn.current()&&Mn.save({panelMax:E.panelMax}))}function jetSavedFlightRouteChanged(flight){
+ let i=M4(t,kt,Tn.meta.seed,n),s=B0(n.arr),o=ps(n),r=Xs(n),a=C4(t,e,kt,i.engFail,{snowOk:h0(n.dep)||h0(n.arr)});i.engFail=a.em==="engFail"?a.eng:0,a.k.extraStorms&&(i.storms=Math.min(10,i.storms+a.k.extraStorms));let l=u4(Bn(e+17),{wp:i.wp,storms:i.storms,glideDeg:3,lenK:i.lenK,diff:i.diff,finalName:("FF"+o).slice(0,5),vorIdent:s.vor.ident,depRot:TM(n)});return e4(l,{dep:n.dep,arr:n.arr,depRwy:r,arrRwy:o},f3),l.depRwy=r,l.arrRwy=o,l.dest=s.icao,l.from=n.dep,l.site=s.site||null,l.depSite=B0(n.dep).site||null,B4(l,a,e),k4(l,a.app),{lv:i,R:l,sc:a}}function TM(n){let t=Zi(n.dep,Xs(n)),e=Zi(n.arr,ps(n));return t==null||e==null?0:(((t-e)%360+540)%360-180)*Math.PI/180}function xM(n){let{R:t,lv:e}=pp(n,E.level,fp(E.level,n));return Object.assign(m3(t,ze),{diff:e.diff})}function mp(){let n=E.plane;return E.state==="intro"||E.state==="end"||E.state==="play"&&n&&n.onGround&&E.phase==="takeoff"&&n.v<3}function IM(n){return mp()?n.dep===n.arr?"m.e.samearpt":(E.plan={dep:n.dep,arr:n.arr,diff:n.diff,fixes:n.fixes||null,seed:n.seed||0,depRwy:n.depRwy||null,arrRwy:n.arrRwy||null},$e.diff=E.plan.diff,ni=sr(),Rs=!0,ii(),ee("plan_sync",E.plan.dep+"-"+E.plan.arr+":"+E.plan.diff+":"+_t.wps.length),Mt.banner(Bt("banner.planSynced"),1.2),yo("fpln"),null):"m.e.onground"}function RM(){return E.genN++,(E.genN*7919+104729)%50021+1}var ni=sr(),yi=document.getElementById("game"),Ye=null,td=!1;try{Ye=new q1({antialias:!0,preserveDrawingBuffer:pi,powerPreference:"high-performance"})}catch{td=!0}var Ga=Ye?Ye.domElement:document.createElement("canvas");Ga.setAttribute("data-game-scene","");yi.appendChild(Ga);Ye&&(Ye.outputColorSpace=ke,Ye.toneMapping=o0,Ye.shadowMap.enabled=!0,Ye.shadowMap.type=hh,Ye.autoClear=!1);var Ap={},yM=Bn(ni),It=Ye?f4(kt,Ap,yM):null,ui=new vn(60,1,.5,14e3),Ba=It?X4(It):null,wt=c5(E),Mt=g5(E,Bt,{commSnap:()=>Q3(),countryName:n=>N5(n,u0),onGear:()=>tc(!0),onFlaps:()=>ec(!0),onAp:()=>Oo(!0,1),onAp2:()=>Oo(!0,2),onFcuBtn:n=>id(n,!0),onEfis:n=>bp(n,!0),onFullscreen:()=>Pp(),onAthr:()=>Up(!0),onEng:n=>nr(n,!0),onMcdu:()=>yo(),onMute:()=>ka(!wt.muted),onReplay:()=>ii(),onNext:()=>bM(),onLevel:n=>_M(n),onApt:(n,t)=>NM(n,t),onPanel:()=>Ql(!E.panelMax,!0),onAcct:(n,t,e)=>xp(n,t,e),acctInfo:()=>Ep(),onSetting:n=>gp(n),onSave:()=>za(!0),onContinue:()=>Tp(),onPause:()=>vo(!E.userPaused,"button"),onResume:()=>vo(!1,"button"),onRestartFlight:()=>Mp(),onQuit:()=>Sp()}),je=I5(E,Bt,{preview:n=>xM(n),sync:n=>IM(n),genSeed:()=>RM(),syncOk:()=>mp(),tap:()=>{wt.unlock(),wt.play("tap",.35),E.state==="play"&&fn()},edit:()=>ee("fms",E.fms?E.fms.edits:0),opened:()=>{Mt.hideHint(),E.hintShownFor=null},closed:()=>{}});function yo(n){wt.unlock(),wt.play("tap"),je.show(n||je.page),ee("mcdu",je.page)}function Ka(n){E.level=Me(n,1,bn);{let t=r3(E.level);E.plan.dep=t[0],E.plan.arr=t[1],E.plan.seed=0,E.plan.depRwy=E.plan.arrRwy=null}ni=sr(),Rs=!0,Mt.setLevel(E.level,bn,E.unlocked),Mn.current()&&Mn.save({lastLevel:E.level})}function Ql(n,t){E.panelMax=!!n,Mt.setPanelMax(E.panelMax),Bi=!0,Is();
+ const min=jcMobileSceneryOnly();
+ document.getElementById('ui')?.classList.toggle('jc-scene-min',min);
+ document.body.classList.toggle('jc-scene-min',min);
+ if(min&&jcMapVisible)jcSurfaceToggle(false);
+ t&&(wt.unlock(),wt.play("tap",.4),ee("panel",E.panelMax?"max":"min"),Mn.current()&&Mn.save({panelMax:E.panelMax}))}function jetSavedFlightRouteChanged(flight){
  if(!flight||!flight.plan)return false;
  const selectedDep=String(E.plan?.dep||'').trim().toUpperCase();
  const selectedArr=String(E.plan?.arr||'').trim().toUpperCase();
@@ -5914,7 +5919,7 @@ function jetTrafficDrawLiveContacts(dt){
 // Jetline Captain mobile full scenery / airport surface map.
 // The chart and 3D tracked aircraft share positions from jetTrafficPosition.
 // Simulated taxiways are labelled, NOT certified real-world ground charts.
-let jcMapLastDraw=0,jcControlsLast=0,jcMapVisible=false,jcFullUI=null,jcSurface=null;
+let jcMapLastDraw=0,jcControlsLast=0,jcMapVisible=false,jcFullUI=null,jcSurface=null,jcWasMobileMin=false;
 function jcMobileSceneryOnly(){
  return E.state==='play' && (window.innerWidth<=650||((navigator.maxTouchPoints||0)>0&&Math.min(window.innerWidth,window.innerHeight)<=520)) && !E.panelMax;
 }
@@ -5993,6 +5998,19 @@ function jcFullOverlayEnsure(){
 function jcMinControlTick(){
  if(Date.now()-jcControlsLast<170)return;jcControlsLast=Date.now();
  const mobile=jcMobileSceneryOnly();
+ // Both the 3D panel mesh and DOM-based cockpit displays must be hidden.
+ // This class is removed automatically when the player presses PANEL MAX.
+ const uiRoot=document.getElementById('ui');
+ if(uiRoot)uiRoot.classList.toggle('jc-scene-min',mobile);
+ document.body.classList.toggle('jc-scene-min',mobile);
+ if(mobile&&!jcWasMobileMin){
+  // The old taxi inset should not remain expanded on top of the runway.
+  const taxiMap=document.getElementById('jet-taxi-route-map');
+  if(taxiMap)taxiMap.classList.add('compact');
+  // Airport surface map remains available from the minimized bottom bar.
+  if(jcMapVisible)jcSurfaceToggle(false);
+ }
+ jcWasMobileMin=mobile;
  if(!jcFullUI&&mobile)jcFullOverlayEnsure();
  if(jcFullUI){jcFullUI.classList.toggle('active',mobile)}
  if(!mobile)return;
@@ -8318,6 +8336,41 @@ window.__holdHud={update};
 #jc-airport-surface .jc-map-legend{display:flex;justify-content:space-around;flex-wrap:wrap;gap:3px 8px;font-size:10px;color:#bbd4e0}
 @media(max-width:650px){#jc-airport-surface{height:min(84dvh,800px);padding:7px}#jc-flight-min-overlay .jc-min-top{font-size:9px}}
 @media(max-height:480px) and (orientation:landscape){#jc-flight-min-overlay{padding-top:3px}#jc-flight-min-overlay .jc-min-top{display:none}#jc-flight-min-overlay button{min-height:28px;font-size:10px}#jc-airport-surface{height:94vh;width:85vw}}
+</style>
+
+<style id="jc-mobile-true-min-panel-fix">
+/* True MOBILE PANEL MIN: 3D cockpit geometry is skipped in the renderer;
+   the HTML cockpit instrument canvases and buttons must ALSO disappear.
+   MAX mode stays completely untouched. */
+/* Class-based, not width-based: also works on landscape phones. */
+ #ui.playing.jc-scene-min .disp,
+ #ui.playing.jc-scene-min .pb,
+ #ui.playing.jc-scene-min .det-lbl,
+ #ui.playing.jc-scene-min .lever-lbl,
+ #ui.playing.jc-scene-min .mcdu,
+ #ui.playing.jc-scene-min #jc-pulldown-stack,
+ #ui.playing.jc-scene-min #jc-ref-ewd,
+ #ui.playing.jc-scene-min #jet-taxi-route-map,
+ #ui.playing.jc-scene-min #jc-ecam-alert,
+ #ui.playing.jc-scene-min .jc-ecam-alert,
+ #ui.playing.jc-scene-min #jet-taxi-box .jet-taxi-actions,
+ #ui.playing.jc-scene-min #jet-taxi-box .jet-taxi-status,
+ #ui.playing.jc-scene-min #jet-taxi-box .jet-taxi-route,
+ body.jc-scene-min #jc-changi-3-rwy-board,
+ body.jc-scene-min #jc-global-map-button {
+   display:none!important;visibility:hidden!important;pointer-events:none!important;
+ }
+ /* Keep top-bar information, runway signal and mini controls only. */
+ #ui.playing.jc-scene-min .panel-btn {display:flex!important;}
+ #jc-flight-min-overlay.active {z-index:65;max-height:25dvh;overflow:visible;}
+ #jc-flight-min-overlay .jc-min-top {margin-bottom:3px;}
+ #jc-flight-min-overlay .jc-min-buttons button{min-height:36px;}
+@media (max-height:520px) and (orientation:landscape){
+ #jc-flight-min-overlay.active{max-height:33dvh;overflow-y:auto;}
+ #jc-flight-min-overlay .jc-min-top{display:none;}
+ #jc-flight-min-overlay .jc-min-buttons{grid-template-columns:repeat(5,minmax(0,1fr));}
+ #jc-flight-min-overlay .jc-min-buttons button{min-height:30px;}
+}
 </style>
 </body>
 </html>
