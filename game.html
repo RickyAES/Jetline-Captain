@@ -4691,12 +4691,47 @@ NTAA|TAHITI|04|-17.55|-149.61|-1|2.4|0.6|0
  let depRecord=_l(n.dep,Xs(n)),arrRecord=_l(n.arr,ps(n));
  Bl.len=depRecord&&depRecord.len?Me(depRecord.len*.3048,900,5000):1800;
  qs.len=arrRecord&&arrRecord.len?Me(arrRecord.len*.3048,900,5000):3000;
- let i=M4(t,kt,Tn.meta.seed,n),s=B0(n.arr),o=ps(n),r=Xs(n),a=C4(t,e,kt,i.engFail,{snowOk:h0(n.dep)||h0(n.arr)});i.engFail=a.em==="engFail"?a.eng:0,a.k.extraStorms&&(i.storms=Math.min(10,i.storms+a.k.extraStorms));let l=u4(Bn(e+17),{wp:i.wp,storms:i.storms,glideDeg:3,lenK:i.lenK,diff:i.diff,finalName:("FF"+o).slice(0,5),vorIdent:s.vor.ident,depRot:TM(n)});return e4(l,{dep:n.dep,arr:n.arr,depRwy:r,arrRwy:o},f3),l.depRwy=r,l.arrRwy=o,l.dest=s.icao,l.from=n.dep,l.site=s.site||null,l.depSite=B0(n.dep).site||null,B4(l,a,e),k4(l,a.app),{lv:i,R:l,sc:a}}function TM(n){let t=Zi(n.dep,Xs(n)),e=Zi(n.arr,ps(n));return t==null||e==null?0:(((t-e)%360+540)%360-180)*Math.PI/180}function xM(n){let{R:t,lv:e}=pp(n,E.level,fp(E.level,n));return Object.assign(m3(t,ze),{diff:e.diff})}function mp(){let n=E.plane;return E.state==="intro"||E.state==="end"||E.state==="play"&&n&&n.onGround&&E.phase==="takeoff"&&n.v<3}function IM(n){return mp()?n.dep===n.arr?"m.e.samearpt":(E.plan={dep:n.dep,arr:n.arr,diff:n.diff,fixes:n.fixes||null,seed:n.seed||0,depRwy:n.depRwy||null,arrRwy:n.arrRwy||null},$e.diff=E.plan.diff,ni=sr(),Rs=!0,ii(),ee("plan_sync",E.plan.dep+"-"+E.plan.arr+":"+E.plan.diff+":"+_t.wps.length),Mt.banner(Bt("banner.planSynced"),1.2),yo("fpln"),null):"m.e.onground"}function RM(){return E.genN++,(E.genN*7919+104729)%50021+1}var ni=sr(),yi=document.getElementById("game"),Ye=null,td=!1;try{Ye=new q1({antialias:!0,preserveDrawingBuffer:pi,powerPreference:"high-performance"})}catch{td=!0}var Ga=Ye?Ye.domElement:document.createElement("canvas");Ga.setAttribute("data-game-scene","");yi.appendChild(Ga);Ye&&(Ye.outputColorSpace=ke,Ye.toneMapping=o0,Ye.shadowMap.enabled=!0,Ye.shadowMap.type=hh,Ye.autoClear=!1);var Ap={},yM=Bn(ni),It=Ye?f4(kt,Ap,yM):null,ui=new vn(60,1,.5,14e3),Ba=It?X4(It):null,wt=c5(E),Mt=g5(E,Bt,{commSnap:()=>Q3(),countryName:n=>N5(n,u0),onGear:()=>tc(!0),onFlaps:()=>ec(!0),onAp:()=>Oo(!0,1),onAp2:()=>Oo(!0,2),onFcuBtn:n=>id(n,!0),onEfis:n=>bp(n,!0),onFullscreen:()=>Pp(),onAthr:()=>Up(!0),onEng:n=>nr(n,!0),onMcdu:()=>yo(),onMute:()=>ka(!wt.muted),onReplay:()=>ii(),onNext:()=>bM(),onLevel:n=>_M(n),onApt:(n,t)=>NM(n,t),onPanel:()=>Ql(!E.panelMax,!0),onAcct:(n,t,e)=>xp(n,t,e),acctInfo:()=>Ep(),onSetting:n=>gp(n),onSave:()=>za(!0),onContinue:()=>Tp(),onPause:()=>vo(!E.userPaused,"button"),onResume:()=>vo(!1,"button"),onRestartFlight:()=>Mp(),onQuit:()=>Sp()}),je=I5(E,Bt,{preview:n=>xM(n),sync:n=>IM(n),genSeed:()=>RM(),syncOk:()=>mp(),tap:()=>{wt.unlock(),wt.play("tap",.35),E.state==="play"&&fn()},edit:()=>ee("fms",E.fms?E.fms.edits:0),opened:()=>{Mt.hideHint(),E.hintShownFor=null},closed:()=>{}});function yo(n){wt.unlock(),wt.play("tap"),je.show(n||je.page),ee("mcdu",je.page)}function Ka(n){E.level=Me(n,1,bn);{let t=r3(E.level);E.plan.dep=t[0],E.plan.arr=t[1],E.plan.seed=0,E.plan.depRwy=E.plan.arrRwy=null}ni=sr(),Rs=!0,Mt.setLevel(E.level,bn,E.unlocked),Mn.current()&&Mn.save({lastLevel:E.level})}function Ql(n,t){E.panelMax=!!n,Mt.setPanelMax(E.panelMax),Bi=!0,Is();
+ let i=M4(t,kt,Tn.meta.seed,n),s=B0(n.arr),o=ps(n),r=Xs(n),a=C4(t,e,kt,i.engFail,{snowOk:h0(n.dep)||h0(n.arr)});i.engFail=a.em==="engFail"?a.eng:0,a.k.extraStorms&&(i.storms=Math.min(10,i.storms+a.k.extraStorms));let l=u4(Bn(e+17),{wp:i.wp,storms:i.storms,glideDeg:3,lenK:i.lenK,diff:i.diff,finalName:("FF"+o).slice(0,5),vorIdent:s.vor.ident,depRot:TM(n)});return e4(l,{dep:n.dep,arr:n.arr,depRwy:r,arrRwy:o},f3),l.depRwy=r,l.arrRwy=o,l.dest=s.icao,l.from=n.dep,l.site=s.site||null,l.depSite=B0(n.dep).site||null,B4(l,a,e),k4(l,a.app),{lv:i,R:l,sc:a}}function TM(n){let t=Zi(n.dep,Xs(n)),e=Zi(n.arr,ps(n));return t==null||e==null?0:(((t-e)%360+540)%360-180)*Math.PI/180}function xM(n){let{R:t,lv:e}=pp(n,E.level,fp(E.level,n));return Object.assign(m3(t,ze),{diff:e.diff})}function mp(){let n=E.plane;return E.state==="intro"||E.state==="end"||E.state==="play"&&n&&n.onGround&&E.phase==="takeoff"&&n.v<3}function IM(n){return mp()?n.dep===n.arr?"m.e.samearpt":(E.plan={dep:n.dep,arr:n.arr,diff:n.diff,fixes:n.fixes||null,seed:n.seed||0,depRwy:n.depRwy||null,arrRwy:n.arrRwy||null},$e.diff=E.plan.diff,ni=sr(),Rs=!0,ii(),ee("plan_sync",E.plan.dep+"-"+E.plan.arr+":"+E.plan.diff+":"+_t.wps.length),Mt.banner(Bt("banner.planSynced"),1.2),yo("fpln"),null):"m.e.onground"}function RM(){return E.genN++,(E.genN*7919+104729)%50021+1}var ni=sr(),yi=document.getElementById("game"),Ye=null,td=!1;try{Ye=new q1({antialias:!0,preserveDrawingBuffer:pi,powerPreference:"high-performance"})}catch{td=!0}var Ga=Ye?Ye.domElement:document.createElement("canvas");Ga.setAttribute("data-game-scene","");yi.appendChild(Ga);Ye&&(Ye.outputColorSpace=ke,Ye.toneMapping=o0,Ye.shadowMap.enabled=!0,Ye.shadowMap.type=hh,Ye.autoClear=!1);var Ap={},yM=Bn(ni),It=Ye?f4(kt,Ap,yM):null,ui=new vn(60,1,.5,14e3),Ba=It?X4(It):null,wt=c5(E),Mt=g5(E,Bt,{commSnap:()=>Q3(),countryName:n=>N5(n,u0),onGear:()=>tc(!0),onFlaps:()=>ec(!0),onAp:()=>Oo(!0,1),onAp2:()=>Oo(!0,2),onFcuBtn:n=>id(n,!0),onEfis:n=>bp(n,!0),onFullscreen:()=>Pp(),onAthr:()=>Up(!0),onEng:n=>nr(n,!0),onMcdu:()=>yo(),onMute:()=>ka(!wt.muted),onReplay:()=>ii(),onNext:()=>bM(),onLevel:n=>_M(n),onApt:(n,t)=>NM(n,t),onPanel:()=>Ql(!E.panelMax,!0),onAcct:(n,t,e)=>xp(n,t,e),acctInfo:()=>Ep(),onSetting:n=>gp(n),onSave:()=>za(!0),onContinue:()=>Tp(),onPause:()=>vo(!E.userPaused,"button"),onResume:()=>vo(!1,"button"),onRestartFlight:()=>Mp(),onQuit:()=>Sp()}),je=I5(E,Bt,{preview:n=>xM(n),sync:n=>IM(n),genSeed:()=>RM(),syncOk:()=>mp(),tap:()=>{wt.unlock(),wt.play("tap",.35),E.state==="play"&&fn()},edit:()=>ee("fms",E.fms?E.fms.edits:0),opened:()=>{Mt.hideHint(),E.hintShownFor=null},closed:()=>{}});function yo(n){wt.unlock(),wt.play("tap"),je.show(n||je.page),ee("mcdu",je.page)}function Ka(n){E.level=Me(n,1,bn);{let t=r3(E.level);E.plan.dep=t[0],E.plan.arr=t[1],E.plan.seed=0,E.plan.depRwy=E.plan.arrRwy=null}ni=sr(),Rs=!0,Mt.setLevel(E.level,bn,E.unlocked),Mn.current()&&Mn.save({lastLevel:E.level})}// Three mobile cockpit views: 65%, 55%, and Essential MIN.
+// Desktop continues to use the game's original MAX/MIN behavior.
+const jcPanelStorageKey='jetline-captain.mobile-panel-mode.v1';
+let jcPanelMode=(()=>{try{const v=localStorage.getItem(jcPanelStorageKey);return ['65','55','essential'].includes(v)?v:'65'}catch{return '65'}})();
+let jcPanelLastMode='';
+function jcPanelIsMobile(){
+ const w=window.innerWidth,h=window.innerHeight;
+ return w<=650||((navigator.maxTouchPoints||0)>0&&Math.min(w,h)<=520);
+}
+function jcPanelSetMode(mode,save=false){
+ if(!['65','55','essential'].includes(mode))mode='65';
+ jcPanelMode=mode;
+ E.panelMax=mode!=='essential';
+ Mt.setPanelMax(E.panelMax);
+ Bi=true;Is();
  const min=jcMobileSceneryOnly();
  document.getElementById('ui')?.classList.toggle('jc-scene-min',min);
  document.body.classList.toggle('jc-scene-min',min);
  if(min&&jcMapVisible)jcSurfaceToggle(false);
- t&&(wt.unlock(),wt.play("tap",.4),ee("panel",E.panelMax?"max":"min"),Mn.current()&&Mn.save({panelMax:E.panelMax}))}function jetSavedFlightRouteChanged(flight){
+ jcControlsLast=0; // update essential controls on this frame
+ jcPanelPickerTick();jcMinControlTick();
+ if(save){
+  try{localStorage.setItem(jcPanelStorageKey,mode)}catch{}
+  wt.unlock();wt.play('tap',.4);ee('panel',mode);
+  Mn.current()&&Mn.save({panelMax:E.panelMax});
+ }
+}
+function Ql(n,t){
+ if(jcPanelIsMobile()){
+  // Native PANEL button cycles 65% -> 55% -> Essential -> 65%.
+  if(t){jcPanelSetMode(jcPanelMode==='65'?'55':jcPanelMode==='55'?'essential':'65',true)}
+  else{jcPanelSetMode(n?'65':'essential',false)}
+  return;
+ }
+ E.panelMax=!!n;Mt.setPanelMax(E.panelMax);Bi=true;Is();
+ const min=jcMobileSceneryOnly();
+ document.getElementById('ui')?.classList.toggle('jc-scene-min',min);
+ document.body.classList.toggle('jc-scene-min',min);
+ if(min&&jcMapVisible)jcSurfaceToggle(false);
+ t&&(wt.unlock(),wt.play('tap',.4),ee('panel',E.panelMax?'max':'min'),Mn.current()&&Mn.save({panelMax:E.panelMax}));
+}function jetSavedFlightRouteChanged(flight){
  if(!flight||!flight.plan)return false;
  const selectedDep=String(E.plan?.dep||'').trim().toUpperCase();
  const selectedArr=String(E.plan?.arr||'').trim().toUpperCase();
@@ -4738,22 +4773,30 @@ function hdAutoTune(seconds,frames){
 // the unused SIDE margins in portrait. Scale is UNIFORM: no stretched gauges.
 // A height budget protects a portion of the forward runway view on short phones.
 const jcMobilePanel=Math.min(t,e)<=520&&Math.max(t,e)<=1100&&(t<=520||((navigator.maxTouchPoints||0)>0)||(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches));
-if(jcMobilePanel&&!E.__mobilePanelAutoSized){E.__mobilePanelAutoSized=!0;E.panelMax=!0;if(Mt&&Mt.setPanelMax)Mt.setPanelMax(!0)}
-if(pe.W=t,pe.H=e,pe.landscape=e/t<1.15,pe.landscape){let i=Math.min(e/Ri.h,t*(E.panelMax?.62:.52*kt("panelSize")/.62)/Ri.w);if(jcMobilePanel&&!E.panelMax)i=Math.min(i,.55*t/Ri.w);pe.s=i,pe.bx=t-Ri.w*i,pe.by=(e-Ri.h*i)/2,pe.world=(jcMobilePanel&&!E.panelMax)?[0,0,t,e]:[0,0,pe.bx+4,e]}else{
-  let i=E.panelMax?(jcMobilePanel?.85:.72):kt("panelSize")+Math.min(1,Math.max(0,(700-e)/400))*Math.max(0,.62-kt("panelSize"));
-  let s=t/Ri.w;
-  if(jcMobilePanel&&!E.panelMax){
-    // Mobile MIN cockpit occupies at most the bottom 55% of the game viewport.
-    // The GEAR / FLAP / SPLR controls live inside the ECAM-to-MCDU gap,
-    // so no extra overlay or height reservation is necessary.
-    const widthScale=.97*t/Ri.w;
-    const cockpitHeightBudget=Math.max(1,e*.55);
-    const heightScale=cockpitHeightBudget/Ri.h;
-    s=Math.min(widthScale,heightScale);
-  }else if(Ri.h*s>e*i){s=e*i/Ri.h}
-  pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;
-  // Full scenery on mobile when the cockpit is minimized; no camera crop.
-  pe.world=(jcMobilePanel&&!E.panelMax)?[0,0,t,e]:[0,0,t,pe.by+8*s]
+if(jcMobilePanel){
+ if(!E.__mobilePanelAutoSized){E.__mobilePanelAutoSized=true}
+ E.panelMax=jcPanelMode!=='essential';
+ Mt?.setPanelMax?.(E.panelMax);
+ const target=jcPanelMode==='65'?.65:jcPanelMode==='55'?.55:0;
+ const widthScale=t/Ri.w;
+ // Essential mode uses the full scene. Non-essential modes occupy exactly
+ // 65% / 55% of viewport height when physical screen width permits.
+ let s;
+ if(jcPanelMode==='essential'){
+   s=Math.min(.96*t/Ri.w,.37*e/Ri.h);
+ }else{
+   s=Math.min(widthScale,Math.max(.25,e*target/Ri.h));
+ }
+ pe.W=t;pe.H=e;pe.landscape=e/t<1.15;
+ pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;
+ pe.world=jcPanelMode==='essential'?[0,0,t,e]:[0,0,t,Math.max(1,pe.by+8*s)];
+}else if(pe.W=t,pe.H=e,pe.landscape=e/t<1.15){
+ const i=Math.min(e/Ri.h,t*(E.panelMax?.62:.52*kt('panelSize')/.62)/Ri.w);
+ pe.s=i;pe.bx=t-Ri.w*i;pe.by=(e-Ri.h*i)/2;pe.world=[0,0,pe.bx+4,e];
+}else{
+ const i=E.panelMax?.72:kt('panelSize')+Math.min(1,Math.max(0,(700-e)/400))*Math.max(0,.62-kt('panelSize'));
+ let s=t/Ri.w;if(Ri.h*s>e*i)s=e*i/Ri.h;
+ pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;pe.world=[0,0,t,pe.by+8*s];
 }return pe.dpr=CM(t,e),Ye&&(Ye.setPixelRatio(pe.dpr),Ye.setSize(t,e,!1),Ga.style.width=t+"px",Ga.style.height=e+"px"),Ba&&Y4(Ba,pe),Mt.layout(pe,cn),je.layout(pe),Bi=!1,E.state!=="boot"&&d0(),!0}var J5=window.ResizeObserver?new ResizeObserver(()=>{Bi=!0,(pi||E.state==="end"||E.hostPaused)&&Is()}):null;J5&&J5.observe(yi);window.addEventListener("resize",()=>{Bi=!0});window.addEventListener("orientationchange",()=>setTimeout(()=>{Bi=!0,Is()},200));var BM=Bn(ni);
 /* Taxi-out / taxi-in routes are navigable simulated airport service roads.
    Runway IDs, headings and lengths follow the selected airport record.
@@ -5920,8 +5963,39 @@ function jetTrafficDrawLiveContacts(dt){
 // The chart and 3D tracked aircraft share positions from jetTrafficPosition.
 // Simulated taxiways are labelled, NOT certified real-world ground charts.
 let jcMapLastDraw=0,jcControlsLast=0,jcMapVisible=false,jcFullUI=null,jcSurface=null,jcWasMobileMin=false;
+function jcPanelPickerEnsure(){
+ let picker=document.getElementById('jc-panel-view-modes');if(picker)return picker;
+ picker=document.createElement('nav');picker.id='jc-panel-view-modes';
+ picker.setAttribute('aria-label','Cockpit panel height selector');
+ picker.setAttribute('data-ui','true');
+ picker.innerHTML='<span class="jc-pick-caption">PANEL</span><button type="button" data-jc-mode="65">65%</button><button type="button" data-jc-mode="55">55%</button><button type="button" data-jc-mode="essential">ESSENTIAL</button>';
+ picker.addEventListener('pointerdown',ev=>ev.stopPropagation());
+ picker.addEventListener('click',ev=>{
+  const b=ev.target.closest('button[data-jc-mode]');if(!b)return;
+  ev.preventDefault();ev.stopPropagation();jcPanelSetMode(b.dataset.jcMode,true);
+ });
+ document.body.appendChild(picker);return picker;
+}
+function jcPanelPickerTick(){
+ const picker=jcPanelPickerEnsure();
+ const active=E.state==='play'&&jcPanelIsMobile();
+ picker.classList.toggle('active',active);
+ if(!active)return;
+ picker.dataset.mode=jcPanelMode;
+ picker.querySelectorAll('button[data-jc-mode]').forEach(b=>{
+  const pressed=b.dataset.jcMode===jcPanelMode;
+  b.classList.toggle('selected',pressed);b.setAttribute('aria-pressed',String(pressed));
+ });
+ const nativeLabel=document.querySelector('#ui.playing .panel-lbl');
+ if(nativeLabel)nativeLabel.textContent=jcPanelMode==='essential'?'PANEL · MIN':`PANEL · ${jcPanelMode}%`;
+ const bar=document.getElementById('jc-flight-min-overlay');
+ const bh=jcPanelMode==='essential'&&bar?.classList.contains('active')?bar.getBoundingClientRect().height:0;
+ const vh=Math.max(1,window.innerHeight);
+ const occupied=jcPanelMode==='essential'?Math.max(0,bh):jcPanelMode==='65'?.65*vh:.55*vh;
+ picker.style.bottom=Math.min(vh-70,Math.max(4,occupied+5))+'px';
+}
 function jcMobileSceneryOnly(){
- return E.state==='play' && (window.innerWidth<=650||((navigator.maxTouchPoints||0)>0&&Math.min(window.innerWidth,window.innerHeight)<=520)) && !E.panelMax;
+ return E.state==='play' && jcPanelIsMobile() && jcPanelMode==='essential';
 }
 function jcSurfaceEnsure(){
  if(jcSurface)return jcSurface;
@@ -5951,24 +6025,28 @@ function jcFullOverlayEnsure(){
  if(jcFullUI)return jcFullUI;
  const root=document.createElement('section');root.id='jc-flight-min-overlay';
  root.setAttribute('data-ui','true');root.setAttribute('aria-label','Minimal flight controls');
- root.innerHTML=`<div class="jc-min-top"><span>FULL SCENERY · MIN</span><span id="jc-min-speed">SPD ---</span><span id="jc-min-airport">---</span></div>
+ root.innerHTML=`<div class="jc-min-top"><span>ESSENTIAL · <b id="jc-min-phase">FLIGHT</b></span><span id="jc-min-speed">SPD ---</span><span id="jc-min-hdg">HDG ---</span><span id="jc-min-alt">ALT ---</span><span id="jc-min-vs">V/S ---</span></div>
  <div class="jc-min-buttons">
   <button type="button" data-jc-hold="left" aria-label="Steer left">◀ LEFT</button>
   <button type="button" data-jc-hold="brake" aria-label="Hold brakes">BRAKE</button>
   <button type="button" data-jc-hold="right" aria-label="Steer right">RIGHT ▶</button>
+  <button type="button" data-jc-hold="pitch-up" aria-label="Hold to pitch up">PITCH ↑</button>
+  <button type="button" data-jc-hold="pitch-down" aria-label="Hold to pitch down">PITCH ↓</button>
   <button type="button" data-jc-action="throttle-down" aria-label="Reduce throttle">THR −</button>
   <button type="button" data-jc-action="throttle-up" aria-label="Increase throttle">THR +</button>
   <button type="button" data-jc-action="gear" id="jc-min-gear">GEAR</button>
   <button type="button" data-jc-action="flaps" id="jc-min-flaps">FLAP</button>
   <button type="button" data-jc-action="spoiler" id="jc-min-spoiler">SPLR</button>
-  <button type="button" data-jc-action="map" id="jc-mini-map-btn">AIRPORT MAP</button>
-  <button type="button" data-jc-action="max" class="jc-min-max">PANEL MAX</button>
+  <button type="button" data-jc-action="map" id="jc-mini-map-btn">RUNWAY MAP</button>
+  <button type="button" data-jc-action="max" class="jc-min-max">PANEL 65%</button>
  </div>`;
  document.body.appendChild(root);
- const held={left:false,right:false,brake:false};
+ const held={left:false,right:false,brake:false,'pitch-up':false,'pitch-down':false};
+ root.__releaseHolds=()=>{for(const k of Object.keys(held))held[k]=false;syncHeld()};
  function syncHeld(){
   $t.kx=(held.right?1:0)-(held.left?1:0);
   $t.kr=(held.right?1:0)-(held.left?1:0);
+  $t.ky=(held['pitch-down']?1:0)-(held['pitch-up']?1:0);
   $t.kb=held.brake?1:0;
   fn();
  }
@@ -5990,7 +6068,7 @@ function jcFullOverlayEnsure(){
   else if(type==='spoiler'){
    E.plane.spoilMode=((Number(E.plane.spoilMode)||0)+1)%3;wt.play('tap',.38);fn();
   }else if(type==='map')jcSurfaceToggle();
-  else if(type==='max')Ql(true,true);
+  else if(type==='max')jcPanelSetMode('65',true);
  });
  root.addEventListener('pointerdown',ev=>ev.stopPropagation());
  jcFullUI=root;return root;
@@ -6010,14 +6088,20 @@ function jcMinControlTick(){
   // Airport surface map remains available from the minimized bottom bar.
   if(jcMapVisible)jcSurfaceToggle(false);
  }
- jcWasMobileMin=mobile;
  if(!jcFullUI&&mobile)jcFullOverlayEnsure();
- if(jcFullUI){jcFullUI.classList.toggle('active',mobile)}
+ if(jcFullUI){
+  if(!mobile&&jcWasMobileMin)jcFullUI.__releaseHolds?.();
+  jcFullUI.classList.toggle('active',mobile);
+ }
+ jcWasMobileMin=mobile;
  if(!mobile)return;
  const p=E.plane;
  const set=(id,txt)=>{const e=document.getElementById(id);if(e)e.textContent=txt};
- set('jc-min-speed',`SPD ${Math.round((p.v||0)*wn)} KT`);
- set('jc-min-airport',jetTrafficActiveAirport()||pt.from||'');
+ set('jc-min-speed',`SPD ${Math.round((p.v||0)*wn)}KT`);
+ set('jc-min-phase',String(E.phase||'FLIGHT').toUpperCase());
+ set('jc-min-hdg',`HDG ${Math.round((p.psi*180/Math.PI+360)%360).toString().padStart(3,'0')}°`);
+ set('jc-min-alt',`ALT ${Math.round((p.y||0)*oe)}FT`);
+ set('jc-min-vs',`V/S ${Math.round((p.vy||0)*hi)}FPM`);
  set('jc-min-gear',`GEAR ${p.gear?'DN':'UP'}`);
  set('jc-min-flaps',`FLAP ${p.flaps||0}`);
  set('jc-min-spoiler',`SPLR ${['OFF','ARM','ON'][Number(p.spoilMode)||0]||'OFF'}`);
@@ -6130,7 +6214,7 @@ function jcAirportUiTick(){
  const launcher=document.getElementById('jc-global-map-button');
  if(launcher)launcher.style.display=E.state==='play'&&!jcMobileSceneryOnly()?'block':'none';
  if(E.state!=='play'&&jcMapVisible)jcSurfaceToggle(false);
- jcMinControlTick();
+ jcMinControlTick();jcPanelPickerTick();
  if(jcMapVisible){jcSurfaceDraw();}
 }
 
@@ -8370,6 +8454,25 @@ window.__holdHud={update};
  #jc-flight-min-overlay .jc-min-top{display:none;}
  #jc-flight-min-overlay .jc-min-buttons{grid-template-columns:repeat(5,minmax(0,1fr));}
  #jc-flight-min-overlay .jc-min-buttons button{min-height:30px;}
+}
+</style>
+<style id="jc-three-panel-mode-style">
+/* 65% / 55% instruments, plus an unobstructed essential flight view. */
+#jc-panel-view-modes{display:none;position:fixed;right:max(6px,env(safe-area-inset-right));z-index:70;box-sizing:border-box;max-width:calc(100vw - 12px);padding:4px;border:1px solid #59bfd0;border-radius:9px;background:rgba(3,17,35,.94);box-shadow:0 2px 10px #0016;align-items:center;gap:4px;pointer-events:auto;color:#e6faff;font:800 10px system-ui,sans-serif}
+#jc-panel-view-modes.active{display:flex}
+#jc-panel-view-modes .jc-pick-caption{padding:0 2px;color:#84e4ee;font-size:9px}
+#jc-panel-view-modes button{min-height:30px;min-width:45px;white-space:nowrap;padding:5px 7px;background:#162f48;color:#d8ecfa;border:1px solid #426b88;border-radius:6px;font:800 11px system-ui,sans-serif;touch-action:manipulation}
+#jc-panel-view-modes button.selected{color:#062026;background:#7af6e2;border-color:#bcfff2}
+#jc-flight-min-overlay .jc-min-buttons{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+#jc-flight-min-overlay .jc-min-top{justify-content:space-around;gap:3px;font-size:clamp(8px,2.35vw,11px);white-space:nowrap}
+#jc-flight-min-overlay button{white-space:normal;min-height:35px;font-size:clamp(9px,2.55vw,12px);padding:4px 2px}
+#jc-flight-min-overlay.active{max-height:28dvh;overflow-y:auto}
+@media(max-height:530px) and (orientation:landscape){
+ #jc-flight-min-overlay .jc-min-buttons{grid-template-columns:repeat(6,minmax(0,1fr));}
+ #jc-flight-min-overlay .jc-min-top{display:none}
+ #jc-flight-min-overlay button{min-height:27px;font-size:10px}
+ #jc-flight-min-overlay.active{max-height:36dvh;overflow-y:auto}
+ #jc-panel-view-modes button{min-height:25px}
 }
 </style>
 </body>
