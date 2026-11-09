@@ -5205,9 +5205,50 @@ function jetTrafficParallelLabelsTick(){
   if(visible){mark.el.style.left=px+'px';mark.el.style.top=py+'px';}
  }
 }
+// Use actual consecutive ADS-B GPS fixes to confirm the direction of travel
+// during runway lineup and departure. This avoids a low-speed/old ADS-B track
+// turning a departing jet's NOSE 180 degrees from its ground movement.
+// No synthetic aircraft or change to its reported ICAO24 identity is involved.
+function jetTrafficObservedCourse(a){
+ const reported=Number(a?.heading);
+ const fallback=Number.isFinite(reported)?((reported%360)+360)%360:0;
+ const stable=jetTraffic.stableTracks.get(a?.id);
+ if(!stable||!Number.isFinite(stable.motionBearing)||!Number.isFinite(stable.motionAt)||
+    !(Number(a?.speedKt)>=28))return fallback;
+ const lastFixTime=jetTraffic.liveAt-(Math.max(0,Number(a.seenPos)||0)*1000);
+ const freshness=lastFixTime-stable.motionAt;
+ if(freshness<-1000||freshness>18000)return fallback;
+ // A strong, measured ground vector is more trustworthy than a transient
+ // opposite track heading. Otherwise retain radar's directly reported track.
+ const conflict=Math.abs(((fallback-stable.motionBearing+540)%360)-180);
+ return conflict>38?stable.motionBearing:fallback;
+}
+function jetTrafficObserveMotion(a,track){
+ const lat=Number(a.lat),lon=Number(a.lon);
+ const sampledAt=jetTraffic.liveAt-Math.max(0,Number(a.seenPos)||0)*1000;
+ if(!Number.isFinite(lat)||!Number.isFinite(lon)||!Number.isFinite(sampledAt))return;
+ if(Number.isFinite(track.fixAt)&&sampledAt>track.fixAt+950){
+  const seconds=(sampledAt-track.fixAt)/1000;
+  const north=(lat-track.fixLat)*111195;
+  const east=(lon-track.fixLon)*111195*Math.cos(lat*Math.PI/180);
+  const meters=Math.hypot(east,north);
+  if(seconds<=35&&seconds>=.95&&meters>=18&&meters<=800){
+   const measuredKnots=meters/seconds*1.943844;
+   // Reject GPS jumps, a changed transponder location, and static jitter.
+   if(measuredKnots>=17&&measuredKnots<=370&&
+      Math.abs(measuredKnots-(Number(a.speedKt)||0))<=Math.max(48,(Number(a.speedKt)||0)*.75)){
+    track.motionBearing=(Math.atan2(east,north)*180/Math.PI+360)%360;
+    track.motionAt=sampledAt;
+   }
+  }
+ }
+ if(!Number.isFinite(track.fixAt)||sampledAt>track.fixAt+950){
+  track.fixLat=lat;track.fixLon=lon;track.fixAt=sampledAt;
+ }
+}
 function jetTrafficParallelTrack(a,lat,lon){
  if(jetTrafficActiveAirport()!=='WSSS'||!Number.isFinite(lat)||!Number.isFinite(lon))return null;
- const head=Number(a.heading),speed=Number(a.speedKt)||0;
+ const head=jetTrafficObservedCourse(a),speed=Number(a.speedKt)||0;
  const d02=Math.abs(((head-jetWSSSCourseDeg+540)%360)-180);
  const d20=Math.abs(((head-(jetWSSSCourseDeg+180)+540)%360)-180);
  if(Number.isFinite(head)&&speed>50&&Math.min(d02,d20)>32)return null;
@@ -5348,6 +5389,7 @@ function jetTrafficAccept(data){
   const r=jetTrafficParallelTrack(plane,plane.lat,plane.lon);
   let track=jetTraffic.stableTracks.get(plane.id);
   if(!track){track={id:plane.id,firstSeen:Date.now()};jetTraffic.stableTracks.set(plane.id,track);}
+  jetTrafficObserveMotion(plane,track);
   track.lastSeen=Date.now();track.callsign=plane.name;track.grounded=plane.onGround;
   track.speedKt=plane.speedKt;track.altFt=plane.altFt;track.phase=plane.phase;
   if(r && (plane.speedKt>40 || !track.runway))track.runway=r.id;
@@ -5408,7 +5450,7 @@ function jetTrafficPossibleArrival(a){
 function jetTraffic02CDeparture(a){
  if(jetTrafficActiveAirport()!=='WSSS'||!a?.id||!Number.isFinite(a.lat)||!Number.isFinite(a.lon))return null;
  const p=jetWSSSAlongCross(a.lat,a.lon,jetChangiRunways['02C'].threshold);
- const course=Number(a.heading);
+ const course=jetTrafficObservedCourse(a);
  const err02=Math.abs(((course-jetWSSSCourseDeg+540)%360)-180);
  const err20=Math.abs(((course-(jetWSSSCourseDeg+180)+540)%360)-180);
  const forward=err02<=err20,err=Math.min(err02,err20);
@@ -5910,7 +5952,8 @@ function jetTrafficPosition(a,now){
  const velocityKm=Math.max(0,a.speedKt)*1.852*elapsed/3600;
  const stopped=!!a.onGround&&a.speedKt<3;
  const deltaKm=stopped?0:Math.min(velocityKm,a.onGround?.35:finalCandidate?.80:1.8);
- const h=(Number(a.heading)||0)*Math.PI/180;
+ const trackedHeading=wsss?jetTrafficObservedCourse(a):Number(a.heading)||0;
+ const h=trackedHeading*Math.PI/180;
  const lat=a.lat+deltaKm*Math.cos(h)/111.195;
  const lon=a.lon+deltaKm*Math.sin(h)/(111.195*Math.max(.15,Math.cos(lat0*Math.PI/180)));
  const east=(lon-lon0)*111195*Math.cos(lat0*Math.PI/180);
@@ -6018,7 +6061,18 @@ function jetTrafficPosition(a,now){
    a.phase==='DESCENDING'?'INBOUND':a.phase==='CLIMBING'?'DEPARTING':'AIRBORNE';
  }
  const pos=qi(_t,x,z);
- let heading=Number.isFinite(Number(a.heading))?Number(a.heading):course;
+ let heading=wsss?trackedHeading:(Number.isFinite(Number(a.heading))?Number(a.heading):course);
+ // During a genuine runway roll or observed low initial climb, align the
+ // aircraft's nose to the same 02/20 runway axis as its radar-derived path.
+ // In particular a 20C departure must face toward the 20 threshold, not 02C.
+ // Do not snap taxiway aircraft, crossing flights or off-centre contacts.
+ if(wsss&&runway&&Math.abs(runway.cross)<110&&
+    runway.along>-90&&runway.along<4850&&Number(a.speedKt)>=45&&
+    (a.onGround||(!a.onGround&&a.phase==='CLIMBING'&&Number(a.altFt)<=1800))){
+  const runwayHeading=runway.dir==='02'?jetWSSSCourseDeg:(jetWSSSCourseDeg+180)%360;
+  const error=Math.abs(((trackedHeading-runwayHeading+540)%360)-180);
+  if(error<35)heading=runwayHeading;
+ }
  if(wsss&&approachAligned&&runway){
   const desired=runway.dir==='02'?jetWSSSCourseDeg:(jetWSSSCourseDeg+180)%360;
   const difference=((desired-heading+540)%360)-180;
@@ -6529,7 +6583,7 @@ function jcSurfaceDraw(force=false){
   ctx.strokeStyle=selected?'#ffffff':color;ctx.fillStyle=color;ctx.lineWidth=selected?2.5:1.2;
   ctx.beginPath();
   if(a.onGround){ctx.arc(px,py,selected?6:4.3,0,Math.PI*2);ctx.fill();}
-  else{const hd=(Number(a.heading)||0)*Math.PI/180;
+  else{const hd=jetTrafficObservedCourse(a)*Math.PI/180;
    const rot=hd-jetWSSSCourseDeg*Math.PI/180;
    ctx.moveTo(px+Math.sin(rot)*8,py-Math.cos(rot)*8);
    ctx.lineTo(px-Math.cos(rot)*4-Math.sin(rot)*4,py-Math.sin(rot)*4+Math.cos(rot)*4);
