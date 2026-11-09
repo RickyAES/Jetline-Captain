@@ -4710,7 +4710,7 @@ function jcPanelSetMode(mode,save=false){
  document.getElementById('ui')?.classList.toggle('jc-scene-min',min);
  document.body.classList.toggle('jc-scene-min',min);
  if(min&&jcMapVisible)jcSurfaceToggle(false);
- jcControlsLast=0; // update essential controls on this frame
+ jcControlsLast=0; // refresh all mobile controls on this frame
  jcPanelPickerTick();jcMinControlTick();
  if(save){
   try{localStorage.setItem(jcPanelStorageKey,mode)}catch{}
@@ -6073,8 +6073,97 @@ function jcFullOverlayEnsure(){
  root.addEventListener('pointerdown',ev=>ev.stopPropagation());
  jcFullUI=root;return root;
 }
+// Dedicated mobile 65%/55% flight controls, anchored to the bottom safe area.
+// These controls are separate from the Essential MIN overlay and retain touch
+// braking while the physical cockpit instruments are shown.
+let jcQuickUI=null,jcQuickActive=false;
+function jcQuickControlsEnsure(){
+ if(jcQuickUI)return jcQuickUI;
+ const root=document.createElement('div');root.id='jc-cockpit-quick-controls';
+ root.setAttribute('role','group');root.setAttribute('data-ui','true');
+ root.setAttribute('aria-label','Mobile cockpit brakes, gear, flaps and spoilers');
+ root.innerHTML=`
+ <button type="button" class="jc-q-brake" data-jc-q-brake="L" aria-label="Left brake, hold" aria-pressed="false">BRAKE L</button>
+ <button type="button" data-jc-q-action="gear" id="jc-q-gear">GEAR</button>
+ <button type="button" data-jc-q-action="flaps" id="jc-q-flaps">FLAPS</button>
+ <button type="button" data-jc-q-action="spoilers" id="jc-q-spoilers">SPOILER</button>
+ <button type="button" class="jc-q-brake" data-jc-q-brake="R" aria-label="Right brake, hold" aria-pressed="false">BRAKE R</button>`;
+ document.body.appendChild(root);
+ const pressed=new Set();
+ const heldIds=new Map();
+ const sync=()=>{
+  window.__jetQuickBrake=pressed.size>0?1:0;
+  // Existing taxi input system consumes this shared brake state on every frame.
+  if(typeof window.__jetTaxiControlsSync==='function')window.__jetTaxiControlsSync();
+  else window.__jetTaxiBrake=window.__jetQuickBrake;
+  for(const b of root.querySelectorAll('[data-jc-q-brake]')){
+   const down=pressed.has(b.dataset.jcQBrake);
+   b.dataset.on=down?'1':'0';b.setAttribute('aria-pressed',String(down));
+  }
+ };
+ const release=(key)=>{
+  const held=heldIds.get(key);
+  if(!held)return;
+  heldIds.delete(key);
+  pressed.delete(held);
+  sync();
+ };
+ root.__releaseAll=()=>{heldIds.clear();pressed.clear();sync();};
+ for(const b of root.querySelectorAll('[data-jc-q-brake]')){
+  const side=b.dataset.jcQBrake;
+  b.addEventListener('pointerdown',ev=>{
+   if(ev.pointerType==='mouse'&&ev.button!==0)return;
+   ev.preventDefault();ev.stopPropagation();
+   const key='p'+ev.pointerId;
+   heldIds.set(key,side);pressed.add(side);sync();
+   try{b.setPointerCapture(ev.pointerId)}catch{}
+  });
+  for(const event of ['pointerup','pointercancel','lostpointercapture']){
+   b.addEventListener(event,ev=>{ev.preventDefault();ev.stopPropagation();release('p'+ev.pointerId)});
+  }
+  b.addEventListener('keydown',ev=>{
+   if(ev.key!=='Enter'&&ev.key!==' ')return;
+   ev.preventDefault();ev.stopPropagation();
+   heldIds.set('k'+side,side);pressed.add(side);sync();
+  });
+  b.addEventListener('keyup',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();release('k'+side)}});
+  b.addEventListener('blur',()=>release('k'+side));
+ }
+ root.addEventListener('pointerdown',ev=>ev.stopPropagation());
+ root.addEventListener('click',ev=>{
+  const b=ev.target.closest('button[data-jc-q-action]');if(!b)return;
+  ev.preventDefault();ev.stopPropagation();
+  if(E.state!=='play'||!jcQuickActive)return;
+  const action=b.dataset.jcQAction;
+  if(action==='gear')tc(true);
+  else if(action==='flaps')ec(true);
+  else if(action==='spoilers'){
+   E.plane.spoilMode=((Number(E.plane.spoilMode)||0)+1)%3;
+   wt.unlock();wt.play('tap',.38);fn();
+  }
+ });
+ window.addEventListener('blur',()=>root.__releaseAll());
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)root.__releaseAll()});
+ jcQuickUI=root;return root;
+}
+function jcQuickControlsTick(){
+ const active=E.state==='play'&&jcPanelIsMobile()&&jcPanelMode!=='essential';
+ if(!jcQuickUI&&!active)return;
+ const root=jcQuickControlsEnsure();
+ root.classList.toggle('active',active);
+ document.body.classList.toggle('jc-panel-controls',active);
+ if(!active&&jcQuickActive)root.__releaseAll?.();
+ jcQuickActive=active;
+ if(!active||!E.plane)return;
+ const p=E.plane;
+ const gear=root.querySelector('#jc-q-gear');if(gear)gear.textContent='GEAR '+(p.gear?'DN':'UP');
+ const flap=root.querySelector('#jc-q-flaps');if(flap)flap.textContent='FLAP '+(p.flaps||0);
+ const sp=root.querySelector('#jc-q-spoilers');if(sp)sp.textContent='SPLR '+(['OFF','ARM','ON'][Number(p.spoilMode)||0]||'OFF');
+}
+
 function jcMinControlTick(){
  if(Date.now()-jcControlsLast<170)return;jcControlsLast=Date.now();
+ jcQuickControlsTick();
  const mobile=jcMobileSceneryOnly();
  // Both the 3D panel mesh and DOM-based cockpit displays must be hidden.
  // This class is removed automatically when the player presses PANEL MAX.
@@ -8207,7 +8296,7 @@ window.__holdHud={update};
  const pressed=new Map();let sequence=0;
  function sync(){
    const held=[...pressed.values()];
-   window.__jetTaxiBrake=(held.some(x=>x.b.dataset.brake)||!!window.__jetPanelMinBrake)?1:0;
+   window.__jetTaxiBrake=(held.some(x=>x.b.dataset.brake)||!!window.__jetPanelMinBrake||!!window.__jetQuickBrake)?1:0;
    const turns=held.filter(x=>x.b.dataset.dir).sort((a,b)=>a.order-b.order);
    window.__jetTaxiSteer=turns.length?Number(turns[turns.length-1].b.dataset.dir):0;
    buttons.forEach(b=>{
@@ -8473,6 +8562,41 @@ window.__holdHud={update};
  #jc-flight-min-overlay button{min-height:27px;font-size:10px}
  #jc-flight-min-overlay.active{max-height:36dvh;overflow-y:auto}
  #jc-panel-view-modes button{min-height:25px}
+}
+</style>
+
+<style id="jc-mobile-lower-brakes-quick-controls">
+/* Mobile 65/55: keep essential takeoff/landing toggles below the instruments. */
+#jc-cockpit-quick-controls{display:none;position:fixed;z-index:74;
+ left:max(5px,env(safe-area-inset-left));right:max(5px,env(safe-area-inset-right));
+ bottom:calc(6px + env(safe-area-inset-bottom));padding:4px 3px;
+ border:1px solid #468dad;border-radius:10px;
+ background:rgba(4,17,32,.93);box-shadow:0 3px 16px #000b;
+ grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;
+ pointer-events:auto;box-sizing:border-box;
+}
+#jc-cockpit-quick-controls.active{display:grid}
+#jc-cockpit-quick-controls button{min-width:0;min-height:44px;padding:4px 1px;
+ background:#173d58;border:1px solid #69b6d0;border-radius:7px;
+ color:#f4ffff;font:800 clamp(8px,2.35vw,11px)/1.1 system-ui,sans-serif;
+ white-space:nowrap;text-align:center;touch-action:none;user-select:none;
+ -webkit-user-select:none;cursor:pointer}
+#jc-cockpit-quick-controls .jc-q-brake{background:#674124;border-color:#d6a26a;color:#fff0ce}
+#jc-cockpit-quick-controls .jc-q-brake[data-on="1"]{background:#bd6033;border-color:#ffe2a0;box-shadow:0 0 9px #ffaa44a0}
+#jc-cockpit-quick-controls button:active{filter:brightness(1.22)}
+/* The existing taxi side brakes formerly occupied the middle of the screen.
+   The new independent left/right brakes now sit in the bottom control row.
+   Move the separate taxi steering buttons down too; prevent duplication. */
+body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-brake{display:none!important}
+body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side{
+ top:auto!important;bottom:calc(72px + env(safe-area-inset-bottom))!important;
+ width:clamp(60px,16vw,82px)!important;gap:0!important}
+body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir]{min-height:40px!important}
+@media (max-height:530px) and (orientation:landscape){
+ #jc-cockpit-quick-controls{bottom:calc(3px + env(safe-area-inset-bottom));padding:2px}
+ #jc-cockpit-quick-controls button{min-height:32px;font-size:10px;padding:2px}
+ body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side{bottom:calc(47px + env(safe-area-inset-bottom))!important;width:62px!important}
+ body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir]{min-height:34px!important}
 }
 </style>
 </body>
