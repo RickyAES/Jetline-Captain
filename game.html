@@ -5211,7 +5211,7 @@ function jetTrafficParallelTrack(a,lat,lon){
   const p=jetWSSSAlongCross(lat,lon,lane.threshold);
   // WSSS actual runway length 4,000m, eligible approach tracks up to 18km
   // outside a threshold and 4km beyond for missed-approach detection.
-  const dist=dir==='02'? -p.along : p.along-4000;
+  const dist=dir==='02'? -p.along : p.along-(4000-(id==='02L'?740:0));
   return{id,dir,designation:dir==='02'?id:({'02L':'20R','02C':'20C','02R':'20L'}[id]),
    runway:lane,along:p.along,cross:p.cross,distanceToThreshold:dist,score:Math.abs(p.cross)};
  }).filter(p=>p.along>=-18000&&p.along<=22000).sort((p,q)=>p.score-q.score);
@@ -5306,7 +5306,7 @@ function jetTrafficApplyLivery(group,a,target){
  // displayed gear is GAME-ESTIMATED, never an assertion about the real jet.
  // Target stage is derived from the same radar position and runway geometry as
  // the visible 3D aircraft; this works for both 02 and reciprocal 20 approaches.
- const onFinal=target?.stage==='APPROACH'||target?.stage==='ROLLOUT EST';
+ const onFinal=target?.stage==='APPROACH'||target?.stage==='APPROACH EST'||target?.stage==='ROLLOUT EST';
  const otherAirportFinal=!a.onGround&&a.phase==='DESCENDING'&&
    Number.isFinite(a.altFt)&&a.altFt<=3000&&(Number(a.km)||Infinity)<12;
  const shortInitialClimb=!a.onGround&&a.phase==='CLIMBING'&&
@@ -5829,11 +5829,24 @@ function jetTrafficBuildLivePlane(a){
 }
 function jetTrafficPosition(a,now){
  const lat0=jetTraffic.liveRef[0],lon0=jetTraffic.liveRef[1];
- // Carefully bounded dead reckoning; stop claiming current accuracy after 80s.
- const elapsed=Math.max(0,Math.min(80,(now-jetTraffic.liveAt)/1000+(a.seenPos||0)));
+ const wsss=jetTrafficActiveAirport()==='WSSS';
+ const stable=jetTraffic.stableTracks.get(a.id);
+ const rawRunway=wsss?jetTrafficParallelTrack(a,a.lat,a.lon):null;
+ const rawBefore=rawRunway?Math.max(0,rawRunway.distanceToThreshold):Infinity;
+ const reportedDescent=a.phase==='DESCENDING'||Number(a.verticalRate)<-180;
+ const finalCandidate=!!rawRunway&&!a.onGround&&a.speedKt>65&&reportedDescent&&
+  Math.abs(rawRunway.cross)<280&&rawBefore<13000;
+ // ADS-B positions can be 20-90s old while the radar endpoint remains cached.
+ // The previous 80-second dead reckoning moved 150kt aircraft >6km, often past
+ // Changi's 4km runway. Near final, project at most 6s (<0.5km at 150kt).
+ // After 35s with no fresh position report, use the last *reported* point.
+ const age=Math.max(0,(now-jetTraffic.liveAt)/1000+(Number(a.seenPos)||0));
+ const maxSeconds=a.onGround?(a.id===jetTraffic.departureId?8:5):
+  (finalCandidate?(rawBefore<4500?6:12):15);
+ const elapsed=age>35?0:Math.min(age,maxSeconds);
  const velocityKm=Math.max(0,a.speedKt)*1.852*elapsed/3600;
- const isObservedDeparture=a.id===jetTraffic.departureId;
- const deltaKm=a.onGround&&a.speedKt<3?0:Math.min(velocityKm,a.onGround?(isObservedDeparture?2.5:.4):8.5);
+ const stopped=!!a.onGround&&a.speedKt<3;
+ const deltaKm=stopped?0:Math.min(velocityKm,a.onGround?.35:finalCandidate?.80:1.8);
  const h=(Number(a.heading)||0)*Math.PI/180;
  const lat=a.lat+deltaKm*Math.cos(h)/111.195;
  const lon=a.lon+deltaKm*Math.sin(h)/(111.195*Math.max(.15,Math.cos(lat0*Math.PI/180)));
@@ -5844,97 +5857,126 @@ function jetTrafficPosition(a,now){
  const bearing=course*Math.PI/180;
  const along=east*Math.sin(bearing)+north*Math.cos(bearing);
  const side=east*Math.cos(bearing)-north*Math.sin(bearing);
- const runway=jetTrafficActiveAirport()==='WSSS'?jetTrafficParallelTrack(a,lat,lon):null;
- const stable=jetTraffic.stableTracks.get(a.id);
- let x,z,height,stage='',estimated=false;
- // WSSS surface aircraft ALWAYS retain real geographical cross/along offsets.
- // Do not snap a stopped airplane to an imaginary gate or runway, and do not
- // replace it with an unrelated decorative parked aircraft.
- if(jetTrafficActiveAirport()==='WSSS'&&a.onGround){
+ let runway=wsss?jetTrafficParallelTrack(a,lat,lon):null;
+ // Retain a previously established final-approach runway instead of letting
+ // small ADS-B course/position jitter jump between 02L, 02C and 02R.
+ if(wsss&&!a.onGround&&stable?.finalRunway&&stable?.finalDirection){
+  const locked=jetChangiRunways[stable.finalRunway];
+  if(locked){
+   const p=jetWSSSAlongCross(lat,lon,locked.threshold);
+   const threshold20=4000-(stable.finalRunway==='02L'?740:0);
+   const dist=stable.finalDirection==='02'?-p.along:p.along-threshold20;
+   if(Math.abs(p.cross)<280&&dist>-5000&&dist<11000){
+    runway={id:stable.finalRunway,dir:stable.finalDirection,
+     designation:stable.finalDirection==='02'?stable.finalRunway:
+      ({'02L':'20R','02C':'20C','02R':'20L'}[stable.finalRunway]),
+     runway:locked,along:p.along,cross:p.cross,distanceToThreshold:dist,score:Math.abs(p.cross)};
+   }
+  }
+ }
+ let x,z,height,stage='',estimated=false,approachAligned=false;
+ if(wsss&&a.onGround){
+  // Ground aircraft remain at measured coordinates, including real taxiways.
   const geo=jetWSSSAlongCross(lat,lon);
   x=geo.cross*jetWSSSScale.across;
   z=-geo.along*jetWSSSScale.along;
-  height=.08; // tyres in 3-D mesh are 0.63 above origin; runway surface ~0.6
+  height=.08;
   stage=a.speedKt>=3?'TAXI / GROUND':'STOPPED / GROUND';
-  if(stable)stable.sawGround=true;
+  if(stable){stable.sawGround=true;stable.estimatedTouch=false;}
  }else if(runway){
   const lane=runway.runway;
-  const travel=runway.dir==='02'?runway.along:4000-runway.along;
+  const threshold20=4000-(runway.id==='02L'?740:0);
+  const travel=runway.dir==='02'?runway.along:threshold20-runway.along;
   const beforeThreshold=Math.max(0,-travel);
-  const reportedAltitude=Number(a.altFt);
-  const predictedAltitude=Number.isFinite(reportedAltitude)?
-    Math.max(0,reportedAltitude+(Math.min(0,Number(a.verticalRate)||0)*elapsed/60)):null;
-  const inbound=!a.onGround && a.speedKt>65 &&
-    ((a.phase==='DESCENDING'||a.verticalRate<-180)||
-    (!!stable?.approaching && a.phase!=='CLIMBING'));
-  const nearRunway=Math.abs(runway.cross)<340;
-  const withinLandingZone=travel>=45 && travel<=Math.min(lane.length/jetWSSSScale.along-120,900);
-  // Only predict touchdown when an inbound track reaches the first part of
-  // the paved runway and has sufficiently low reported/projected altitude.
-  const canEstimateTouch=!!stable?.approaching && inbound && nearRunway && withinLandingZone &&
-    predictedAltitude!=null && predictedAltitude<350;
-  if(stable && a.phase==='CLIMBING')stable.estimatedTouch=false;
-  if(stable && inbound && beforeThreshold<6000 && nearRunway)stable.approaching=true;
-  if(stable && canEstimateTouch)stable.estimatedTouch=true;
-  const rollingEstimate=!!stable?.estimatedTouch && !a.onGround && a.phase!=='CLIMBING' &&
-    travel>=0 && travel<=3400;
-  // 3-D runway surface and live aircraft are both computed from same lane.x/z.
-  // Interpolate out lateral radar error during short final, but never erase
-  // genuine taxiway offsets once the aircraft is reported on the ground.
-  const correction=inbound?Math.max(0,Math.min(1,beforeThreshold/2200)) : 1;
-  const crossMeters=(inbound && nearRunway)?runway.cross*correction:runway.cross;
-  x=lane.x+Math.max(-120,Math.min(120,crossMeters*jetWSSSScale.across));
-  z=lane.z-runway.along*jetWSSSScale.along;
-  if(a.onGround){
-   height=.08;stage=a.speedKt>45?'ROLLOUT / GROUND':a.speedKt>=3?'TAXI / GROUND':'STOPPED / GROUND';
-   if(stable)stable.sawGround=true;
-  }else if(rollingEstimate){
-   height=.08;estimated=true;stage='ROLLOUT EST';
-   // Guard against the visual aircraft teleporting past a runway threshold
-   // when interpolated ADS-B updates overshoot the far end.
-   const clamped=Math.max(45,Math.min(3700,travel));
-   z=lane.z-(runway.dir==='02'?clamped:4000-clamped)*jetWSSSScale.along;
-   x=lane.x;
-  }else if(inbound && beforeThreshold<14500 && nearRunway){
-   // 3-degree visual glidepath in the game world's compressed altitude scale.
-   // At 02/20 threshold the model reaches the START of runway pavement.
-   const glideY=3.7+beforeThreshold*jetWSSSScale.along*Math.tan(3*Math.PI/180);
-   const altSuggest=predictedAltitude==null?glideY:
-     Math.max(3.7,Math.min(650,predictedAltitude*0.18));
-   height=Math.max(3.7,Math.min(650,Math.max(glideY,altSuggest)));
-   if(travel>0&&!canEstimateTouch&&predictedAltitude!=null&&predictedAltitude>350){
-    // A high aircraft crossing the threshold is not shown as a confirmed landing.
-    height=Math.max(height,Math.min(180,predictedAltitude*0.18));
+  const alt=Number(a.altFt);
+  const predictedAltitude=a.altFt!=null&&Number.isFinite(alt)?
+   Math.max(0,alt+Math.min(0,Number(a.verticalRate)||0)*elapsed/60):null;
+  const runwayCourse=runway.dir==='02'?jetWSSSCourseDeg:(jetWSSSCourseDeg+180)%360;
+  const deltaHead=((Number(a.heading)-runwayCourse+540)%360)-180;
+  const trackAligned=Number.isFinite(deltaHead)&&Math.abs(deltaHead)<23;
+  const inbound=!a.onGround&&a.speedKt>65&&trackAligned&&
+   (reportedDescent||!!stable?.approaching&&a.phase!=='CLIMBING');
+  const nearRunway=Math.abs(runway.cross)<220;
+  const beforeFarEnd=travel<=(runway.dir==='02'?3950:threshold20-50);
+  const onFinal=inbound&&nearRunway&&beforeThreshold<9500&&travel>=-9500&&beforeFarEnd;
+  if(stable&&a.phase==='CLIMBING'){
+   stable.approaching=false;stable.estimatedTouch=false;
+   stable.finalRunway=null;stable.finalDirection=null;
+  }
+  if(stable&&onFinal&&travel<350){
+   stable.approaching=true;
+   if(!stable.finalRunway||stable.finalRunway===runway.id){
+    stable.finalRunway=runway.id;stable.finalDirection=runway.dir;
    }
-   stage='APPROACH';
+  }
+  // Estimate a rollout only for a low, aligned, descending aircraft entering
+  // the touchdown zone, never from distance extrapolation alone.
+  const landingZone=travel>=35&&travel<=1050;
+  const canEstimateTouch=!!stable?.approaching&&onFinal&&landingZone&&
+   predictedAltitude!=null&&predictedAltitude<=420&&age<=35;
+  if(stable&&canEstimateTouch)stable.estimatedTouch=true;
+  const rollingEstimate=!!stable?.estimatedTouch&&!a.onGround&&a.phase!=='CLIMBING'&&
+   travel>=0&&travel<(runway.dir==='02'?3900:threshold20-50);
+  // At >220m from the centreline, DON'T snap a different aircraft onto this
+  // runway; it remains at its true offset instead of visually crossing strips.
+  const blend=onFinal?Math.max(0,Math.min(1,1-beforeThreshold/2600)):0;
+  const displayedCross=runway.cross*(1-blend);
+  x=lane.x+displayedCross*jetWSSSScale.across;
+  z=lane.z-runway.along*jetWSSSScale.along;
+  approachAligned=onFinal&&blend>.05;
+  if(rollingEstimate){
+   // Use measured runway progress, not a free-running animation. Once the
+   // track leaves the rollout region, return to its radar-derived position.
+   const limited=Math.max(35,Math.min(travel,runway.dir==='02'?3850:threshold20-65));
+   const alongRunway=runway.dir==='02'?limited:threshold20-limited;
+   z=lane.z-alongRunway*jetWSSSScale.along;
+   x=lane.x;height=.08;estimated=true;stage='ROLLOUT EST';
+  }else if(onFinal&&travel<1200){
+   // Simulated 3-degree approach targets the correct threshold, including
+   // the displaced 20R threshold. Do not continue a landing animation beyond
+   // its touchdown window unless radar supports a low-altitude rollout.
+   const glideY=3.7+beforeThreshold*jetWSSSScale.along*Math.tan(3*Math.PI/180);
+   height=glideY;
+   if(travel>0&&predictedAltitude!=null&&predictedAltitude>420){
+    height=Math.max(glideY,Math.min(200,predictedAltitude*.18));
+    stage='THRESHOLD FLYOVER';
+   }else stage='APPROACH EST';
+   estimated=true;
   }else{
-   height=Math.max(8,Math.min(800,(Number(a.altFt)||0)*.3048*.48));
-   stage=a.phase==='CLIMBING'?'DEPARTING':'OVERFLIGHT';
+   // Far side of the runway, missed approach or uncertain localizer: show
+   // radar position/altitude rather than a fabricated never-ending landing.
+   height=Math.max(8,Math.min(800,(a.altFt==null?0:a.altFt)*.3048*.48));
+   stage=a.phase==='CLIMBING'?'DEPARTING':travel>=1200?'OVERFLIGHT':'UNALIGNED / AIRBORNE';
   }
  }else{
   x=side*.35;z=(arrival?(_t.thrB-900):0)-along*.35;
-  height=a.onGround?.08:Math.max(8,Math.min(780,(Number(a.altFt)||0)*.3048*.48));
-  stage=a.onGround?(a.speedKt>=3?'TAXI / GROUND':'STOPPED / GROUND'):a.phase==='DESCENDING'?'INBOUND':a.phase==='CLIMBING'?'DEPARTING':'AIRBORNE';
+  height=a.onGround?.08:Math.max(8,Math.min(780,(a.altFt==null?0:a.altFt)*.3048*.48));
+  stage=a.onGround?(a.speedKt>=3?'TAXI / GROUND':'STOPPED / GROUND'):
+   a.phase==='DESCENDING'?'INBOUND':a.phase==='CLIMBING'?'DEPARTING':'AIRBORNE';
  }
  const pos=qi(_t,x,z);
- const heading=Number.isFinite(Number(a.heading))?Number(a.heading):course;
- // Fix reciprocal approach direction: WSSS runway coordinates use one fixed
- // 02 bearing (23.01 deg), but the old yaw used the currently selected player
- // runway (which may be 20C = 203 deg). That rotated real 20 arrivals 180 deg.
- // Derive the nose vector from the SAME projected east/north coordinates as the
- // runway/ADS-B 3D position, including the distinct across/along world scales.
+ let heading=Number.isFinite(Number(a.heading))?Number(a.heading):course;
+ if(wsss&&approachAligned&&runway){
+  const desired=runway.dir==='02'?jetWSSSCourseDeg:(jetWSSSCourseDeg+180)%360;
+  const difference=((desired-heading+540)%360)-180;
+  const distance=Math.max(0,runway.distanceToThreshold);
+  const headingBlend=Math.max(0,Math.min(1,1-distance/2300));
+  // Approach nose follows the same centreline used by the scenery pavement.
+  heading+=difference*headingBlend;
+  estimated=true;
+ }
  let yaw;
- if(jetTrafficActiveAirport()==='WSSS'){
+ if(wsss){
   const relative=(heading-jetWSSSCourseDeg)*Math.PI/180;
   const dxLocal=Math.sin(relative)*jetWSSSScale.across;
   const dzLocal=-Math.cos(relative)*jetWSSSScale.along;
   const worldVector=qi(_t,dxLocal,dzLocal);
   yaw=Math.atan2(-worldVector[0],-worldVector[1]);
  }else{
-  // Other airports use the active flight runway as the local map reference.
   yaw=-(_t.depRot||0)-(((heading-course+540)%360)-180)*Math.PI/180;
  }
- return{x:pos[0],y:height,z:pos[1],yaw,runway:runway?.designation||null,
+ return{x:pos[0],y:height,z:pos[1],yaw,
+  runway:runway&&Math.abs(runway.cross)<220?runway.designation:null,
   runwayBase:runway?.id||null,stage,estimated};
 }
 
