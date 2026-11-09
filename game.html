@@ -5606,8 +5606,8 @@ function jetTrafficDrawND(ctx,width,height,state,project,view){
  const matched=jetTraffic.arrivalId;
  const primary=flights.find(a=>a.id===jetTraffic.departureId)||flights.find(a=>a.id===matched)||arrivals.sort((a,b)=>a.km-b.km)[0]||null;
  const selected=[...(primary?[primary]:[]),...flights.filter(a=>!primary||a.id!==primary.id).sort((a,b)=>a.km-b.km)].slice(0,11);
- const fnt=Math.max(8,Math.min(12,width*.029));
- const small=Math.max(7,Math.min(10,width*.025));
+ const fnt=Math.max(7,Math.min(9,width*.022));
+ const small=Math.max(6,Math.min(8,width*.021));
  const mode=String(view.mode||'arc');
  const rim=mode==='arc'?height*.72:height*.4;
  const cx=view.centerX,cy=view.centerY;
@@ -5648,7 +5648,7 @@ function jetTrafficDrawND(ctx,width,height,state,project,view){
   const cs=simulated?'SIM JL01':jetTrafficCallsign(a);
   const distance=simulated?'TRAINING':(a.km.toFixed(1)+'km APT');
   const altitude=simulated?'SIM':grounded?'GND':(Math.round(a.altFt||0)+'ft');
-  const label=cs+'  '+distance+'  '+altitude+(offScale?' ↗':'');
+  const label=cs+(important?' '+altitude:'')+(offScale?' ↗':'');
   const bearing=simulated?'':(()=>{
    const origin=jetTraffic.liveRef;
    if(!origin)return '';
@@ -5816,7 +5816,7 @@ function jetTrafficBuildLivePlane(a){
  }
  const label=document.createElement('div');label.className='jc-live-flight-tag';
  label.setAttribute('aria-hidden','true');
- label.style.cssText='position:absolute;z-index:14;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:#061a33e8;color:#b5faff;border:1px solid #36d7f5;border-radius:5px;padding:2px 4px;font:800 10px system-ui;text-shadow:0 1px #000;display:none';
+ label.style.cssText='position:absolute;z-index:12;pointer-events:none;white-space:nowrap;transform:translate(-50%,-100%);background:rgba(3,18,32,.62);color:#def8ff;border:1px solid rgba(110,227,252,.35);border-radius:3px;padding:1px 3px;font:700 8px/1.15 system-ui;text-shadow:0 1px 2px #000;letter-spacing:.08px;opacity:.82;display:none';
  (document.getElementById('ui')||document.body).appendChild(label);
  group.userData.trafficTag=label;
  const badge=document.createElement('div');badge.className='jc-live-airline-tag';
@@ -5987,25 +5987,44 @@ function jetTrafficDrawLiveContacts(dt){
  if(!jetTraffic.scene)jetTraffic.scene=It.scene;
  const now=Date.now();
  // All 3D models originate from this *same* ADS-B cache as the radar dots.
- // Prioritize real observed SIA ground contacts, especially those stopped, then
- // arriving runway traffic. The camera and device budget still limit 3D models;
- // the radar retains the complete feed and never invents parked airplanes.
- const priority=a=>a.id===jetTraffic.departureId?-1:a.id===jetTraffic.arrivalId?0:
-  (a.onGround&&jetTrafficIsSingapore(a)?(a.speedKt<3?1:2):
-   a.onGround?3:a.phase==='DESCENDING'?4:jetTrafficIsSingapore(a)?5:6);
+ // Prioritize *observed* runway arrivals, takeoff rolls and initial climbs
+ // BEFORE parked traffic. Previously many ground contacts filled every 3D slot,
+ // leaving only radar flight numbers while airborne jets vanished from scenery.
+ // Do not synthesize contacts: every model retains the radar's ICAO24 identity.
+ const runwayRank=new Map();
+ const rank=a=>{
+  if(a.id===jetTraffic.departureId)return -1000;
+  if(a.id===jetTraffic.arrivalId)return -950;
+  if(runwayRank.has(a.id))return runwayRank.get(a.id);
+  const r=jetTrafficActiveAirport()==='WSSS'?jetTrafficParallelTrack(a,a.lat,a.lon):null;
+  const onStrip=!!r&&Math.abs(r.cross)<180&&r.along>-350&&r.along<4650;
+  const nearFinal=!!r&&Math.abs(r.cross)<350&&r.distanceToThreshold>-500&&r.distanceToThreshold<12500;
+  const climbing=!a.onGround&&(a.phase==='CLIMBING'||a.verticalRate>180);
+  const descending=!a.onGround&&(a.phase==='DESCENDING'||a.verticalRate< -180);
+  const n=(descending&&nearFinal?-900:
+   a.onGround&&onStrip&&a.speedKt>30?-850:
+   climbing&&nearFinal?-820:
+   descending&&a.km<20?-700:
+   climbing&&a.km<15?-670:
+   a.onGround&&jetTrafficIsSingapore(a)?-550:
+   a.onGround?-350:jetTrafficIsSingapore(a)?-300:0);
+  runwayRank.set(a.id,n);return n;
+ };
  const capacity=window.innerWidth<700?16:24;
  const prioritized=jetTraffic.live.filter(a=>a.id&&Number.isFinite(a.lat)&&Number.isFinite(a.lon))
-  .filter(a=>a.km<=25&&(a.onGround||(a.altFt!=null&&a.altFt<9000)))
-  .sort((a,b)=>priority(a)-priority(b)||a.km-b.km).slice(0,capacity);
+  .filter(a=>a.km<=30&&(a.onGround||(a.altFt!=null&&a.altFt<9000)))
+  .sort((a,b)=>rank(a)-rank(b)||a.km-b.km).slice(0,capacity);
  const visible=new Set();
  const cameraCanvas=document.querySelector('#game canvas');
  const rect=cameraCanvas?.getBoundingClientRect();
  for(const a of prioritized){
   const target=jetTrafficPosition(a,now);
-  // Never drop the one matched flight from the 3D scene merely because it is
-  // farther than the generic camera proximity culling threshold.
-  if(a.id!==jetTraffic.arrivalId&&a.id!==jetTraffic.departureId&&
-   Math.hypot(target.x-(E.plane?.x||0),target.z-(E.plane?.z||0))>(a.onGround&&jetTrafficIsSingapore(a)?11000:a.onGround?8500:6000))continue;
+  // A flight can be visible to the runway camera even when it is farther
+  // than the old 6-km radius around the player's aircraft. Cull by the actual
+  // 3D camera's far range rather than arbitrarily removing runway traffic.
+  if(!Number.isFinite(target.x)||!Number.isFinite(target.y)||!Number.isFinite(target.z))continue;
+  const camDist=Math.hypot(target.x-ui.position.x,target.y-ui.position.y,target.z-ui.position.z);
+  if(camDist>Math.min(ui.far||14000,18000)-90)continue;
   visible.add(a.id);
   let entry=jetTraffic.liveModels.get(a.id);
   // Airline may be blank in one ADS-B update and acquire a callsign in the
@@ -6030,27 +6049,40 @@ function jetTrafficDrawLiveContacts(dt){
   entry.group.userData.gameDeparture=a.id===jetTraffic.departureId;
   const isTracked=a.id===jetTraffic.arrivalId||a.id===jetTraffic.departureId;
   jetTrafficApplyLivery(entry.group,a,target);
-  entry.group.scale.setScalar(isTracked?1.28:(a.onGround?0.95:1.02));
+  // Distant aircraft can be smaller than one device pixel while their HTML
+  // callsign remains large. Use a modest distance-dependent VISUAL LOD size
+  // boost (never move the radar position). This is a game visibility aid.
+  const lod=Math.max(1,Math.min(5.2,.85+camDist/950));
+  const modelScale=(isTracked?1.18:a.onGround?1.0:1.07)*lod;
+  entry.group.scale.setScalar(modelScale);
+  entry.group.userData.visibilityScale=modelScale;
   const tag=entry.group.userData.trafficTag;
   const badge=entry.group.userData.airlineBadge;
+  // No floating airline badge or verbose stage/altitude/status text. Detail
+  // belongs in the radar / runway-information panels, not over the scenery.
+  if(badge)badge.style.display='none';
   if(tag){
-   tag.textContent=(a.id===jetTraffic.departureId?'▶ DEP ':'✈ ')+jetTrafficCallsign(a)+(a.type?' · '+a.type:'')+(target.runway?' · RWY '+target.runway+'?':'')+' · '+(a.id===jetTraffic.departureId?jetTraffic.departureStage:target.stage)+(target.estimated?' (EST)':'');
-   tag.style.borderColor=isTracked?'#ffe18b':jetTrafficIsSingapore(a)?'#d6b357':a.onGround?'#ffcd68':'#36d7f5';
-   tag.style.color=isTracked?'#fff0b1':jetTrafficIsSingapore(a)?'#fff1bf':a.onGround?'#ffd782':'#b5faff';
+   tag.textContent=jetTrafficCallsign(a);
+   tag.style.opacity=isTracked?'.85':'.70';
    try{
-    const projected=entry.group.position.clone();projected.y+=22;projected.project(ui);
+    const center=entry.group.position.clone();center.y+=5*modelScale;center.project(ui);
+    const projected=entry.group.position.clone();projected.y+=Math.max(16,12*modelScale);projected.project(ui);
     const vw=rect?.width||innerWidth,vh=rect?.height||innerHeight;
     const px=(projected.x*.5+.5)*vw+(rect?.left||0);
     const py=(-projected.y*.5+.5)*vh+(rect?.top||0);
-    const nearCanvas=projected.z>-1&&projected.z<1&&px>15&&px<innerWidth-15&&py>12&&py<innerHeight-25;
+    const centerX=(center.x*.5+.5)*vw+(rect?.left||0);
+    const centerY=(-center.y*.5+.5)*vh+(rect?.top||0);
+    const fov=Math.max(20,Math.min(110,Number(ui.fov)||60))*Math.PI/180;
+    const planePixels=(70*modelScale*vh)/(2*Math.max(1,camDist)*Math.tan(fov/2));
+    // A tag is shown only when a recognizably sized 3D airplane is ALSO on
+    // screen, avoiding stray flight numbers with invisible distant models.
+    const nearCanvas=center.z>-1&&center.z<1&&projected.z>-1&&projected.z<1&&
+     centerX>7&&centerX<innerWidth-7&&centerY>7&&centerY<innerHeight-7&&
+     px>12&&px<innerWidth-12&&py>9&&py<innerHeight-18&&planePixels>=10;
     tag.style.display=nearCanvas?'block':'none';
-    if(badge)badge.style.display=nearCanvas&&jetTrafficIsSingapore(a)?'block':'none';
-    if(nearCanvas){
-      tag.style.left=px+'px';tag.style.top=py+'px';
-      if(badge){badge.style.left=px+'px';badge.style.top=(py-17)+'px';}
-    }
-   }catch{tag.style.display='none'; if(badge)badge.style.display='none';}
-  }else if(badge)badge.style.display='none';
+    if(nearCanvas){tag.style.left=px+'px';tag.style.top=py+'px';}
+   }catch{tag.style.display='none';}
+  }
  }
  for(const [key,entry] of jetTraffic.liveModels){if(!visible.has(key)){
   jetTrafficDispose(entry.group);jetTraffic.liveModels.delete(key);
