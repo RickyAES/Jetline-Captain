@@ -6712,20 +6712,51 @@ function jetTrafficDrawLiveContacts(dt){
 // Jetline Captain mobile full scenery / airport surface map.
 // The chart and 3D tracked aircraft share positions from jetTrafficPosition.
 // Simulated taxiways are labelled, NOT certified real-world ground charts.
-let jcMapLastDraw=0,jcControlsLast=0,jcMapVisible=false,jcFullUI=null,jcSurface=null,jcWasMobileMin=false,jcRunwayPanelOpen=false;
-let jcSurfaceFrame=0,jcSurfaceTrackAirport='',jcSurfaceLastPrune=0;
-const jcSurfaceTracks=new Map();
-// The source is ADS-B data from /api/radar (refreshed independently). The map
-// continuously draws an interpolated VISUAL position; not one new radar fix/sec.
-function jcSurfaceAnimationFrame(){
- jcSurfaceFrame=0;
- if(!jcMapVisible)return;
- jcSurfaceDraw();
- jcSurfaceFrame=requestAnimationFrame(jcSurfaceAnimationFrame);
+let jcMapLastDraw=0,jcMapLastStatus=0,jcControlsLast=0,jcMapVisible=false,jcFullUI=null,jcSurface=null,jcWasMobileMin=false,jcRunwayPanelOpen=false;
+// Airport surface uses the exact radar hex IDs, but animates each marker
+// between provider measurements. The network feed remains separate and can
+// arrive less frequently than the map's one-second status/30fps draw loop.
+const jcSurfaceTracks=new Map();let jcSurfaceLastAirport='';
+function jcSurfaceSmoothGeo(a,now,airport){
+ if(!a||!a.id||!Number.isFinite(a.lat)||!Number.isFinite(a.lon))return null;
+ const lat=Number(a.lat),lon=Number(a.lon),id=String(a.id);
+ let tr=jcSurfaceTracks.get(id);
+ // A new airport or identity must NEVER blend the old plane onto a new chart.
+ if(!tr||tr.airport!==airport||!Number.isFinite(tr.lat)||!Number.isFinite(tr.lon)||now-tr.lastDraw>30000){
+  tr={airport,lat,lon,rawLat:lat,rawLon:lon,rawAt:now,lastDraw:now};
+  jcSurfaceTracks.set(id,tr);return [lat,lon];
+ }
+ const latFactor=111195,lonFactor=111195*Math.max(.12,Math.cos(lat*Math.PI/180));
+ const displacement=Math.hypot((lat-tr.rawLat)*latFactor,(lon-tr.rawLon)*lonFactor);
+ if(displacement>6000){tr.lat=lat;tr.lon=lon;tr.rawLat=lat;tr.rawLon=lon;tr.rawAt=now;tr.lastDraw=now;return[lat,lon];}
+ const changed=displacement>1.2;
+ if(changed){tr.rawLat=lat;tr.rawLon=lon;tr.rawAt=now;}
+ // Carry the last reported position forward for only a few seconds. Stop
+ // rather than invent an indefinitely moving aircraft from stale ADS-B data.
+ const maxSpeed=a.onGround?32:155;
+ const mps=Math.min(maxSpeed,Math.max(0,Number(a.speedKt)||0)*.514444);
+ const stopped=!!a.onGround&&mps<1.55;
+ const observed=Number(jetTrafficObservedCourse(a));
+ const course=(Number.isFinite(observed)?observed:Number(a.heading)||0)*Math.PI/180;
+ const age=Math.min(a.onGround?3.5:6,Math.max(0,(now-tr.rawAt)/1000));
+ const distance=stopped?0:mps*age;
+ const aimLat=tr.rawLat+Math.cos(course)*distance/latFactor;
+ const aimLon=tr.rawLon+Math.sin(course)*distance/lonFactor;
+ const dt=Math.min(.12,Math.max(.001,(now-tr.lastDraw)/1000));
+ tr.lastDraw=now;
+ // Easing plus a maximum correction speed removes ADS-B jumps without
+ // teleporting a marker when a delayed report arrives.
+ const gain=1-Math.exp(-dt*(a.onGround?2.3:2.0));
+ let moveNorth=(aimLat-tr.lat)*latFactor*gain;
+ let moveEast=(aimLon-tr.lon)*lonFactor*gain;
+ const move=Math.hypot(moveNorth,moveEast);
+ const cap=(stopped?18:mps+32)*dt;
+ if(move>cap&&move>0){const f=cap/move;moveNorth*=f;moveEast*=f;}
+ tr.lat+=moveNorth/latFactor;tr.lon+=moveEast/lonFactor;
+ return [tr.lat,tr.lon];
 }
-function jcSurfaceSchedule(open){
- if(open){if(!jcSurfaceFrame)jcSurfaceFrame=requestAnimationFrame(jcSurfaceAnimationFrame);}
- else if(jcSurfaceFrame){cancelAnimationFrame(jcSurfaceFrame);jcSurfaceFrame=0;}
+function jcSurfaceClearMissing(now,visible){
+ for(const [id,tr] of jcSurfaceTracks){if(!visible.has(id)||now-tr.lastDraw>20000)jcSurfaceTracks.delete(id);}
 }
 
 function jcRunwayDetailsSync(){
@@ -6776,11 +6807,11 @@ function jcSurfaceEnsure(){
  const overlay=document.createElement('section');overlay.id='jc-airport-surface';
  overlay.setAttribute('data-ui','true');overlay.setAttribute('aria-label','Airport surface traffic map');
  overlay.innerHTML=`<div class="jc-map-hd"><strong id="jc-map-apt">AIRPORT MAP</strong>
- <span class="jc-map-hint">N ↑ · radar-aligned · smooth traffic</span>
+ <span class="jc-map-hint">N ↑ · radar orientation · taxiways schematic</span>
  <button type="button" id="jc-map-close" aria-label="Close airport map">✕ CLOSE</button></div>
  <canvas id="jc-map-canvas" width="500" height="650" aria-label="Runways, taxiways, player location and live radar contacts"></canvas>
  <div id="jc-map-footer"><span id="jc-map-count">Radar synchronizing...</span><span id="jc-map-pilot">YOU</span></div>
- <div class="jc-map-legend"><span><b style="color:#51f4de">◆</b> Your aircraft</span><span><b style="color:#ffd67f">●</b> Ground</span><span><b style="color:#73dfff">▲</b> Airborne</span><span>Live positions approximate</span></div>`;
+ <div class="jc-map-legend"><span><b style="color:#51f4de">◆</b> Your aircraft</span><span><b style="color:#ffd67f">●</b> Ground</span><span><b style="color:#73dfff">▲</b> Airborne</span><span>ADS-B positions interpolated · runway/taxiways schematic</span></div>`;
  host.appendChild(overlay);
  overlay.querySelector('#jc-map-close').addEventListener('click',ev=>{ev.stopPropagation();jcSurfaceToggle(false)});
  overlay.addEventListener('pointerdown',ev=>ev.stopPropagation());
@@ -6790,8 +6821,7 @@ function jcSurfaceEnsure(){
 function jcSurfaceToggle(open){
  const sheet=jcSurfaceEnsure();jcMapVisible=open==null?!jcMapVisible:!!open;
  sheet.classList.toggle('open',jcMapVisible);
- if(jcMapVisible){jcRunwayPanelOpen=false;jcRunwayDetailsSync();jcSurfaceDraw(true)}
- jcSurfaceSchedule(jcMapVisible);
+ if(jcMapVisible){jcRunwayPanelOpen=false;jcRunwayDetailsSync();jcMapLastDraw=0;jcSurfaceDraw(true)}
  const mapButton=document.getElementById('jc-mini-map-btn');
  if(mapButton)mapButton.textContent=jcMapVisible?'CLOSE MAP':'AIRPORT MAP';
 }
@@ -7053,86 +7083,68 @@ function jcSurfaceLocalLandingGeo(landing,now){
 function jcSurfaceXYOnRadar(lat,lon,origin){
  return [(lon-origin[1])*111195*Math.cos(origin[0]*Math.PI/180),-(lat-origin[0])*111195];
 }
-// Screen-space GPS interpolation in geographic coordinates; a flight's identity
-// remains its ICAO24 ID. Smooth corrections are bounded, and prediction decays
-// when the last ADS-B observation ages. This is NOT a new live GPS measurement.
-function jcSurfaceInterpolatedGeo(a,now,airport){
- const id=String(a.id||'');
- if(!id||!Number.isFinite(+a.lat)||!Number.isFinite(+a.lon))return null;
- const lat=+a.lat,lon=+a.lon,key=airport+'|'+id;
- let t=jcSurfaceTracks.get(key);
- const stopped=!!a.onGround&&(+a.speedKt||0)<3;
- const speed=stopped?0:Math.max(0,Math.min(a.onGround?55:145,(+a.speedKt||0)*.514444));
- const fixAge=Math.max(0,(now-(jetTraffic.liveAt||now))/1000+(+a.seenPos||0));
- const coastStart=a.onGround?4:7,coastEnd=a.onGround?9:15;
- const coast=fixAge<=coastStart?1:fixAge>=coastEnd?0:Math.max(0,(coastEnd-fixAge)/(coastEnd-coastStart));
- const bearing=((jetTrafficObservedCourse(a)%360)+360)%360*Math.PI/180;
- const north=Math.cos(bearing),east=Math.sin(bearing);
- const metersPerLon=111195*Math.max(.1,Math.cos(lat*Math.PI/180));
- if(!t||now-t.updated>20000||!Number.isFinite(t.lat)||!Number.isFinite(t.lon)){
-  t={lat,lon,bearing,updated:now};jcSurfaceTracks.set(key,t);
- }
- const dt=Math.max(0,Math.min(.06,(now-t.updated)/1000));t.updated=now;
- // Short forward projection avoids a visible stop between provider snapshots;
- // inside 1 km, independent local touchdown logic below takes precedence.
- const lead=stopped?0:Math.min(fixAge,a.onGround?1.5:2.3)*coast;
- const desiredLat=lat+north*speed*lead/111195;
- const desiredLon=lon+east*speed*lead/metersPerLon;
- if(dt>0){
-  t.lat+=north*speed*dt*coast/111195;
-  t.lon+=east*speed*dt*coast/metersPerLon;
-  const deltaN=(desiredLat-t.lat)*111195;
-  const deltaE=(desiredLon-t.lon)*metersPerLon;
-  const error=Math.hypot(deltaN,deltaE);
-  const gain=1-Math.exp(-dt*(stopped?3.3:2.0));
-  const maxCorrect=(stopped?18:Math.max(16,speed*.95))*dt;
-  const magnitude=Math.min(error*gain,maxCorrect);
-  if(error>.0001){t.lat+=deltaN/error*magnitude/111195;t.lon+=deltaE/error*magnitude/metersPerLon;}
-  const angle=Math.atan2(Math.sin(bearing-t.bearing),Math.cos(bearing-t.bearing));
-  t.bearing+=angle*(1-Math.exp(-dt*3));
- }
- // Do not accumulate unbounded dead reckoning if the radar feed goes stale.
- if(now-jcSurfaceLastPrune>15000){
-  jcSurfaceLastPrune=now;
-  for(const [key,v] of jcSurfaceTracks)if(now-v.updated>25000)jcSurfaceTracks.delete(key);
- }
- return {geo:[t.lat,t.lon],heading:t.bearing};
-}
 function jcSurfaceDraw(force=false){
- const time=Date.now();if(!force&&time-jcMapLastDraw<30)return;jcMapLastDraw=time;
+ const time=Date.now();
+ // Game loop may run at 60fps; a 25/30fps chart avoids excessive canvas
+ // work while keeping the player and moving aircraft visually continuous.
+ const frameMs=jcPanelIsMobile()?40:32;
+ if(!force&&time-jcMapLastDraw<frameMs)return;
+ jcMapLastDraw=time;
  if(!jcMapVisible||E.state!=='play'||!_t||!E.plane)return;
  const overlay=jcSurfaceEnsure(),canvas=overlay.querySelector('canvas'),ctx=canvas.getContext('2d');
  if(!ctx)return;
- const W=canvas.width,H=canvas.height,airport=jetTrafficActiveAirport()||pt.from;
+ // Match canvas backing resolution to its displayed size (the previous
+ // fixed 500x650 bitmap looked blurry when expanded on desktop).
+ const rect=canvas.getBoundingClientRect();
+ const W=Math.max(280,Math.round(rect.width||500));
+ const H=Math.max(330,Math.round(rect.height||650));
+ const ratio=Math.min(1.75,Math.max(1,Number(window.devicePixelRatio)||1));
+ const pixelsW=Math.round(W*ratio),pixelsH=Math.round(H*ratio);
+ if(canvas.width!==pixelsW||canvas.height!==pixelsH){canvas.width=pixelsW;canvas.height=pixelsH;}
+ ctx.setTransform(ratio,0,0,ratio,0,0);
+ const airport=jetTrafficActiveAirport()||pt.from;
+ if(jcSurfaceLastAirport!==airport){jcSurfaceTracks.clear();jcSurfaceLastAirport=airport;jcMapLastStatus=0;}
  const ref=jcSurfaceReference(airport),isWSSS=airport==='WSSS';
- if(jcSurfaceTrackAirport!==airport){jcSurfaceTracks.clear();jcSurfaceTrackAirport=airport;}
- overlay.querySelector('#jc-map-apt').textContent=`${airport} · AIRPORT SURFACE · N ↑`;
+ const wsssNames={'02L':'20R','02C':'20C','02R':'20L'};
+ const wsssCanonicalFromGeo=(lat,lon)=>{
+  const p=jetWSSSAlongCross(lat,lon,jetWSSSOrigin);
+  return [p.cross*jetWSSSScale.across,-p.along*jetWSSSScale.along];
+ };
+ overlay.querySelector('#jc-map-apt').textContent=isWSSS?
+  `${airport} · AIRPORT SURFACE · RADAR ALIGN`:`${airport} · AIRPORT SURFACE · N ↑`;
  const runways=isWSSS?Object.entries(jetChangiRunways).map(([id,r])=>({
-  id,opposite:({'02L':'20R','02C':'20C','02R':'20L'})[id],a:r.threshold,b:r.opposite
+  id,opposite:wsssNames[id],start:[r.x,r.z],end:[r.x,r.z-r.length],a:r.threshold,b:r.opposite
  })):(jetTraffic.worldRunways||[]).filter(r=>jcSurfaceGeoValid(r.a)&&jcSurfaceGeoValid(r.b)).map(r=>{
   const names=jetTrafficRunwayNames(r);return{id:names[0],opposite:names[1],a:r.a,b:r.b};
  });
  if(!runways.length){const name=jcSurfaceSelectedRunwayCode();
-  runways.push({id:name,opposite:(parseInt(name.slice(0,2),10)?
-   String(((parseInt(name.slice(0,2),10)+17)%36)+1).padStart(2,'0')+name.slice(2):''),
-   a:ref.a,b:ref.b,simulated:true});
+  runways.push(isWSSS?{id:name,opposite:wsssNames[name]||jetTrafficReciprocalRunway(name),
+   start:[0,0],end:[0,-Math.max(900,Number((Bl?.len)||2400)*jetWSSSScale.along)],simulated:true}:
+   {id:name,opposite:(parseInt(name.slice(0,2),10)?
+    String(((parseInt(name.slice(0,2),10)+17)%36)+1).padStart(2,'0')+name.slice(2):''),
+    a:ref.a,b:ref.b,simulated:true});
  }
- const latSum=runways.flatMap(r=>[+r.a[0],+r.b[0]]);
- const lonSum=runways.flatMap(r=>[+r.a[1],+r.b[1]]);
- const origin=[(Math.min(...latSum)+Math.max(...latSum))/2,(Math.min(...lonSum)+Math.max(...lonSum))/2];
- const coords=runways.map(r=>({...r,start:jcSurfaceXYOnRadar(...r.a,origin),
-  end:jcSurfaceXYOnRadar(...r.b,origin)}));
+ const coords=isWSSS?runways.map(r=>({id:r.id,opposite:r.opposite,start:r.start,end:r.end,simulated:r.simulated})):
+  (()=>{const latSum=runways.flatMap(r=>[+r.a[0],+r.b[0]]);
+   const lonSum=runways.flatMap(r=>[+r.a[1],+r.b[1]]);
+   const origin=[(Math.min(...latSum)+Math.max(...latSum))/2,(Math.min(...lonSum)+Math.max(...lonSum))/2];
+   return runways.map(r=>({...r,start:jcSurfaceXYOnRadar(...r.a,origin),end:jcSurfaceXYOnRadar(...r.b,origin),origin}));})();
  const geom=coords.flatMap(r=>[r.start,r.end]);
- const minEast=Math.min(...geom.map(v=>v[0]))-220,maxEast=Math.max(...geom.map(v=>v[0]))+220;
- const minSouth=Math.min(...geom.map(v=>v[1]))-220,maxSouth=Math.max(...geom.map(v=>v[1]))+220;
- const pad=40,scale=Math.min((W-2*pad)/Math.max(500,maxEast-minEast),
-  (H-2*pad)/Math.max(750,maxSouth-minSouth));
- const drawW=(maxEast-minEast)*scale,drawH=(maxSouth-minSouth)*scale;
+ const bounds=isWSSS?{minX:Math.min(...geom.map(v=>v[0]))-120,maxX:Math.max(...geom.map(v=>v[0]))+120,
+  minY:Math.min(...geom.map(v=>v[1]))-260,maxY:Math.max(...geom.map(v=>v[1]))+160}:
+  {minX:Math.min(...geom.map(v=>v[0]))-220,maxX:Math.max(...geom.map(v=>v[0]))+220,
+   minY:Math.min(...geom.map(v=>v[1]))-220,maxY:Math.max(...geom.map(v=>v[1]))+220};
+ const pad=40,scale=Math.min((W-2*pad)/Math.max(isWSSS?360:500,bounds.maxX-bounds.minX),
+  (H-2*pad)/Math.max(isWSSS?900:750,bounds.maxY-bounds.minY));
+ const drawW=(bounds.maxX-bounds.minX)*scale,drawH=(bounds.maxY-bounds.minY)*scale;
  const left=(W-drawW)/2,top=(H-drawH)/2;
- const atPoint=p=>[left+(p[0]-minEast)*scale,top+(p[1]-minSouth)*scale];
- const atGeo=p=>atPoint(jcSurfaceXYOnRadar(...p,origin));
+ const atPoint=p=>[left+(p[0]-bounds.minX)*scale,top+(p[1]-bounds.minY)*scale];
+ const atGeo=p=>isWSSS?atPoint(wsssCanonicalFromGeo(...p)):atPoint(jcSurfaceXYOnRadar(...p,coords[0]?.origin||[0,0]));
  const worldGeo=(x,z)=>jcSurfaceWorldToGeo(x,z,ref);
- const worldXY=(x,z)=>{const geo=worldGeo(x,z);return geo?atGeo(geo):null;};
+ const worldXY=(x,z)=>{
+  if(isWSSS){const p=jetWSSSWorldToCanonical(x,z);return p?atPoint(p):null;}
+  const geo=worldGeo(x,z);return geo?atGeo(geo):null;
+ };
  ctx.fillStyle='#071629';ctx.fillRect(0,0,W,H);
  ctx.lineWidth=1;ctx.strokeStyle='#25475a';
  for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
@@ -7144,7 +7156,7 @@ function jcSurfaceDraw(force=false){
   // jetChangiBuildTaxiNetwork. These lines are explicitly SCHEMATIC.
   const L=jetChangiRunways['02L'],R=jetChangiRunways['02R'];
   const west=L.x*.51,east=R.x*.51;
-  const p=(x,z)=>atGeo(jetWSSSCanonicalToGeo(x,z));
+  const p=(x,z)=>atPoint([x,z]);
   ctx.strokeStyle='#738795';ctx.lineWidth=Math.max(2.2,24*scale);ctx.setLineDash([]);
   for(const x of [west,east]){
    const a=p(x,175),b=p(x,-3950);
@@ -7159,13 +7171,15 @@ function jcSurfaceDraw(force=false){
  }
  for(const lane of coords){
   const a=atPoint(lane.start),b=atPoint(lane.end);
+  const active=String((E.phase==='taxi'||E.phase==='takeoff')?(pt.depRwy||''):(pt.ils?.rwy||pt.arrRwy||'')).toUpperCase().replace(/^RWY\s*/, '')===lane.opposite||
+   String((E.phase==='taxi'||E.phase==='takeoff')?(pt.depRwy||''):(pt.ils?.rwy||pt.arrRwy||'')).toUpperCase().replace(/^RWY\s*/, '')===lane.id;
   ctx.lineCap='round';ctx.lineWidth=Math.max(7,55*scale);ctx.strokeStyle='#0d1a27';
   ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();
-  ctx.lineWidth=Math.max(5,46*scale);ctx.strokeStyle='#485565';
+  ctx.lineWidth=Math.max(5,46*scale);ctx.strokeStyle=active?'#5f788a':'#485565';
   ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();
-  ctx.strokeStyle='#d5e5f3';ctx.lineWidth=1;ctx.setLineDash([7,7]);
+  ctx.strokeStyle=active?'#7af5dc':'#d5e5f3';ctx.lineWidth=active?1.7:1;ctx.setLineDash([7,7]);
   ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();ctx.setLineDash([]);
-  ctx.fillStyle='#f1faff';ctx.font='bold 12px system-ui';ctx.textAlign='center';
+  ctx.fillStyle=active?'#7af5dc':'#f1faff';ctx.font='bold 12px system-ui';ctx.textAlign='center';
   ctx.fillText(lane.id,a[0],Math.min(H-7,a[1]+16));
   ctx.fillText(lane.opposite||'',b[0],Math.max(14,b[1]-9));
  }
@@ -7189,16 +7203,27 @@ function jcSurfaceDraw(force=false){
  }
  const live=jetTrafficLiveFresh()?jetTraffic.live.filter(a=>a?.id&&Number.isFinite(a.lat)&&Number.isFinite(a.lon)):[];
  let rendered=0;
+ const visibleIds=new Set();
  for(const a of live){
+  visibleIds.add(a.id);
   const stable=jetTraffic.stableTracks.get(a.id);
   const simulated=!!stable?.localLanding;
-  const smooth=simulated?null:jcSurfaceInterpolatedGeo(a,time,airport);
-  // A locally simulated final 1 km has its own continuous runway path; the
-  // independent source radar still shows its actual reported coordinates.
-  // For normal traffic use a one-to-one contact-to-visual smooth state.
-  const geo=simulated?jcSurfaceLocalLandingGeo(stable.localLanding,time):smooth?.geo;
+  // Filter distant airport-area traffic BEFORE projection/animation. The
+  // provider can supply hundreds of contacts within a 100 km radar radius.
+  const rawPoint=isWSSS?wsssCanonicalFromGeo(a.lat,a.lon):jcSurfaceXYOnRadar(a.lat,a.lon,coords[0]?.origin||[0,0]);
+  const rawXY=atPoint(rawPoint);
+  if(!simulated&&(rawXY[0]<-70||rawXY[0]>W+70||rawXY[1]<-70||rawXY[1]>H+70))continue;
+  // Live contacts retain their ADS-B hex IDs; this map interpolates their
+  // geographic fixes between provider reports. 1km landings are game-only.
+  let geo=simulated?jcSurfaceLocalLandingGeo(stable.localLanding,time):
+    jcSurfaceSmoothGeo(a,time,airport);
+  if(!geo&&simulated){
+   try{const pos=jetTraffic.liveModels.get(a.id)||jetTrafficPosition(a,time);
+    if(pos)geo=worldGeo(pos.x,pos.z);}catch(_e){}
+  }
   if(!geo)continue;
-  const [px,py]=atGeo(geo);
+  const point=isWSSS?wsssCanonicalFromGeo(...geo):jcSurfaceXYOnRadar(...geo,coords[0]?.origin||[0,0]);
+  const [px,py]=atPoint(point);
   if(px<-10||px>W+10||py<-10||py>H+10)continue;
   const selected=a.id===jetTraffic.departureId||a.id===jetTraffic.arrivalId;
   const color=simulated?'#f8b876':a.onGround?'#ffcf71':'#68dbff';
@@ -7207,9 +7232,16 @@ function jcSurfaceDraw(force=false){
   if(a.onGround){ctx.arc(px,py,selected?6:4.3,0,Math.PI*2);ctx.fill();}
   else{
    const simCourse=simulated?jetTrafficGeoBearing(stable.localLanding.threshold,stable.localLanding.opposite):null;
-   const angle=simCourse!=null?simCourse*Math.PI/180:
-     (Number.isFinite(smooth?.heading)?smooth.heading:jetTrafficObservedCourse(a)*Math.PI/180);
-   const dx=Math.sin(angle),dy=-Math.cos(angle);
+   const reportedCourse=simCourse!=null?simCourse:(jetTrafficObservedCourse(a)||Number(a.heading)||0);
+   let dx=0,dy=-1;
+   if(isWSSS){
+    const r=reportedCourse*Math.PI/180,step=65;
+    const lat2=geo[0]+Math.cos(r)*step/111195;
+    const lon2=geo[1]+Math.sin(r)*step/(111195*Math.max(.1,Math.cos(geo[0]*Math.PI/180)));
+    const p2=atPoint(wsssCanonicalFromGeo(lat2,lon2));dx=p2[0]-px;dy=p2[1]-py;
+   }else{
+    dx=Math.sin(reportedCourse*Math.PI/180);dy=-Math.cos(reportedCourse*Math.PI/180);
+   }
    const len=Math.hypot(dx,dy)||1,fx=dx/len,fy=dy/len;
    ctx.moveTo(px+fx*8,py+fy*8);
    ctx.lineTo(px-fx*5-fy*4,py-fy*5+fx*4);
@@ -7238,14 +7270,22 @@ function jcSurfaceDraw(force=false){
  }else{ctx.fillStyle='#62ffdb';ctx.font='bold 12px system-ui';ctx.textAlign='center';
   ctx.fillText('YOUR AIRCRAFT OUTSIDE AIRPORT MAP',W/2,H-13);}
  ctx.fillStyle='#d0e8f0';ctx.textAlign='left';ctx.font='bold 13px system-ui';
- ctx.fillText(ref.simulated?'N ↑ · SIMULATED RUNWAY':'N ↑ · RADAR / TRUE NORTH',12,23);
- const count=overlay.querySelector('#jc-map-count');
- count.textContent=jetTrafficLiveFresh()?`ADS-B · ${live.length} contacts · ${rendered} on chart · smooth 30+ FPS`:
-  'ADS-B unavailable / stale · no live contacts';
- overlay.querySelector('#jc-map-pilot').textContent=`YOU · ${Math.round((E.plane.v||0)*wn)} KT`;
- overlay.querySelector('.jc-map-hint').textContent=ref.simulated?
-  'N ↑ · SIM runway · 1s radar check':
-  'N ↑ · radar aligned · 1s cache check';
+ ctx.fillText(isWSSS?'RADAR / SCENERY ALIGN':(ref.simulated?'N ↑ · SIMULATED RUNWAY':'N ↑ · RADAR / TRUE NORTH'),12,23);
+ jcSurfaceClearMissing(time,visibleIds);
+ // One-second data/status refresh, while map geometry and markers animate
+ // at 25–30 frames per second. Provider reads stay rate-limit protected.
+ if(force||time-jcMapLastStatus>=1000){
+  jcMapLastStatus=time;
+  const count=overlay.querySelector('#jc-map-count');
+  const lastAge=Math.max(0,Math.round((time-jetTraffic.liveAt)/1000));
+  count.textContent=jetTrafficLiveFresh()?`ADS-B · ${live.length} contacts · ${rendered} shown · ${lastAge}s feed`:
+   'ADS-B unavailable / stale · awaiting new report';
+  overlay.querySelector('#jc-map-pilot').textContent=`YOU · ${Math.round((E.plane.v||0)*wn)} KT`;
+  overlay.querySelector('.jc-map-hint').textContent=isWSSS?
+   'Radar / scenery aligned · taxi & hold corrected · 1s status':
+   (ref.simulated?'N ↑ · SIM runway · positions animated · 1s status':
+   'N ↑ · RADAR aligned · animated contacts · 1s status');
+ }
 }
 let jcDesktopRunwayOpen=false;
 function jcDesktopRunwayToggle(next){
@@ -7282,7 +7322,7 @@ function jcAirportUiTick(){
  if(launcher)launcher.style.display=E.state==='play'&&!jcMobileSceneryOnly()?'block':'none';
  if(E.state!=='play'&&jcMapVisible)jcSurfaceToggle(false);
  jcMinControlTick();jcPanelPickerTick();
- // Airport map has its own animation loop while visible; see jcSurfaceSchedule.
+ if(jcMapVisible){jcSurfaceDraw();}
 }
 
 
