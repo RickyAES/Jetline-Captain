@@ -4708,6 +4708,7 @@ function jcPanelIsMobile(){
 function jcPanelSetMode(mode,save=false){
  if(!['65','55','essential'].includes(mode))mode='65';
  jcPanelMode=mode;
+ if(mode!=='essential')jcRunwayPanelOpen=false;
  E.panelMax=mode!=='essential';
  Mt.setPanelMax(E.panelMax);
  Bi=true;Is();
@@ -4735,6 +4736,7 @@ function Ql(n,t){
  document.getElementById('ui')?.classList.toggle('jc-scene-min',min);
  document.body.classList.toggle('jc-scene-min',min);
  if(min&&jcMapVisible)jcSurfaceToggle(false);
+ jcRunwayPanelOpen=false;jcRunwayDetailsSync();
  t&&(wt.unlock(),wt.play('tap',.4),ee('panel',E.panelMax?'max':'min'),Mn.current()&&Mn.save({panelMax:E.panelMax}));
 }function jetSavedFlightRouteChanged(flight){
  if(!flight||!flight.plan)return false;
@@ -5285,7 +5287,7 @@ function jetTrafficIsSingapore(a){
  const cs=jetTrafficCallsign(a);
  return /^SIA[A-Z0-9]{1,8}$/.test(cs)||cs.startsWith('SINGAPORE')||/^SQ[0-9]{1,4}[A-Z]?$/.test(cs);
 }
-function jetTrafficApplyLivery(group,a){
+function jetTrafficApplyLivery(group,a,target){
  if(!group)return;
  const data=group.userData||(group.userData={});
  const isSIA=jetTrafficIsSingapore(a);
@@ -5300,8 +5302,17 @@ function jetTrafficApplyLivery(group,a){
   data.airlineBadge.style.color=isSIA?'#fff1bf':'#b5faff';
   data.airlineBadge.style.background=isSIA?'#17284ae8':'#061a33e8';
  }
- if(data.landingGear)data.landingGear.visible=!!a.onGround||
-  (Number.isFinite(a.altFt)&&a.altFt<2000&&a.phase!=='CLIMBING');
+ // Flight-tracking messages do not include a landing-gear sensor.  The
+ // displayed gear is GAME-ESTIMATED, never an assertion about the real jet.
+ // Target stage is derived from the same radar position and runway geometry as
+ // the visible 3D aircraft; this works for both 02 and reciprocal 20 approaches.
+ const onFinal=target?.stage==='APPROACH'||target?.stage==='ROLLOUT EST';
+ const otherAirportFinal=!a.onGround&&a.phase==='DESCENDING'&&
+   Number.isFinite(a.altFt)&&a.altFt<=3000&&(Number(a.km)||Infinity)<12;
+ const shortInitialClimb=!a.onGround&&a.phase==='CLIMBING'&&
+   Number.isFinite(a.altFt)&&a.altFt<350;
+ if(data.landingGear)data.landingGear.visible=!!a.onGround||onFinal||otherAirportFinal||shortInitialClimb;
+ data.gearEstimate=data.landingGear?.visible?'DOWN (SIMULATED)':'UP (SIMULATED)';
 }
 function jetTrafficAccept(data){
  if(!data||!Array.isArray(data.aircraft))return false;
@@ -5535,6 +5546,17 @@ function jetTrafficRefreshHud(){
   status.textContent='🟠 WAIT · CHECKING RUNWAY TRAFFIC';
   radar.textContent='📡 '+(jetTrafficLiveFresh()?'LIVE CONTACTS RECEIVED':'LIVE POSITIONS UNAVAILABLE')+' · GAME SIGNAL';
  }
+ if(jcPanelIsMobile()){
+  const runway=String(jetTraffic.departureRunway||pt.depRwy||'02C');
+  if(jetTraffic.departureBlocking){
+   const cs=dep?jetTrafficCallsign(dep):jetTraffic.departureCallsign||'TRAFFIC';
+   status.textContent='🔴 HOLD '+runway+' · '+cs;
+  }else if(jetTraffic.clear){status.textContent='🟢 '+String(pt.depRwy||'02C')+' GAME CLEAR';}
+  else if(arr){status.textContent='🔴 HOLD · '+jetTrafficCallsign(arr);}
+  else if(jetTraffic.runwayOccupied){status.textContent='🔴 HOLD · RUNWAY OCCUPIED';}
+  else{status.textContent='🟠 CHECKING RUNWAY';}
+  radar.style.display='none';
+ }else{radar.style.display='block';}
  status.style.borderColor=jetTraffic.clear?'#53e999':jetTraffic.departureBlocking?'#ff6358':'#ffb452';
 }
 // Cockpit ND live contacts. Source is the SAME ICAO24-keyed ADS-B cache as 3D traffic.
@@ -5896,7 +5918,22 @@ function jetTrafficPosition(a,now){
  }
  const pos=qi(_t,x,z);
  const heading=Number.isFinite(Number(a.heading))?Number(a.heading):course;
- const yaw=-(_t.depRot||0)-(((heading-course+540)%360)-180)*Math.PI/180;
+ // Fix reciprocal approach direction: WSSS runway coordinates use one fixed
+ // 02 bearing (23.01 deg), but the old yaw used the currently selected player
+ // runway (which may be 20C = 203 deg). That rotated real 20 arrivals 180 deg.
+ // Derive the nose vector from the SAME projected east/north coordinates as the
+ // runway/ADS-B 3D position, including the distinct across/along world scales.
+ let yaw;
+ if(jetTrafficActiveAirport()==='WSSS'){
+  const relative=(heading-jetWSSSCourseDeg)*Math.PI/180;
+  const dxLocal=Math.sin(relative)*jetWSSSScale.across;
+  const dzLocal=-Math.cos(relative)*jetWSSSScale.along;
+  const worldVector=qi(_t,dxLocal,dzLocal);
+  yaw=Math.atan2(-worldVector[0],-worldVector[1]);
+ }else{
+  // Other airports use the active flight runway as the local map reference.
+  yaw=-(_t.depRot||0)-(((heading-course+540)%360)-180)*Math.PI/180;
+ }
  return{x:pos[0],y:height,z:pos[1],yaw,runway:runway?.designation||null,
   runwayBase:runway?.id||null,stage,estimated};
 }
@@ -5947,9 +5984,10 @@ function jetTrafficDrawLiveContacts(dt){
   entry.group.userData.onGround=a.onGround;
   entry.group.userData.reportedSpeedKt=a.speedKt;
   entry.group.userData.visualRunway=target.runway;
+  entry.group.userData.approachDirection=target.runway;
   entry.group.userData.gameDeparture=a.id===jetTraffic.departureId;
   const isTracked=a.id===jetTraffic.arrivalId||a.id===jetTraffic.departureId;
-  jetTrafficApplyLivery(entry.group,a);
+  jetTrafficApplyLivery(entry.group,a,target);
   entry.group.scale.setScalar(isTracked?1.28:(a.onGround?0.95:1.02));
   const tag=entry.group.userData.trafficTag;
   const badge=entry.group.userData.airlineBadge;
@@ -5981,13 +6019,21 @@ function jetTrafficDrawLiveContacts(dt){
 // Jetline Captain mobile full scenery / airport surface map.
 // The chart and 3D tracked aircraft share positions from jetTrafficPosition.
 // Simulated taxiways are labelled, NOT certified real-world ground charts.
-let jcMapLastDraw=0,jcControlsLast=0,jcMapVisible=false,jcFullUI=null,jcSurface=null,jcWasMobileMin=false;
+let jcMapLastDraw=0,jcControlsLast=0,jcMapVisible=false,jcFullUI=null,jcSurface=null,jcWasMobileMin=false,jcRunwayPanelOpen=false;
+function jcRunwayDetailsSync(){
+ const allowed=jcMobileSceneryOnly() && !je.open && jetTrafficActiveAirport()==='WSSS';
+ const show=allowed&&jcRunwayPanelOpen;
+ document.body.classList.toggle('jc-runway-details-visible',show);
+ const button=document.getElementById('jc-mini-runways-btn');
+ if(button){button.textContent=show?'HIDE INFO':'RWY INFO';button.setAttribute('aria-expanded',String(show));}
+}
+
 function jcPanelPickerEnsure(){
  let picker=document.getElementById('jc-panel-view-modes');if(picker)return picker;
  picker=document.createElement('nav');picker.id='jc-panel-view-modes';
  picker.setAttribute('aria-label','Cockpit panel height selector');
  picker.setAttribute('data-ui','true');
- picker.innerHTML='<span class="jc-pick-caption">PANEL</span><button type="button" data-jc-mode="65">65%</button><button type="button" data-jc-mode="55">55%</button><button type="button" data-jc-mode="essential">ESSENTIAL</button>';
+ picker.innerHTML='<span class="jc-pick-caption">PANEL</span><button type="button" data-jc-mode="65">65%</button><button type="button" data-jc-mode="55">55%</button><button type="button" data-jc-mode="essential">TAXIING</button>';
  picker.addEventListener('pointerdown',ev=>ev.stopPropagation());
  picker.addEventListener('click',ev=>{
   const b=ev.target.closest('button[data-jc-mode]');if(!b)return;
@@ -6006,7 +6052,7 @@ function jcPanelPickerTick(){
   b.classList.toggle('selected',pressed);b.setAttribute('aria-pressed',String(pressed));
  });
  const nativeLabel=document.querySelector('#ui.playing .panel-lbl');
- if(nativeLabel)nativeLabel.textContent=jcPanelMode==='essential'?'PANEL · MIN':`PANEL · ${jcPanelMode}%`;
+ if(nativeLabel)nativeLabel.textContent=jcPanelMode==='essential'?'PANEL · TAXI':`PANEL · ${jcPanelMode}%`;
  const bar=document.getElementById('jc-flight-min-overlay');
  const bh=jcPanelMode==='essential'&&bar?.classList.contains('active')?bar.getBoundingClientRect().height:0;
  const vh=Math.max(1,window.innerHeight);
@@ -6036,7 +6082,7 @@ function jcSurfaceEnsure(){
 function jcSurfaceToggle(open){
  const sheet=jcSurfaceEnsure();jcMapVisible=open==null?!jcMapVisible:!!open;
  sheet.classList.toggle('open',jcMapVisible);
- if(jcMapVisible){jcSurfaceDraw(true)}
+ if(jcMapVisible){jcRunwayPanelOpen=false;jcRunwayDetailsSync();jcSurfaceDraw(true)}
  const mapButton=document.getElementById('jc-mini-map-btn');
  if(mapButton)mapButton.textContent=jcMapVisible?'CLOSE MAP':'AIRPORT MAP';
 }
@@ -6044,7 +6090,7 @@ function jcFullOverlayEnsure(){
  if(jcFullUI)return jcFullUI;
  const root=document.createElement('section');root.id='jc-flight-min-overlay';
  root.setAttribute('data-ui','true');root.setAttribute('aria-label','Minimal flight controls');
- root.innerHTML=`<div class="jc-min-top"><span>ESSENTIAL · <b id="jc-min-phase">FLIGHT</b></span><span id="jc-min-speed">SPD ---</span><span id="jc-min-hdg">HDG ---</span><span id="jc-min-alt">ALT ---</span><span id="jc-min-vs">V/S ---</span></div>
+ root.innerHTML=`<div class="jc-min-top"><span>TAXIING · <b id="jc-min-phase">FLIGHT</b></span><span id="jc-min-speed">SPD ---</span><span id="jc-min-hdg">HDG ---</span><span id="jc-min-alt">ALT ---</span><span id="jc-min-vs">V/S ---</span></div>
  <div class="jc-min-buttons">
   <button type="button" data-jc-hold="left" aria-label="Steer left">◀ LEFT</button>
   <button type="button" data-jc-hold="brake" aria-label="Hold brakes">BRAKE</button>
@@ -6056,6 +6102,7 @@ function jcFullOverlayEnsure(){
   <button type="button" data-jc-action="gear" id="jc-min-gear">GEAR</button>
   <button type="button" data-jc-action="flaps" id="jc-min-flaps">FLAP</button>
   <button type="button" data-jc-action="spoiler" id="jc-min-spoiler">SPLR</button>
+  <button type="button" data-jc-action="runways" id="jc-mini-runways-btn" aria-expanded="false">RWY INFO</button>
   <button type="button" data-jc-action="map" id="jc-mini-map-btn">RUNWAY MAP</button>
   <button type="button" data-jc-action="max" class="jc-min-max">PANEL 65%</button>
  </div>`;
@@ -6086,6 +6133,10 @@ function jcFullOverlayEnsure(){
   else if(type==='flaps')ec(true);
   else if(type==='spoiler'){
    E.plane.spoilMode=((Number(E.plane.spoilMode)||0)+1)%3;wt.play('tap',.38);fn();
+  }else if(type==='runways'){
+   if(jetTrafficActiveAirport()!=='WSSS'){jcSurfaceToggle(true);return;}
+   jcRunwayPanelOpen=!jcRunwayPanelOpen;
+   jcRunwayDetailsSync();
   }else if(type==='map')jcSurfaceToggle();
   else if(type==='max')jcPanelSetMode('65',true);
  });
@@ -6133,6 +6184,7 @@ function jcQuickControlsEnsure(){
 }
 function jcQuickControlsTick(){
  const mcduOpen=!!je.open;
+ if(mcduOpen){jcRunwayPanelOpen=false;if(jcMapVisible)jcSurfaceToggle(false);jcRunwayDetailsSync();}
  document.body.classList.toggle('jc-mcdu-expanded',mcduOpen);
  const active=E.state==='play'&&jcPanelIsMobile()&&jcPanelMode!=='essential'&&!mcduOpen;
  if(!jcQuickUI&&!active)return;
@@ -6174,6 +6226,11 @@ function jcMinControlTick(){
  if(Date.now()-jcControlsLast<170)return;jcControlsLast=Date.now();
  jcQuickControlsTick();
  const mobile=jcMobileSceneryOnly();
+ const mobilePanel=E.state==='play'&&jcPanelIsMobile();
+ document.body.classList.toggle('jc-mobile-panel',mobilePanel);
+ if(!mobilePanel)jcRunwayPanelOpen=false;
+ if(!mobile)jcRunwayPanelOpen=false;
+ jcRunwayDetailsSync();
  // A desktop resize may follow a phone-like window: never retain mobile-only
  // control surfaces/classes when returning to the side-by-side desktop view.
  if(!jcPanelIsMobile()){
@@ -8563,7 +8620,6 @@ window.__holdHud={update};
  #ui.playing.jc-scene-min #jet-taxi-box .jet-taxi-actions,
  #ui.playing.jc-scene-min #jet-taxi-box .jet-taxi-status,
  #ui.playing.jc-scene-min #jet-taxi-box .jet-taxi-route,
- body.jc-scene-min #jc-changi-3-rwy-board,
  body.jc-scene-min #jc-global-map-button {
    display:none!important;visibility:hidden!important;pointer-events:none!important;
  }
@@ -8661,6 +8717,51 @@ body.jc-desktop-layout #jc-cockpit-quick-controls,
 body.jc-desktop-layout #jc-flight-min-overlay,
 body.jc-desktop-layout #jc-panel-view-modes {
  display:none!important;visibility:hidden!important;pointer-events:none!important;
+}
+</style>
+
+<style id="jc-mobile-taxiing-runway-information-2026-11">
+/* Dedicated runway information only in TAXIING mode, opened intentionally.
+   The all-airport runway map is accessed with its separate map button. */
+body.jc-mobile-panel #jc-changi-3-rwy-board,
+body.jc-mobile-panel #jc-global-map-button,
+body.jc-mobile-panel #jet-taxi-route-map,
+body.jc-mobile-panel #jet-taxi-box .jet-taxi-status,
+body.jc-mobile-panel #jet-taxi-box .jet-taxi-route {display:none!important;visibility:hidden!important;pointer-events:none!important;}
+body.jc-mobile-panel.jc-scene-min.jc-runway-details-visible:not(.jc-mcdu-expanded) #jc-changi-3-rwy-board {
+ display:block!important;visibility:visible!important;pointer-events:auto!important;
+ position:fixed!important;z-index:66!important;
+ top:clamp(82px,15dvh,145px)!important;right:6px!important;left:auto!important;
+ width:min(195px,48vw)!important;max-height:min(32dvh,250px)!important;
+ box-sizing:border-box!important;overflow-y:auto!important;
+ border-radius:10px!important;background:rgba(4,22,40,.95)!important;
+ box-shadow:0 6px 18px #000b!important;
+}
+/* The green / red signal must be visible without the long second row. */
+body.jc-mobile-panel #ui.playing #jet-runway-traffic {
+ top:clamp(48px,9dvh,85px)!important;left:50%!important;
+ max-width:min(245px,59vw)!important;font-size:9px!important;
+ line-height:1.15!important;z-index:39!important;
+}
+body.jc-mobile-panel #ui.playing #jet-runway-traffic .jc-signal {
+ padding:4px 7px!important;box-shadow:0 2px 8px #0008!important;
+ border-radius:7px!important;line-height:1.2!important;
+}
+body.jc-mobile-panel #ui.playing #jet-runway-traffic .jc-live {display:none!important;}
+/* Thirteen controls in three rows, instead of forcing a tall fourth row. */
+body.jc-mobile-panel.jc-scene-min #jc-flight-min-overlay .jc-min-buttons {
+ grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;
+}
+body.jc-mobile-panel.jc-scene-min #jc-flight-min-overlay button {
+ font-size:clamp(8px,2.1vw,11px);min-height:34px;padding:4px 2px;
+}
+body.jc-mobile-panel.jc-scene-min #jc-mini-runways-btn[aria-expanded="true"] {
+ background:#235f6a;border-color:#7cffda;color:#eafffa;
+}
+@media (max-height:530px) and (orientation:landscape){
+ body.jc-mobile-panel.jc-scene-min #jc-flight-min-overlay .jc-min-buttons {grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;}
+ body.jc-mobile-panel.jc-scene-min #jc-flight-min-overlay button {min-height:27px;font-size:9px;padding:2px 1px;}
+ body.jc-mobile-panel.jc-scene-min.jc-runway-details-visible #jc-changi-3-rwy-board {top:42px!important;max-height:42dvh!important;}
 }
 </style>
 </body>
