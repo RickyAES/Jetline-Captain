@@ -1062,7 +1062,10 @@
         runwayLookup.set(code,runways);
       })
       .catch(()=>runwayLookup.set(code,[]))
-      .finally(()=>{runwayPending.delete(code);if(code===radarAirport){showAirportRunway();drawRadar()}});
+      .finally(()=>{runwayPending.delete(code);if(code===radarAirport){showAirportRunway();drawRadar()}
+        const active=taxiFlightAirport();
+        if(active?.code===code&&taxiRadarLive?.airport?.icao===code)deliverAirportRadar(taxiRadarLive,active);
+      });
   }
   function loadRadarAirports(){
     // One shared in-flight request: opening RADAR during startup must not overwrite
@@ -2175,23 +2178,29 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
       {code,lat:Number(existing.lat),lon:Number(existing.lon),name:existing.name||code,
        runway:String(arrival?info.rwys?.arrRwy:info.rwys?.depRwy||'')}:null;
   }
+  function runwayRecordsForGame(current){
+    return SG_AIRFIELDS[current.code]?.runways||runwayLookup.get(current.code)||[];
+  }
   function runwayForGame(current){
-    const records=SG_AIRFIELDS[current.code]?.runways||runwayLookup.get(current.code)||[];
-    const runway=current.runway.toUpperCase();
-    const pair=records.find(r=>String(r.id||'').toUpperCase().split('/').some(x=>x===runway))||
-      records.find(r=>String(r.id||'').toUpperCase().includes(runway));
+    const records=runwayRecordsForGame(current);
+    const designation=String(current.runway||'').toUpperCase().replace(/^RWY\s*/, '');
+    const pair=records.find(r=>String(r.id||'').toUpperCase().split('/').some(x=>x===designation));
     return pair&&Array.isArray(pair.a)&&Array.isArray(pair.b)?[pair.a,pair.b]:null;
   }
   function deliverAirportRadar(d,current){
     if(!gameLoaded||!d?.aircraft||!current)return;
     const native=flightApi();
     native?.setAirportTraffic?.({airport:current.code,reference:[current.lat,current.lon],
-      asOf:d.asOf||d.fetchedAt,runwayEnds:runwayForGame(current),aircraft:d.aircraft});
+      asOf:d.asOf||d.fetchedAt,selectedRunway:current.runway,
+      runways:runwayRecordsForGame(current).map(r=>({id:r.id,a:r.a,b:r.b,source:r.source||'airport directory'})),
+      runwayEnds:runwayForGame(current),aircraft:d.aircraft});
   }
   async function syncTaxiRadar(){
     const current=taxiFlightAirport();
     if(!current||taxiRadarFetching||document.visibilityState==='hidden')return;
     const stamp=Date.now();
+    // A pilot's current airport needs runway data even if RADAR is never opened.
+    ensureAirportRunways(current.code);
     if(current.code===taxiRadarFlightAirport&&stamp-taxiRadarLastMs<Math.max(2800,taxiRadarBackoffMs))return;
     taxiRadarFetching=true;taxiRadarFlightAirport=current.code;taxiRadarLastMs=stamp;
     try{
