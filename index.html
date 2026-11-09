@@ -2234,6 +2234,22 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   // Synchronize the airport/game cache on a one-second tick. Network reads
   // occur ~every 3 s, with exponential backoff if the ADS-B provider fails.
   setInterval(syncTaxiRadar,1000);
+   // ATC diversion: hand the active alternate to the open world radar as well.
+   // Uses the game flight's single authoritative destination; does not fake ADS-B.
+   let lastWeatherDivertAirport='';
+   setInterval(()=>{
+     let wx=null;
+     try{wx=flightApi()?.weatherInfo?.()}catch(_e){}
+     if(!wx?.diverted||!wx.to){lastWeatherDivertAirport='';return;}
+     const code=String(wx.to).toUpperCase();
+     if(code===lastWeatherDivertAirport)return;
+     lastWeatherDivertAirport=code;
+     radarManualAirport=false;
+     taxiRadarLastMs=0;taxiRadarFlightAirport='';
+     const follow=()=>{if(airports[code])chooseRadarAirport(code,false)};
+     if(airports[code])follow();else loadRadarAirports().then(follow).catch(()=>{});
+   },900);
+
   setInterval(()=>{if(radarOpenState)updateGameRadarMatch();},1500);
   frame.addEventListener('load',()=>{taxiRadarLastMs=0;taxiRadarFlightAirport='';});
 
