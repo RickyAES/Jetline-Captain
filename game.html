@@ -5999,16 +5999,30 @@ function jetTrafficNDRunwayGeometry(state){
  if(jetTraffic.worldRunways.length&&(jetTrafficActiveAirport()!=='WSSS'||
    ['route','approach','taxiIn'].includes(state.phase))){
   const result=[];
+  const wsss=jetTrafficActiveAirport()==='WSSS';
+  const reciprocal={'02L':'20R','02C':'20C','02R':'20L'};
   for(const pair of jetTraffic.worldRunways){
-   const a=jetTrafficWorldMapPoint(...pair.a),b=jetTrafficWorldMapPoint(...pair.b);
-   if(!a||!b)continue;
-   const dx=b.x-a.x,dz=b.z-a.z,length=Math.hypot(dx,dz);
+   let first=jetTrafficWorldMapPoint(...pair.a),last=jetTrafficWorldMapPoint(...pair.b);
+   if(!first||!last)continue;
+   let [name,opposite]=jetTrafficRunwayNames(pair);
+   // A radar runway pair may arrive as 20C/02C with its northern endpoint
+   // first. For WSSS, normalize EVERY strip to geographic 02 (southwest)
+   // -> 20 (northeast), independently of the selected departure direction.
+   if(wsss){
+    const label=[name,opposite].map(s=>String(s).replace(/^RWY\s*/i,'').toUpperCase());
+    const base=Object.keys(reciprocal).find(id=>label.includes(id)||label.includes(reciprocal[id]));
+    if(base){
+     name=base;opposite=reciprocal[base];
+     if(Number(pair.a[0])>Number(pair.b[0]))[first,last]=[last,first];
+    }
+   }
+   const dx=last.x-first.x,dz=last.z-first.z,length=Math.hypot(dx,dz);
    if(length<40)continue;
    const half=24,nx=-dz/length*half,nz=dx/length*half;
-   const name=jetTrafficRunwayNames(pair);
-   result.push({id:name[0],opposite:name[1],
-    corners:[[a.x+nx,a.z+nz],[a.x-nx,a.z-nz],[b.x-nx,b.z-nz],[b.x+nx,b.z+nz]],
-    centerStart:[a.x,a.z],centerEnd:[b.x,b.z],source:'verified-geographic-thresholds'});
+   result.push({id:name,opposite,
+    corners:[[first.x+nx,first.z+nz],[first.x-nx,first.z-nz],
+     [last.x-nx,last.z-nz],[last.x+nx,last.z+nz]],
+    centerStart:[first.x,first.z],centerEnd:[last.x,last.z],source:'verified-geographic-thresholds'});
   }
   return result;
  }
@@ -6040,6 +6054,16 @@ function jetTrafficNDRunwayGeometry(state){
    corners=[world(-halfW,halfD),world(halfW,halfD),
     world(halfW,-halfD),world(-halfW,-halfD)];
    start=world(0,halfD);end=world(0,-halfD);
+   // A reciprocal 20 departure reverses the local axes of the 3D mesh.
+   // Decide which mesh end is actually the 02 threshold from the shared
+   // WSSS geographic/canonical runway frame, not from mesh-local +Z/-Z.
+   const startLocal=jetWSSSWorldToCanonical(start[0],start[1]);
+   const endLocal=jetWSSSWorldToCanonical(end[0],end[1]);
+   const distanceTo02=p=>Math.hypot((p[0]-lane.x)*.5,p[1]-lane.z);
+   if(distanceTo02(endLocal)<distanceTo02(startLocal)){
+    [start,end]=[end,start];
+    corners=[corners[3],corners[2],corners[1],corners[0]];
+   }
   }else{
    // Pre-first-render fallback uses exactly the same transform as addBox.
    const p=(x,z)=>jetWSSSCanonicalToWorld(x,z),z0=lane.z,z1=z0-lane.length;
@@ -6083,6 +6107,8 @@ function jetTrafficDrawWSSSNDRunways(ctx,project,width,height,state){
    ctx.fillStyle='rgba(0,20,35,.88)';ctx.fillRect(pos[0]-tw/2-3,pos[1]-15,tw+6,13);
    ctx.fillStyle='#dff9ff';ctx.fillText(text,pos[0]-tw/2,pos[1]-5);
   };
+  // Geographically oriented: southwest threshold is 02, northeast 20.
+  // On heading-up ND the labels rotate with the runway, but never swap ends.
   label(th,strip.id);label(far,strip.opposite);
  }
  ctx.restore();
