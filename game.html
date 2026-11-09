@@ -6100,59 +6100,20 @@ function jcQuickControlsEnsure(){
  if(jcQuickUI)return jcQuickUI;
  const root=document.createElement('div');root.id='jc-cockpit-quick-controls';
  root.setAttribute('role','group');root.setAttribute('data-ui','true');
- root.setAttribute('aria-label','Mobile cockpit brakes, gear, flaps and spoilers');
- // The buttons live in the cockpit's central ECAM/MCDU gap instead of
- // occupying the screen bottom, so the virtual throttle and flight sticks
- // stay uncovered in both 65% and 55% mobile modes.
+ root.setAttribute('aria-label','Mobile gear, flaps and spoilers between ECAM and MCDU');
+ // Keep only the three rockers in this centre column. Taxi brakes now live
+ // underneath their corresponding LEFT / RIGHT steering buttons.
  root.innerHTML=`
- <div class="jc-q-brakes" role="group" aria-label="Independent taxi brakes">
-  <button type="button" class="jc-q-brake" data-jc-q-brake="L" aria-label="Left brake, hold" aria-pressed="false">BRK L</button>
-  <button type="button" class="jc-q-brake" data-jc-q-brake="R" aria-label="Right brake, hold" aria-pressed="false">BRK R</button>
- </div>
  <button type="button" data-jc-q-action="gear" id="jc-q-gear">GEAR</button>
  <button type="button" data-jc-q-action="flaps" id="jc-q-flaps">FLAPS</button>
  <button type="button" data-jc-q-action="spoilers" id="jc-q-spoilers">SPLR</button>`;
  (document.getElementById('ui')||document.body).appendChild(root);
- const pressed=new Set();
- const heldIds=new Map();
- const sync=()=>{
-  window.__jetQuickBrake=pressed.size>0?1:0;
-  // Existing taxi input system consumes this shared brake state on every frame.
-  if(typeof window.__jetTaxiControlsSync==='function')window.__jetTaxiControlsSync();
-  else window.__jetTaxiBrake=window.__jetQuickBrake;
-  for(const b of root.querySelectorAll('[data-jc-q-brake]')){
-   const down=pressed.has(b.dataset.jcQBrake);
-   b.dataset.on=down?'1':'0';b.setAttribute('aria-pressed',String(down));
-  }
+ // Native taxi buttons own brake and steering input. Do not duplicate
+ // brake presses here or create conflicting, latched brake states.
+ root.__releaseAll=()=>{
+  window.__jetQuickBrake=0;
+  window.__jetTaxiControlsSync?.();
  };
- const release=(key)=>{
-  const held=heldIds.get(key);
-  if(!held)return;
-  heldIds.delete(key);
-  pressed.delete(held);
-  sync();
- };
- root.__releaseAll=()=>{heldIds.clear();pressed.clear();sync();};
- for(const b of root.querySelectorAll('[data-jc-q-brake]')){
-  const side=b.dataset.jcQBrake;
-  b.addEventListener('pointerdown',ev=>{
-   if(ev.pointerType==='mouse'&&ev.button!==0)return;
-   ev.preventDefault();ev.stopPropagation();
-   const key='p'+ev.pointerId;
-   heldIds.set(key,side);pressed.add(side);sync();
-   try{b.setPointerCapture(ev.pointerId)}catch{}
-  });
-  for(const event of ['pointerup','pointercancel','lostpointercapture']){
-   b.addEventListener(event,ev=>{ev.preventDefault();ev.stopPropagation();release('p'+ev.pointerId)});
-  }
-  b.addEventListener('keydown',ev=>{
-   if(ev.key!=='Enter'&&ev.key!==' ')return;
-   ev.preventDefault();ev.stopPropagation();
-   heldIds.set('k'+side,side);pressed.add(side);sync();
-  });
-  b.addEventListener('keyup',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();release('k'+side)}});
-  b.addEventListener('blur',()=>release('k'+side));
- }
  root.addEventListener('pointerdown',ev=>ev.stopPropagation());
  root.addEventListener('click',ev=>{
   const b=ev.target.closest('button[data-jc-q-action]');if(!b)return;
@@ -6171,7 +6132,9 @@ function jcQuickControlsEnsure(){
  jcQuickUI=root;return root;
 }
 function jcQuickControlsTick(){
- const active=E.state==='play'&&jcPanelIsMobile()&&jcPanelMode!=='essential';
+ const mcduOpen=!!je.open;
+ document.body.classList.toggle('jc-mcdu-expanded',mcduOpen);
+ const active=E.state==='play'&&jcPanelIsMobile()&&jcPanelMode!=='essential'&&!mcduOpen;
  if(!jcQuickUI&&!active)return;
  const root=jcQuickControlsEnsure();
  root.classList.toggle('active',active);
@@ -8183,12 +8146,31 @@ window.__holdHud={update};
      btn.style.pointerEvents=show?'auto':'none';
    }
    if(!show)return;
+   const mobileCockpit=document.body.classList.contains('jc-panel-controls');
+   if(mobileCockpit){
+     // The open area between the throttle (left) and the stick (right) is
+     // approximately 110..192 in the native 390px cockpit design.
+     // Scale from the EWD display's real on-screen geometry: no floating
+     // switches over MCDU or the throttle/stick input capture regions.
+     const slotLeft=ewd.offsetLeft+ewd.offsetWidth*.57;
+     const slotRight=Math.min(mcdu.offsetLeft-5,ewd.offsetLeft+ewd.offsetWidth*.99);
+     const available=Math.max(62,slotRight-slotLeft);
+     const spacing=3,bw=Math.max(28,Math.min(38,(available-spacing)/2));
+     const bh=Math.max(23,Math.min(32,ewd.offsetHeight*.20));
+     const belowScreens=Math.max(ewd.offsetTop+ewd.offsetHeight,mcdu.offsetTop+mcdu.offsetHeight)+3;
+     const top=Math.max(belowScreens,ui.clientHeight-bh-13);
+     [eng1,eng2].forEach((b,i)=>{
+       const styles={left:Math.round(slotLeft+(bw+spacing)*i)+'px',top:Math.round(Math.min(ui.clientHeight-bh-4,top))+'px',
+         width:Math.round(bw)+'px',height:Math.round(bh)+'px',fontSize:'9px',padding:'1px',zIndex:'60'};
+       for(const [key,value] of Object.entries(styles))if(b.style[key]!==value)b.style[key]=value;
+     });
+     return;
+   }
+   // Desktop retains its established, right-docked instrument arrangement.
    const bw=Math.max(36,Math.min(58,mcdu.offsetWidth*.15));
    const bh=Math.max(22,Math.min(36,mcdu.offsetHeight*.105));
    const spacing=3, edge=5;
    const x=Math.max(0,ui.clientWidth-bw-edge);
-   // Never place over the MCDU. If there is not enough space below it,
-   // use the right-side control area and always hide during expanded MCDU.
    const mcduBottom=mcdu.offsetTop+mcdu.offsetHeight;
    const bottomArea=Math.max(mcduBottom+3,ui.clientHeight-2*bh-spacing-6);
    const top=Math.min(ui.clientHeight-2*bh-spacing-3,bottomArea);
@@ -8624,7 +8606,7 @@ window.__holdHud={update};
  box-sizing:border-box;min-width:0;max-width:76px;padding:2px;
  border:1px solid #4f9eb7;border-radius:7px;background:#0b253ae8;
  box-shadow:0 2px 8px #001a;grid-template-columns:1fr;
- grid-template-rows:1.16fr repeat(3,1fr);gap:2px;pointer-events:auto;
+ grid-template-rows:repeat(3,minmax(0,1fr));gap:2px;pointer-events:auto;
 }
 #ui.playing #jc-cockpit-quick-controls.active{display:grid}
 #jc-cockpit-quick-controls .jc-q-brakes{min-width:0;min-height:0;
@@ -8644,17 +8626,31 @@ window.__holdHud={update};
 /* Hide duplicated rocker stack only while these central controls are active.
    Desktop cockpit's own rockers remain where they were. */
 body.jc-panel-controls #ui.playing #jc-pulldown-stack{display:none!important}
-body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-brake{display:none!important}
-/* Keep taxi steering separate and away from the middle controls. */
+/* The TWO original brake switches remain functional but move BELOW steering.
+   Stay above the throttle and stick touch areas rather than on top of them. */
 body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side{
- top:auto!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;
- width:clamp(50px,12vw,76px)!important;gap:0!important}
-body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir]{min-height:34px!important}
+ top:auto!important;bottom:calc(clamp(86px,19vh,170px) + env(safe-area-inset-bottom))!important;
+ width:clamp(51px,12vw,76px)!important;gap:3px!important}
+body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir]{order:1!important;min-height:32px!important}
+body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side .jet-taxi-brake{
+ order:2!important;display:flex!important;min-height:32px!important}
+/* The existing Engine 1 and 2 buttons are moved to the true cockpit bottom
+   centre by the ECAM layout routine, so there are no duplicate switches. */
 @media(max-height:530px) and (orientation:landscape){
  #jc-cockpit-quick-controls button{font-size:7px}
- body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side{bottom:calc(3px + env(safe-area-inset-bottom))!important;width:52px!important}
- body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir]{min-height:29px!important}
+ body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side{bottom:calc(64px + env(safe-area-inset-bottom))!important;width:52px!important}
+ body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side button[data-dir],
+ body.jc-panel-controls #ui.playing #jet-taxi-box .jet-taxi-side .jet-taxi-brake{min-height:26px!important}
 }
+/* An expanded MCDU is always the foreground control. No brake, map,
+   engine, or mobile-panel selector may cover the keyboard or display. */
+body.jc-mcdu-expanded #ui #jc-cockpit-quick-controls,
+body.jc-mcdu-expanded #ui #jet-taxi-box,
+body.jc-mcdu-expanded #jc-panel-view-modes,
+body.jc-mcdu-expanded #jc-global-map-button,
+body.jc-mcdu-expanded #jc-changi-3-rwy-board,
+body.jc-mcdu-expanded #jc-flight-min-overlay{display:none!important;visibility:hidden!important;pointer-events:none!important}
+
 </style>
 
 <style id="jc-desktop-right-dock-fix">
