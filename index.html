@@ -2202,8 +2202,9 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
         radarData=d;radarLastFetchMs=Date.now();
       if(!radarManualAirport&&taxiFlightAirport()?.code===radarAirport){
         const hold=gameInfo()?.runwaySignal;
-        if(hold?.arrivalId&&d.aircraft.some(p=>(p.hex||p.callsign)===hold.arrivalId))
-          radarSelected=hold.arrivalId;
+        const activeId=hold?.departureId||hold?.arrivalId;
+        if(activeId&&d.aircraft.some(p=>(p.hex||p.callsign)===activeId))
+          radarSelected=activeId;
       }renderRadar();
       }
     }catch(e){

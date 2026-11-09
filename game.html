@@ -4873,7 +4873,7 @@ const jetTraffic={airport:'',age:0,clear:false,phase:'',plane:null,lights:null,l
  live:[],liveAt:0,liveAirport:'',liveRef:null,liveRunway:null,liveMeshes:[],liveModels:new Map(),
  nextLiveDraw:0,nextHud:0,announced:false,hideAt:0,arrivalId:'',arrivalLostAt:0,arrivalLandedAt:0,
  runwayOccupied:false,mode:'SIM',lastLiveStatus:'',changeAirportAt:0,arrivalCallsign:'',scenarioId:'SIM-JL01',lastTrackedPhase:'',lastTrackedSeen:0,
- primaryArrivalSeenAt:0,stableTracks:new Map(),parallelScene:null,parallelGroup:null,parallelLabels:[],parallelRunwayX:300,parallelRunwayZ:115};
+ primaryArrivalSeenAt:0,stableTracks:new Map(),departureId:'',departureCallsign:'',departureRunway:'',departureStage:'',departureLastSeen:0,departureClearSince:0,departureBlocking:false,departureReleasedAt:0,parallelScene:null,parallelGroup:null,parallelLabels:[],parallelRunwayX:300,parallelRunwayZ:115};
 function jetTrafficDispose(object){
  if(!object)return;
  if(object.userData?.trafficTag)object.userData.trafficTag.remove();
@@ -5171,6 +5171,9 @@ function jetTrafficStart(){
  jetTraffic.clear=false;jetTraffic.phase='final';jetTraffic.nextHud=0;jetTraffic.announced=false;
  jetTraffic.live=[];jetTraffic.liveAirport='';jetTraffic.liveRef=null;jetTraffic.liveAt=0;jetTraffic.stableTracks.clear();
  jetTraffic.arrivalId='';jetTraffic.arrivalCallsign='';jetTraffic.arrivalLostAt=0;jetTraffic.arrivalLandedAt=0;
+ jetTraffic.departureId='';jetTraffic.departureCallsign='';jetTraffic.departureRunway='';
+ jetTraffic.departureStage='';jetTraffic.departureLastSeen=0;jetTraffic.departureClearSince=0;
+ jetTraffic.departureBlocking=false;jetTraffic.departureReleasedAt=0;jetTraffic.stableTracks.clear();
  jetTraffic.mode='SIM';jetTrafficMakeObjects();jetTrafficShowHud();
 }
 function jetTrafficMakeObjects(){
@@ -5238,7 +5241,7 @@ function jetTrafficAccept(data){
  const ref=data.reference;
  if(!Array.isArray(ref)||ref.length!==2||!ref.every(v=>Number.isFinite(Number(v))))return false;
  const old=jetTraffic.liveAirport;
- if(old&&old!==airport){jetTrafficClearModels();jetTraffic.arrivalId='';jetTraffic.arrivalCallsign='';jetTraffic.arrivalLostAt=0;}
+ if(old&&old!==airport){jetTrafficClearModels();jetTraffic.arrivalId='';jetTraffic.arrivalCallsign='';jetTraffic.arrivalLostAt=0;jetTraffic.departureId='';jetTraffic.departureBlocking=false;jetTraffic.departureClearSince=0;}
  jetTraffic.liveAirport=airport;jetTraffic.airport=airport;
  const asOf=Date.parse(data.asOf||'');jetTraffic.liveAt=Number.isFinite(asOf)?Math.min(Date.now(),asOf):Date.now();
  jetTraffic.liveRef=ref.map(Number);
@@ -5314,74 +5317,156 @@ function jetTrafficPossibleArrival(a){
  const difference=Math.abs(((a.heading-toward+540)%360)-180);
  return difference<75;
 }
+// 02C/20C departures come ONLY from an observed ICAO24 ADS-B contact.
+// The game signal is a training rule, not live tower clearance or verified
+// runway use. Never invent a flight or claim a ground roll from an airborne-only contact.
+function jetTraffic02CDeparture(a){
+ if(jetTrafficActiveAirport()!=='WSSS'||!a?.id||!Number.isFinite(a.lat)||!Number.isFinite(a.lon))return null;
+ const p=jetWSSSAlongCross(a.lat,a.lon,jetChangiRunways['02C'].threshold);
+ const course=Number(a.heading);
+ const err02=Math.abs(((course-jetWSSSCourseDeg+540)%360)-180);
+ const err20=Math.abs(((course-(jetWSSSCourseDeg+180)+540)%360)-180);
+ const forward=err02<=err20,err=Math.min(err02,err20);
+ const spd=Number(a.speedKt)||0,alt=Number(a.altFt)||0,vr=Number(a.verticalRate)||0;
+ const onPavement=a.onGround&&p.along>=-70&&p.along<=4070&&Math.abs(p.cross)<=96;
+ // Position-only ground contacts are allowed to block a runway. The heading
+ // filter is applied to moving aircraft to reject cross-runway taxi traffic.
+ const ground=onPavement&&(spd<12||err<=33);
+ // An observed low-altitude climb close to the same centreline is a probable
+ // departure, not a verified takeoff runway assignment.
+ const climb=!a.onGround&&spd>=80&&alt<=1600&&
+   (a.phase==='CLIMBING'||vr>180)&&err<=35&&
+   Math.abs(p.cross)<=300&&p.along>=-170&&p.along<=5700;
+ if(!ground&&!climb)return null;
+ const designation=forward?'02C':'20C';
+ const travelled=forward?p.along:4000-p.along;
+ const stage=a.onGround?(spd>=75?'TAKEOFF ROLL':spd>=12?'ROLLING / LINEUP':'ON RUNWAY'):
+  (alt<=450?'INITIAL CLIMB':'CLIMBING');
+ return {a,designation,stage,ground,climb,alt,spd,travelled,along:p.along,cross:p.cross};
+}
+function jetTrafficDepartureDecision(){
+ const now=Date.now(),fresh=jetTrafficLiveFresh();
+ if(jetTrafficActiveAirport()!=='WSSS'||!fresh){
+  jetTraffic.departureBlocking=false;
+  return false;
+ }
+ const cand=jetTraffic.live.map(jetTraffic02CDeparture).filter(p=>p&&
+   now-(jetTraffic.stableTracks.get(p.a.id)?.departureFinishedAt||0)>60000)
+  .sort((p,q)=>(p.ground?-1:0)-(q.ground?-1:0)||q.spd-p.spd);
+ let selected=jetTraffic.departureId?
+  jetTraffic.live.find(a=>a.id===jetTraffic.departureId):null;
+ let candidate=selected?jetTraffic02CDeparture(selected):null;
+ // Keep one real identity from rollout into initial climb; only replace it
+ // when its departure no longer blocks the player's runway.
+ if(!jetTraffic.departureId){
+  const next=cand[0];
+  if(next){
+   jetTraffic.departureId=next.a.id;jetTraffic.departureCallsign=jetTrafficCallsign(next.a);
+   jetTraffic.departureRunway=next.designation;jetTraffic.departureStage=next.stage;
+   jetTraffic.departureLastSeen=now;jetTraffic.departureClearSince=0;
+   jetTraffic.departureBlocking=true;candidate=next;
+  }
+ }
+ if(jetTraffic.departureId){
+  selected=jetTraffic.live.find(a=>a.id===jetTraffic.departureId)||null;
+  candidate=selected?jetTraffic02CDeparture(selected):null;
+  if(candidate){
+   jetTraffic.departureCallsign=jetTrafficCallsign(selected);
+   jetTraffic.departureRunway=candidate.designation;
+   jetTraffic.departureStage=candidate.stage;
+   jetTraffic.departureLastSeen=now;
+   // Lift-off does not mean runway instantly clear. Wait until radar places
+   // the aircraft beyond the strip OR high in the climb, plus 7 s game buffer.
+   const beyond=candidate.climb && (candidate.travelled>=4200||candidate.alt>=800);
+   if(candidate.ground||!beyond){
+    jetTraffic.departureClearSince=0;
+    jetTraffic.departureBlocking=true;
+   }else{
+    if(!jetTraffic.departureClearSince)jetTraffic.departureClearSince=now;
+    jetTraffic.departureBlocking=(now-jetTraffic.departureClearSince)<7000;
+   }
+  }else{
+   // The contact left the observed runway corridor / radar feed. Keep a
+   // finite buffer, never treat disappearance as confirmed runway clearance.
+   if(!jetTraffic.departureClearSince)jetTraffic.departureClearSince=now;
+   jetTraffic.departureStage='NO LONGER TRACKED';
+   jetTraffic.departureBlocking=(now-jetTraffic.departureClearSince)<12000;
+  }
+  if(!jetTraffic.departureBlocking){
+   jetTraffic.departureReleasedAt=now;
+   const stable=jetTraffic.stableTracks.get(jetTraffic.departureId);
+   if(stable)stable.departureFinishedAt=now;
+   jetTraffic.departureId='';jetTraffic.departureCallsign='';
+   jetTraffic.departureRunway='';jetTraffic.departureStage='';
+   jetTraffic.departureClearSince=0;
+   // A second real departure entering the runway will be selected next tick.
+  }
+ }
+ return jetTraffic.departureBlocking;
+}
+function jetTraffic02COccupied(a){
+ if(!a?.onGround||!Number.isFinite(a.lat)||!Number.isFinite(a.lon))return false;
+ const p=jetWSSSAlongCross(a.lat,a.lon,jetChangiRunways['02C'].threshold);
+ return p.along>=-65&&p.along<=4050&&Math.abs(p.cross)<83;
+}
 function jetTrafficRunwayDecision(){
- const t=jetTraffic.age;
- const fresh=jetTrafficLiveFresh();
- const ground=fresh?jetTraffic.live.filter(a=>jetTrafficGroundOnRunway(a)):[];
- const incoming=fresh?jetTraffic.live.filter(a=>jetTrafficPossibleArrival(a)&&(jetTrafficActiveAirport()!=='WSSS'||jetTrafficParallelTrack(a,a.lat,a.lon)?.id==='02C')).sort((a,b)=>a.km-b.km):[];
- const reported=jetTraffic.live.find(a=>a.id&&a.id===jetTraffic.arrivalId);
- // Hold behind one stable, real ICAO24 identity. Never substitute a different
- // flight number mid-arrival when the radar refreshes.
- if(!jetTraffic.arrivalId && fresh && (incoming.length||ground.length) && t>=.2){
-  const chosen=incoming[0]||ground[0];
-  jetTraffic.arrivalId=chosen.id;
-  jetTraffic.arrivalCallsign=chosen.name;
-  jetTraffic.arrivalLostAt=0;
-  if(chosen.onGround)jetTraffic.arrivalLandedAt=Date.now();
+ const t=jetTraffic.age,fresh=jetTrafficLiveFresh();
+ const departureBlocking=jetTrafficDepartureDecision();
+ const ground=fresh?jetTraffic.live.filter(a=>
+  jetTrafficActiveAirport()==='WSSS'?jetTraffic02COccupied(a):jetTrafficGroundOnRunway(a)):[];
+ const incoming=fresh?jetTraffic.live.filter(a=>jetTrafficPossibleArrival(a)&&
+  (jetTrafficActiveAirport()!=='WSSS'||jetTrafficParallelTrack(a,a.lat,a.lon)?.id==='02C'))
+  .sort((a,b)=>a.km-b.km):[];
+ if(!jetTraffic.arrivalId&&incoming.length&&t>=.2){
+  const a=incoming[0];jetTraffic.arrivalId=a.id;
+  jetTraffic.arrivalCallsign=jetTrafficCallsign(a);
+  jetTraffic.arrivalLostAt=0;jetTraffic.arrivalLandedAt=0;
  }
  const tracked=jetTraffic.live.find(a=>a.id&&a.id===jetTraffic.arrivalId);
  if(tracked){
-  jetTraffic.arrivalCallsign=tracked.name||jetTraffic.arrivalCallsign;
-  jetTraffic.arrivalLostAt=0;
-  jetTraffic.lastTrackedSeen=Date.now();
+  jetTraffic.arrivalCallsign=jetTrafficCallsign(tracked);
+  jetTraffic.arrivalLostAt=0;jetTraffic.lastTrackedSeen=Date.now();
   jetTraffic.primaryArrivalSeenAt=Date.now();
   jetTraffic.lastTrackedPhase=tracked.onGround?'ON GROUND':tracked.phase||'AIRBORNE';
   if(tracked.onGround&&!jetTraffic.arrivalLandedAt)jetTraffic.arrivalLandedAt=Date.now();
- }else if(jetTraffic.arrivalId&&!jetTraffic.arrivalLostAt){jetTraffic.arrivalLostAt=Date.now();}
+ }else if(jetTraffic.arrivalId&&!jetTraffic.arrivalLostAt)jetTraffic.arrivalLostAt=Date.now();
  jetTraffic.runwayOccupied=ground.length>0;
- // A current feed with no relevant runway/arrival aircraft does NOT prove that
- // a flight landed. Retain a clearly labeled SIM training arrival, never invent
- // a callsign on the live radar.
- if(!fresh||(!jetTraffic.arrivalId&&!ground.length)){
-  // No synthetic landing aircraft: game-only lineup is available after a
-  // short grace period, explicitly *not* a real tower runway clearance.
-  jetTraffic.mode=fresh?'NO_MATCH':'NO_DATA';
-  jetTraffic.phase=fresh?'no_matched_arrival':'live_unavailable';
-  jetTraffic.clear=t>=3;
-  return;
- }
- jetTraffic.mode='LIVE';
- const lost=jetTraffic.arrivalLostAt&&Date.now()-jetTraffic.arrivalLostAt>30000;
+ const arrivalLost=jetTraffic.arrivalLostAt&&Date.now()-jetTraffic.arrivalLostAt>30000;
  const landed=!!jetTraffic.arrivalLandedAt;
- const waiting=!!jetTraffic.arrivalId&&(!landed&&!lost || landed&&Date.now()-jetTraffic.arrivalLandedAt<8500);
- jetTraffic.clear=t>2&&!jetTraffic.runwayOccupied&&!waiting;
- jetTraffic.phase=jetTraffic.runwayOccupied?'runway_occupied':waiting?'possible_arrival':'clear';
+ const arrivalWaiting=!!jetTraffic.arrivalId&&(!landed&&!arrivalLost||landed&&Date.now()-jetTraffic.arrivalLandedAt<8500);
+ jetTraffic.clear=t>=3&&!departureBlocking&&!jetTraffic.runwayOccupied&&!arrivalWaiting;
+ jetTraffic.mode=!fresh?'NO_DATA':departureBlocking?'DEPARTURE':
+  (arrivalWaiting||ground.length)?'LIVE':'NO_MATCH';
+ jetTraffic.phase=departureBlocking?'departure_02c':jetTraffic.runwayOccupied?'runway_occupied':
+  arrivalWaiting?'possible_arrival':!fresh?'live_unavailable':'clear';
 }
 function jetTrafficRefreshHud(){
  const hud=jetTrafficShowHud(),isTaxi=E.state==='play'&&E.phase==='taxi'&&!jetTrafficAircraftAirborne();
  hud.style.display=isTaxi?'block':'none';if(!isTaxi)return;
- const status=hud.querySelector('.jc-signal');
- const radar=hud.querySelector('.jc-live');
- const tracked=jetTraffic.live.find(a=>a.id===jetTraffic.arrivalId);
- const flight=jetTraffic.mode==='LIVE'?(tracked?.name||jetTraffic.arrivalCallsign||jetTraffic.arrivalId||'UNIDENTIFIED'):
-   jetTraffic.scenarioId;
- const track=tracked?jetTrafficParallelTrack(tracked,tracked.lat,tracked.lon):null;
- const trackSuffix=track?' · RWY '+track.id+' (TRACK ESTIMATE)':'';
- const stage=jetTraffic.mode==='LIVE'?(tracked?.onGround?'ON GROUND':jetTraffic.runwayOccupied?'RUNWAY OCCUPIED':
-   tracked?.phase==='DESCENDING'?'ON APPROACH':'POSSIBLE ARRIVAL'):
-   jetTraffic.age<16?'ON FINAL':jetTraffic.age<31?'LANDING':jetTraffic.age<39?'VACATING':'VACATED';
- status.textContent=jetTraffic.clear?'🟢 GAME LINEUP AVAILABLE · NOT ATC CLEARANCE':
-  (jetTraffic.mode==='LIVE'?'🔴 HOLD SHORT · '+flight+' · '+stage:'🟠 WAIT · CHECKING LIVE RADAR');
- status.style.borderColor=jetTraffic.clear?'#53e999':'#ff6358';
- if(jetTraffic.mode==='LIVE'&&tracked){
-  radar.textContent='📡 SAME RADAR CONTACT '+flight+' · '+tracked.km.toFixed(1)+' km · '+
-   (tracked.onGround?'GROUND':Math.round(tracked.altFt||0)+' ft')+trackSuffix+' · ICAO '+tracked.id+
-   ' · 3D position approximate';
- }else if(jetTraffic.mode==='NO_DATA'){
-  radar.textContent='📡 NO LIVE POSITIONS · no aircraft added · game signal only';
- }else if(jetTraffic.mode==='NO_MATCH'){
-  radar.textContent='📡 '+jetTraffic.live.length+' LIVE CONTACTS · no matched runway arrival · no aircraft invented';
- }else radar.textContent='📡 LIVE ADS-B · RUNWAY STATUS IS A GAME ESTIMATE';
+ const status=hud.querySelector('.jc-signal'),radar=hud.querySelector('.jc-live');
+ const dep=jetTraffic.live.find(a=>a.id===jetTraffic.departureId);
+ const arr=jetTraffic.live.find(a=>a.id===jetTraffic.arrivalId);
+ if(jetTraffic.departureBlocking){
+  const cs=dep?jetTrafficCallsign(dep):jetTraffic.departureCallsign||'TRACKED AIRCRAFT';
+  const rw=jetTraffic.departureRunway||'02C';
+  status.textContent='🔴 HOLD SHORT · RWY '+rw+' · '+cs+' · '+jetTraffic.departureStage;
+  radar.textContent='📡 '+cs+' · SAME ADS-B CONTACT / 3D PLANE · '+
+   (dep?(dep.onGround?'ON RUNWAY '+Math.round(dep.speedKt)+' KT':'CLIMB '+Math.round(dep.altFt||0)+' FT'):'POSITION NOT CURRENT')+
+   ' · GAME WAIT, NOT ATC CLEARANCE';
+ }else if(jetTraffic.clear){
+  status.textContent='🟢 GAME LINEUP AVAILABLE · RWY '+(pt.depRwy||'02C')+' · NOT ATC CLEARANCE';
+  radar.textContent=jetTrafficLiveFresh()?'📡 NO MATCHED CONFLICT ON PLAYER RUNWAY · SIMULATED CLEARANCE':'📡 ADS-B UNAVAILABLE · SIMULATED CLEARANCE';
+ }else if(arr){
+  status.textContent='🔴 HOLD SHORT · ARRIVAL '+jetTrafficCallsign(arr)+' · 02C/20C';
+  radar.textContent='📡 SAME ADS-B ARRIVAL '+jetTrafficCallsign(arr)+' · '+Math.round(arr.altFt||0)+' FT · ESTIMATED RUNWAY';
+ }else if(jetTraffic.runwayOccupied){
+  status.textContent='🔴 HOLD SHORT · RWY 02C/20C OCCUPIED (EST)';
+  radar.textContent='📡 ADS-B GROUND CONTACT ON RWY CENTRELINE · GAME HOLD';
+ }else{
+  status.textContent='🟠 WAIT · CHECKING RUNWAY TRAFFIC';
+  radar.textContent='📡 '+(jetTrafficLiveFresh()?'LIVE CONTACTS RECEIVED':'LIVE POSITIONS UNAVAILABLE')+' · GAME SIGNAL';
+ }
+ status.style.borderColor=jetTraffic.clear?'#53e999':jetTraffic.departureBlocking?'#ff6358':'#ffb452';
 }
 // Cockpit ND live contacts. Source is the SAME ICAO24-keyed ADS-B cache as 3D traffic.
 // Screen location uses the existing game-world transformation, so labels match the 3D
@@ -5428,7 +5513,7 @@ function jetTrafficDrawND(ctx,width,height,state,project,view){
   &&a.km<=18&&(a.onGround||(a.altFt!=null&&a.altFt<7500))):[];
  const arrivals=flights.filter(a=>jetTrafficPossibleArrival(a));
  const matched=jetTraffic.arrivalId;
- const primary=flights.find(a=>a.id===matched)||arrivals.sort((a,b)=>a.km-b.km)[0]||null;
+ const primary=flights.find(a=>a.id===jetTraffic.departureId)||flights.find(a=>a.id===matched)||arrivals.sort((a,b)=>a.km-b.km)[0]||null;
  const selected=[...(primary?[primary]:[]),...flights.filter(a=>!primary||a.id!==primary.id).sort((a,b)=>a.km-b.km)].slice(0,11);
  const fnt=Math.max(8,Math.min(12,width*.029));
  const small=Math.max(7,Math.min(10,width*.025));
@@ -5447,7 +5532,7 @@ function jetTrafficDrawND(ctx,width,height,state,project,view){
   if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.z))return;
   let [x,y]=project(target.x,target.z);
   if(!Number.isFinite(x)||!Number.isFinite(y))return;
-  const important=!simulated&&(a.id===matched||primary?.id===a.id);
+  const important=!simulated&&(a.id===matched||a.id===jetTraffic.departureId||primary?.id===a.id);
   // Keep the selected inbound visible as an edge-of-display marker when its
   // visual position falls beyond the ND range. Other out-of-range contacts are omitted.
   let offScale=(x<17||x>width-17||y<57||y>height-43);
@@ -5656,7 +5741,8 @@ function jetTrafficPosition(a,now){
  // Carefully bounded dead reckoning; stop claiming current accuracy after 80s.
  const elapsed=Math.max(0,Math.min(80,(now-jetTraffic.liveAt)/1000+(a.seenPos||0)));
  const velocityKm=Math.max(0,a.speedKt)*1.852*elapsed/3600;
- const deltaKm=a.onGround&&a.speedKt<3?0:Math.min(velocityKm,a.onGround?.4:8.5);
+ const isObservedDeparture=a.id===jetTraffic.departureId;
+ const deltaKm=a.onGround&&a.speedKt<3?0:Math.min(velocityKm,a.onGround?(isObservedDeparture?2.5:.4):8.5);
  const h=(Number(a.heading)||0)*Math.PI/180;
  const lat=a.lat+deltaKm*Math.cos(h)/111.195;
  const lon=a.lon+deltaKm*Math.sin(h)/(111.195*Math.max(.15,Math.cos(lat0*Math.PI/180)));
@@ -5756,7 +5842,7 @@ function jetTrafficDrawLiveContacts(dt){
  // Prioritize real observed SIA ground contacts, especially those stopped, then
  // arriving runway traffic. The camera and device budget still limit 3D models;
  // the radar retains the complete feed and never invents parked airplanes.
- const priority=a=>a.id===jetTraffic.arrivalId?0:
+ const priority=a=>a.id===jetTraffic.departureId?-1:a.id===jetTraffic.arrivalId?0:
   (a.onGround&&jetTrafficIsSingapore(a)?(a.speedKt<3?1:2):
    a.onGround?3:a.phase==='DESCENDING'?4:jetTrafficIsSingapore(a)?5:6);
  const capacity=window.innerWidth<700?16:24;
@@ -5770,7 +5856,7 @@ function jetTrafficDrawLiveContacts(dt){
   const target=jetTrafficPosition(a,now);
   // Never drop the one matched flight from the 3D scene merely because it is
   // farther than the generic camera proximity culling threshold.
-  if(a.id!==jetTraffic.arrivalId&&
+  if(a.id!==jetTraffic.arrivalId&&a.id!==jetTraffic.departureId&&
    Math.hypot(target.x-(E.plane?.x||0),target.z-(E.plane?.z||0))>(a.onGround&&jetTrafficIsSingapore(a)?11000:a.onGround?8500:6000))continue;
   visible.add(a.id);
   let entry=jetTraffic.liveModels.get(a.id);
@@ -5792,13 +5878,14 @@ function jetTrafficDrawLiveContacts(dt){
   entry.group.userData.onGround=a.onGround;
   entry.group.userData.reportedSpeedKt=a.speedKt;
   entry.group.userData.visualRunway=target.runway;
-  const isTracked=a.id===jetTraffic.arrivalId;
+  entry.group.userData.gameDeparture=a.id===jetTraffic.departureId;
+  const isTracked=a.id===jetTraffic.arrivalId||a.id===jetTraffic.departureId;
   jetTrafficApplyLivery(entry.group,a);
   entry.group.scale.setScalar(isTracked?1.28:(a.onGround?0.95:1.02));
   const tag=entry.group.userData.trafficTag;
   const badge=entry.group.userData.airlineBadge;
   if(tag){
-   tag.textContent=(isTracked?'▶ ':'✈ ')+jetTrafficCallsign(a)+(a.type?' · '+a.type:'')+(target.runway?' · RWY '+target.runway+'?':'')+' · '+target.stage+(target.estimated?' (EST)':'');
+   tag.textContent=(a.id===jetTraffic.departureId?'▶ DEP ':'✈ ')+jetTrafficCallsign(a)+(a.type?' · '+a.type:'')+(target.runway?' · RWY '+target.runway+'?':'')+' · '+(a.id===jetTraffic.departureId?jetTraffic.departureStage:target.stage)+(target.estimated?' (EST)':'');
    tag.style.borderColor=isTracked?'#ffe18b':jetTrafficIsSingapore(a)?'#d6b357':a.onGround?'#ffcd68':'#36d7f5';
    tag.style.color=isTracked?'#fff0b1':jetTrafficIsSingapore(a)?'#fff1bf':a.onGround?'#ffd782':'#b5faff';
    try{
@@ -5863,6 +5950,7 @@ function jetTrafficTick(dt){
  const [red,green]=jetTraffic.lightMaterials;
  if(red&&green){red.color.setHex(jetTraffic.clear?0x361e1e:0xff3f36);
   green.color.setHex(jetTraffic.clear?0x32ff83:0x143a28);}
+ if(!jetTraffic.clear)jetTraffic.announced=false;
  if(jetTraffic.clear&&!jetTraffic.announced){jetTraffic.announced=true;
   Mt.banner(jetTraffic.mode==='LIVE'?'GAME RUNWAY SIGNAL · LINEUP AVAILABLE':'GAME-ONLY LINEUP AVAILABLE · NOT ATC CLEARANCE',2);
   ee('runway_signal','game_clear');}
@@ -6130,7 +6218,7 @@ function jetRouteChooseAirports(dep,arr){
  return {ok:true,dep,arr,departureLandmark:Xi(dep),destinationLandmark:Xi(arr),
   savedFlightDifferent:jetSavedFlightRouteChanged(ir().flight)};
 }
-window.__game={registerRouteAirport:jetRouteRegisterAirport,chooseRouteAirports:jetRouteChooseAirports,routeSelection(){return {dep:E.plan?.dep,arr:E.plan?.arr,phase:E.phase,state:E.state};},landmarkInfo(){return {departure:Xi(E.plan?.dep),destination:Xi(E.plan?.arr),visible:(It?.landmarks||[]).map(x=>({id:x.userData?.landmark,airport:x.userData?.icao})),extrasDeparture:Sa(E.plan?.dep,4),extrasDestination:Sa(E.plan?.arr,4)};},setAirportTraffic(data){return jetTrafficAccept(data)},airportTrafficInfo(){return {airport:jetTraffic.airport,phase:jetTraffic.phase,runwayClear:jetTraffic.clear,simulated:true,liveCount:jetTraffic.live.length,mode:jetTraffic.mode,liveModels:jetTraffic.liveModels.size,liveAgeMs:Date.now()-jetTraffic.liveAt,arrivalId:jetTraffic.mode==='LIVE'?jetTraffic.arrivalId:null,arrivalCallsign:jetTraffic.mode==='LIVE'?jetTraffic.arrivalCallsign:jetTraffic.scenarioId,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null}},setSpoilers(mode){
+window.__game={registerRouteAirport:jetRouteRegisterAirport,chooseRouteAirports:jetRouteChooseAirports,routeSelection(){return {dep:E.plan?.dep,arr:E.plan?.arr,phase:E.phase,state:E.state};},landmarkInfo(){return {departure:Xi(E.plan?.dep),destination:Xi(E.plan?.arr),visible:(It?.landmarks||[]).map(x=>({id:x.userData?.landmark,airport:x.userData?.icao})),extrasDeparture:Sa(E.plan?.dep,4),extrasDestination:Sa(E.plan?.arr,4)};},setAirportTraffic(data){return jetTrafficAccept(data)},airportTrafficInfo(){return {airport:jetTraffic.airport,phase:jetTraffic.phase,runwayClear:jetTraffic.clear,simulated:true,liveCount:jetTraffic.live.length,mode:jetTraffic.mode,liveModels:jetTraffic.liveModels.size,liveAgeMs:Date.now()-jetTraffic.liveAt,arrivalId:jetTraffic.arrivalId||null,arrivalCallsign:jetTraffic.arrivalCallsign||null,departureId:jetTraffic.departureId||null,departureCallsign:jetTraffic.departureCallsign||null,departureRunway:jetTraffic.departureRunway||null,departureStage:jetTraffic.departureStage||null,departureBlocking:!!jetTraffic.departureBlocking,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null}},setSpoilers(mode){
   if(E.state!=="play"||!E.plane)return false;
   mode=Number(mode);
   if(!Number.isInteger(mode)||mode<0||mode>2)return false;
@@ -6193,7 +6281,7 @@ window.__game={registerRouteAirport:jetRouteRegisterAirport,chooseRouteAirports:
   totalSec:jetMissionCap(),remainingSec:jetMissionLeft(),elapsedSec:Math.max(0,E.t-(E.holdTimeExcluded||0)),
   holding:!!E.holdExempt,requiredFuelT:jetRequiredBlock(E.fms),
   fobT:E.fuel?E.fuel.remainingKg/1000:0};
-},setAtcHolding(n,atcClearance){n=!!n;if(n){if(E.state!=="play")return{ok:!1,active:!!E.holdExempt};if(!E.holdExempt){E.holdExempt=!0;ee("atc_hold","start")}}else if(E.holdExempt){E.holdExempt=!1;let t=0;if(_t&&_t.wps&&E.plane&&E.phase==="route")while(E.wpIdx<_t.wps.length&&E.plane.z<_t.wps[E.wpIdx].z-160){let e=_t.wps[E.wpIdx];e.hit=!0;let i=It&&It.rings&&It.rings[E.wpIdx];i&&(i.visible=!1),E.wpIdx++,t++}if(atcClearance&&E.state==="play"&&!E.trailer){let f=jetMissionCap(),remaining=f-(E.t-(E.holdTimeExcluded||0)),bonus=Math.max(0,900-remaining);E.holdTimeExcluded+=bonus;E.holdClearanceGrace=bonus}ee("atc_hold","resume:"+t)}return{ok:!0,active:!!E.holdExempt,misses:E.misses,wpIdx:E.wpIdx,timeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0}},step(n,t,e){t=t||1/30,n=n||1;for(let i=0;i<n;i++){if(E.hostPaused)continue;let s=typeof e=="function"?()=>{let o=e(window.__game);return o&&typeof o=="object"&&"lever"in o?o:null}:e&&typeof e=="object"&&"lever"in e?()=>e:null;Dp(t,s)}d0()},render(){d0()},begin(){Lo()},bot(n){return W4(E,n)},fcuTurn(n,t){nd(n,t)},fcuTap(n){Lp(n)},efis(n,t){return t===void 0?q3["k"+n[0].toUpperCase()+n.slice(1)]?Np(n):bp(n,!1):n in E.efis&&(E.efis[n]=t),Object.assign({},E.efis)},fullscreen(){Pp()},fcuButton(n){id(n,!1)},ap(n){Oo(!1,n)},restart(){ii()},pause(){return vo(!0,"api")},resume(){return vo(!1,"api")},quit(){return Sp()},restartFlight(){return Mp()},account(n,t,e){return xp(n,t,e)},save(){return za(!0)},continueFlight(){return Tp()},setting(n){return gp(n)},saved(){let n=ir();return{flight:n.flight||null,settings:n.settings||null,lastLevel:n.lastLevel||null}},panel(n){Ql(n==null?!E.panelMax:!!n,!0)},info(){return E.plane?(pi&&Ye&&E.state!=="boot"&&(Bp(),E.objects.scene=Object.assign({props:12,dressingShare:.7},xo||{})),{pads:xs.count,devices:xs.devices.map(n=>({name:n.name,kind:n.kind,roles:n.roles.slice()})),rwys:_t?{dep:pt.from,depRwy:pt.depRwy,depCrs:pt.depCrs,arr:pt.dest,arrRwy:pt.ils.rwy,arrCrs:pt.arrCrs,ils:pt.ils.ident+" "+pt.ils.freq+" "+pt.ils.crs+(pt.ils.real?"":" GEN"),vor:pt.vor.ident+" "+pt.vor.freq,depRot:+((_t.depRot||0)*An).toFixed(1),realFixes:_t.realNames||0,fixes:_t.wps.map(n=>n.name+(n.lat!=null?"@"+n.lat.toFixed(2)+","+n.lon.toFixed(2):"")),db:_t.db.length}:null,nav:(()=>{let n=gs(E);return n?{ils:{ident:n.ils.ident,freq:n.ils.freq,crs:n.ils.crs,rwy:n.ils.rwy,loc:+n.ils.loc.toFixed(2),gs:+n.ils.gs.toFixed(2),locValid:n.ils.locValid,gsValid:n.ils.gsValid,dme:+n.ils.dme.toFixed(1)},papi:n.papi,vor:{ident:n.vor.ident,brg:Math.round(n.vor.brg),dme:+n.vor.dme.toFixed(1)},app:n.app,vapp:n.vapp?{dev:+n.vapp.dev.toFixed(2),vdevFt:Math.round(n.vapp.vdevFt),dme:+n.vapp.dme.toFixed(1),valid:n.vapp.valid,next:n.vapp.next?[n.vapp.next.dme,n.vapp.next.alt]:null,visual:n.vapp.visual}:null,x:Math.round(E.plane.x),gsKt:Math.round(n.gs),wind:[n.wind.dir,n.wind.kt],dest:pt.dest,wps:_t.wps.map(t=>t.name)}:null})(),atc:Object.assign(X5(E.atc),{text:E.atc.log.length?k5(Bt,E.atc.log[E.atc.log.length-1]):""}),traffic:(E.trafficList||[]).map(n=>({cs:n.cs,kind:n.kind,dist:Math.round(n.dist||0),dy:Math.round((n.dy||0)*oe),ta:!!n.ta})),settings:f0(),lastSave:E.lastSave,level:E.level,levels:bn,unlocked:E.unlocked,lv:E.lv||null,panelMax:E.panelMax,account:Ep(),community:(()=>{let n=Q3();return{source:ap()?"live":"demo",live:!!n.live,linked:fi.linked,sent:fi.sent,got:fi.got,online:n.online,flying:n.flying,registered:n.registered,simulated:n.simulated,top:n.score.slice(0,3).map(t=>t.name+"/"+t.cc+"/"+t.best),me:n.me,countries:n.countries.length,open:Mt.commOpen()}})(),guide:E.guide?{altT:E.guide.altT!=null?Math.round(E.guide.altT*oe):null,obst:E.guide.obst?{h:Math.round(E.guide.obst.o.h*oe),along:Math.round(E.guide.obst.along),danger:!!E.guide.obst.danger,pass:E.guide.obst.o.pass}:null,hint:E.guide.hint}:null,fuel:E.fuel?{startKg:E.fuel.startKg,remainingKg:Math.round(E.fuel.remainingKg),usedKg:Math.round(E.fuel.usedKg),burnKgH:Math.round(E.fuel.burnKgH),enduranceMin:E.fuel.enduranceMin,reserveKg:E.fuel.reserveKg,requiredBlockKg:Math.round(jetRequiredBlock(E.fms)*1000),predictedEFOBKg:Math.round(jetFuelPred(E.fms)*1000),pct:Math.round(E.fuel.remainingKg/E.fuel.startKg*100),flamedOut:!!E.fuel.flamedOut}:null,holdingExempt:!!E.holdExempt,missionPlan:E.routeFlight||null,missionLimitSec:jetMissionCap(),missionTime:Math.max(0,E.t-(E.holdTimeExcluded||0)),missionTimeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0,holdClearanceGrace:E.holdClearanceGrace||0,wpIdx:E.wpIdx,route:_t?{storms:_t.storms.map(n=>({x:Math.round(n.x),z:Math.round(n.z),r:n.r})),plan:Object.assign({},E.plan),stats:E.routeStats,misses:E.misses,wps:_t.wps.map(n=>({name:n.name,x:Math.round(n.x),z:Math.round(n.z),alt:Math.round(n.alt*oe)})),obst:_t.obst.map(n=>({kind:n.kind,pass:n.pass,x:Math.round(n.x),z:Math.round(n.z),h:Math.round(n.h*oe),r:Math.round(n.r)})),hdgOff:pt.ils.crs,dest:pt.dest,rwy:pt.ils.rwy}:null,gpws:E.gpws?{warn:E.gpws.warn,last:E.gpws.last,counts:Object.assign({},E.gpws.counts)}:null,efis:Object.assign({},E.efis),autoflight:{ap:!!E.plane.apOn,apN:E.plane.apN,athr:!!E.plane.athrOn,athrActive:!!E.plane.athr,spdTarget:Math.round(E.plane.spdTarget),fcu:Object.assign({},E.plane.fcu),lat:(E.guide||{}).latMode||"nav",vert:(E.guide||{}).vertMode||"man",att:{theta:+E.plane.theta.toFixed(2),aoa:+E.plane.aoa.toFixed(2),gamma:+E.plane.gamma.toFixed(2),fdPitch:E.guide?+(+E.guide.pitch).toFixed(2):null,v:+E.plane.v.toFixed(1),vy:+E.plane.vy.toFixed(2)}},fms:E.fms?{legs:E.fms.legs.map(n=>({name:n.name,seq:n.seq,alt:n.alt!=null?Math.round(n.alt*oe):null,spd:n.spd,ring:n.ring})),tmpy:!!E.fms.tmpy,ci:E.fms.ci,crzAlt:E.fms.crzAlt,vapp:E.fms.vapp,ils:E.fms.ilsFreq,fob:+E.fms.fob.toFixed(2),edits:E.fms.edits}:null,mcdu:{open:je.open,page:je.page,sp:je.sp,msg:je.msg},t:+E.t.toFixed(3),st:E.state==="boot"?"boot":E.state,nogl:td,stage:E.stage,phase:E.phase,runwaySignal:{simulated:true,source:jetTraffic.mode,clear:jetTraffic.clear,phase:jetTrafficAircraftAirborne()?'airborne':jetTraffic.phase,airport:jetTraffic.airport,liveCount:jetTraffic.live.length,arrivalId:jetTraffic.mode==='LIVE'?jetTraffic.arrivalId:null,arrivalCallsign:jetTraffic.mode==='LIVE'?jetTraffic.arrivalCallsign:jetTraffic.scenarioId,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null},taxi:E.groundTaxi?{mode:E.groundTaxi.mode,airport:E.groundTaxi.airport,runway:E.groundTaxi.runway,path:E.groundTaxi.waypoints.map(p=>[Math.round(p.x),Math.round(p.z)]),next:E.groundTaxi.next,total:E.groundTaxi.waypoints.length,distance:E.groundTaxi.distance||0,gateDistance:E.groundTaxi.gateDistance||0,headingError:E.groundTaxi.headingError||0,speedKt:E.groundTaxi.speedKt||0,atGate:!!E.groundTaxi.atGate}:null,won:E.won,gated:E.gated,outcome:E.outcome,progress:E.phase==="takeoff"?.15:E.phase==="route"?.3+.4*E.wpIdx/Math.max(1,_t.wps.length):E.phase==="approach"?.8:1,danger:+E.danger.toFixed(3),maxDanger:+E.maxDanger.toFixed(3),maxDangerByStage:E.maxDangerByStage,score:E.score,scenario:E.scenario,events:E.events.slice(),objects:E.objects,textures:Ip,assets:{loaded:Jl.loaded.slice(),fallback:Jl.fallback.slice()},loop:{zones:E.loop.zones,inFlight:E.loop.frames?+(E.loop.inFlightFrames/E.loop.frames).toFixed(3):0,firstRewardAt:E.loop.firstRewardAt,firstPayoffAt:E.loop.firstPayoffAt},scenery:_t?{dep:_t.from,arr:_t.dest,depCountry:Vn(_t.from),arrCountry:Vn(_t.dest),depLandmark:Xi(_t.from),arrLandmark:Xi(_t.dest),depBiome:C0(_t.from),arrBiome:C0(_t.dest),biomeK:E.biomeK||0,mode:kt("countryScenery"),built:It&&It.landmarks?It.landmarks.map(n=>n.userData.landmark+"@"+n.userData.icao):[],extras:{dep:Sa(_t.from,1),arr:Sa(_t.dest,1)},winter:{dep:h0(_t.from),arr:h0(_t.dest)},ocean:_t.oceanBand?[Math.round(_t.oceanBand.z0),Math.round(_t.oceanBand.z1)]:null,cities:It?It.cities:[],runways:It?It.extraRwys:[],enroute:It?It.enroute:null,airports:Ws.length}:null,paused:!!E.userPaused,shaders:Ap,fx:!0,flight:E.scen?{approach:_t?_t.app:null,mda:_t&&_t.app==="vor"?Math.round(_t.mda*oe):null,dmeSteps:_t&&_t.steps?_t.steps.map(n=>[n.dme,n.alt]):[],wind:(()=>{let n=Es(E);return{mode:n.mode,dir:Math.round(n.dir),kt:Math.round(n.kt),steady:Math.round(n.steady)}})(),weather:E.scen.wx,emergency:E.scen.em,engine:E.scen.eng,afterFix:E.scen.at,fired:!!E.scen.fired,active:!!E.scen.active,cleared:!!E.scen.cleared,memo:E.scen.memo?E.scen.memo.k:null,cat:(_t.cat||[]).length,fires:(_t.fires||[]).length,volcano:!!_t.volcano,ash:_t.storms.filter(n=>n.kind==="ash").length,storms:_t.storms.length}:null,params:{difficulty:$e.diff,thrustPower:kt("thrustPower"),turbulence:kt("turbulence"),stormCount:kt("stormCount")},layout:{design:"390x844",min:"320x480",critical:"390x600",framing:{farY:.3,playerY:.7,heroPx:Math.round(Ri.h*pe.s),groundWidth:16}},plane:{eng1:!!E.plane.eng1,eng2:!!E.plane.eng2,n1:Math.round(E.plane.n1),n1b:Math.round(E.plane.n1b),kt:Math.round(E.plane.v*wn),alt:Math.round(E.plane.y*oe),vs:Math.round(E.plane.vy*hi),hdg:Math.round($i(E.plane.psi)),lever:E.plane.lever,reverseThrust:!!E.plane.reverseThrust,gear:E.plane.gear,flaps:E.plane.flaps,spoilerMode:E.plane.spoilMode||0,spoilerPct:Math.round(100*(E.plane.spoilT||0)),spoilerActive:!!E.plane.spoilActive,damage:Math.round(E.plane.damage),tdFpm:E.plane.tdFpm}}):{st:E.state,won:!1,outcome:null,events:[],assets:{loaded:[],fallback:[]}}},flight(){let n=E.plane;return{phase:E.phase,t:E.t,alt:n.y*oe,vs:n.vy*hi,gpws:E.gpws?E.gpws.warn:null}},probe(){let n=E.plane;return{hero:{x:n.x,y:n.y,z:n.z,yaw:n.psi,scale:1},camera:{x:ui.position.x,y:ui.position.y,z:ui.position.z},counters:{score:{shown:Mt.shownScore(),real:E.score}}}},stats(){let n=Ye?Ye.info.render:{triangles:0,calls:0};return{tris:n.triangles,calls:n.calls,fps:+j3.toFixed(1)}},params(){return $e.list()},paramsSchema(){return $e.schema()},paramsValues(){return $e.values()},settingsValues(){return{cta_text:Oe.cta_text,locale:Oe.locale,difficulty:Oe.difficulty,max_play_time:Oe.max_play_time,hint_delay:Oe.hint_delay}},mcdu:{open:n=>yo(n),close:()=>je.close(),type:n=>{String(n).split("").forEach(t=>je.type(t))},clr:()=>je.clr(),lsk:(n,t)=>je.lsk(n,t),go:n=>je.go(n),key:n=>je.key(n)},setLevel(n){Ka(n),ii()},setParam(n,t){$e.set(n,t)&&(n==="background"&&sd(t),Wa(),Tn.params[n]&&Tn.params[n].apply==="restart"&&Vp()),d0()},showEnd(n){return pi?n===null?(Mt.hideEnd(),null):(Mt.showEnd(n,jl(),!0),Mt.endTexts()):null},audioLog(){return wt.log.slice()},renderAudio(n){return wt.renderAudio(n)}};function kp(){document.documentElement.lang=u0,Mt.relang(),je.relang();{let n=ir().settings;n&&n.muted&&!n0&&ka(!0)}if(td||!Ye){Ha("intro"),Mt.hideLoader(),np();return}if(!Is()){requestAnimationFrame(kp);return}DM().then(()=>{q5(),Rp(),kt("background")!==Tn.params.background.def&&sd(kt("background")),De.forEach((n,t)=>{Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,n)}),Hn&&Hn.params&&Object.keys(Hn.params).forEach(n=>{let t=wa(n);Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,Hn.params[n])}),Wa(),yp(),Ha("intro"),Is(),d0(),setTimeout(()=>q5(),1500),Mt.hideLoader(),Mt.showStart(),De.has("tune")&&Mt.buildTune($e,(n,t)=>window.__game.setParam(n,t),()=>ii(),Tn),np(),pi||requestAnimationFrame(Hp)})}function np(){if(Hn)try{Hn.onUpdate=XM,Hn.onCommand=YM,Hn.ready()}catch{}}function zp(n){let t=window.mraid;if(!t)return n();try{if(t.getState()==="loading"){t.addEventListener("ready",()=>zp(n));return}if(!t.isViewable()){let e=i=>{i&&(t.removeEventListener("viewableChange",e),n())};t.addEventListener("viewableChange",e);return}}catch{}n()}zp(kp);})();
+},setAtcHolding(n,atcClearance){n=!!n;if(n){if(E.state!=="play")return{ok:!1,active:!!E.holdExempt};if(!E.holdExempt){E.holdExempt=!0;ee("atc_hold","start")}}else if(E.holdExempt){E.holdExempt=!1;let t=0;if(_t&&_t.wps&&E.plane&&E.phase==="route")while(E.wpIdx<_t.wps.length&&E.plane.z<_t.wps[E.wpIdx].z-160){let e=_t.wps[E.wpIdx];e.hit=!0;let i=It&&It.rings&&It.rings[E.wpIdx];i&&(i.visible=!1),E.wpIdx++,t++}if(atcClearance&&E.state==="play"&&!E.trailer){let f=jetMissionCap(),remaining=f-(E.t-(E.holdTimeExcluded||0)),bonus=Math.max(0,900-remaining);E.holdTimeExcluded+=bonus;E.holdClearanceGrace=bonus}ee("atc_hold","resume:"+t)}return{ok:!0,active:!!E.holdExempt,misses:E.misses,wpIdx:E.wpIdx,timeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0}},step(n,t,e){t=t||1/30,n=n||1;for(let i=0;i<n;i++){if(E.hostPaused)continue;let s=typeof e=="function"?()=>{let o=e(window.__game);return o&&typeof o=="object"&&"lever"in o?o:null}:e&&typeof e=="object"&&"lever"in e?()=>e:null;Dp(t,s)}d0()},render(){d0()},begin(){Lo()},bot(n){return W4(E,n)},fcuTurn(n,t){nd(n,t)},fcuTap(n){Lp(n)},efis(n,t){return t===void 0?q3["k"+n[0].toUpperCase()+n.slice(1)]?Np(n):bp(n,!1):n in E.efis&&(E.efis[n]=t),Object.assign({},E.efis)},fullscreen(){Pp()},fcuButton(n){id(n,!1)},ap(n){Oo(!1,n)},restart(){ii()},pause(){return vo(!0,"api")},resume(){return vo(!1,"api")},quit(){return Sp()},restartFlight(){return Mp()},account(n,t,e){return xp(n,t,e)},save(){return za(!0)},continueFlight(){return Tp()},setting(n){return gp(n)},saved(){let n=ir();return{flight:n.flight||null,settings:n.settings||null,lastLevel:n.lastLevel||null}},panel(n){Ql(n==null?!E.panelMax:!!n,!0)},info(){return E.plane?(pi&&Ye&&E.state!=="boot"&&(Bp(),E.objects.scene=Object.assign({props:12,dressingShare:.7},xo||{})),{pads:xs.count,devices:xs.devices.map(n=>({name:n.name,kind:n.kind,roles:n.roles.slice()})),rwys:_t?{dep:pt.from,depRwy:pt.depRwy,depCrs:pt.depCrs,arr:pt.dest,arrRwy:pt.ils.rwy,arrCrs:pt.arrCrs,ils:pt.ils.ident+" "+pt.ils.freq+" "+pt.ils.crs+(pt.ils.real?"":" GEN"),vor:pt.vor.ident+" "+pt.vor.freq,depRot:+((_t.depRot||0)*An).toFixed(1),realFixes:_t.realNames||0,fixes:_t.wps.map(n=>n.name+(n.lat!=null?"@"+n.lat.toFixed(2)+","+n.lon.toFixed(2):"")),db:_t.db.length}:null,nav:(()=>{let n=gs(E);return n?{ils:{ident:n.ils.ident,freq:n.ils.freq,crs:n.ils.crs,rwy:n.ils.rwy,loc:+n.ils.loc.toFixed(2),gs:+n.ils.gs.toFixed(2),locValid:n.ils.locValid,gsValid:n.ils.gsValid,dme:+n.ils.dme.toFixed(1)},papi:n.papi,vor:{ident:n.vor.ident,brg:Math.round(n.vor.brg),dme:+n.vor.dme.toFixed(1)},app:n.app,vapp:n.vapp?{dev:+n.vapp.dev.toFixed(2),vdevFt:Math.round(n.vapp.vdevFt),dme:+n.vapp.dme.toFixed(1),valid:n.vapp.valid,next:n.vapp.next?[n.vapp.next.dme,n.vapp.next.alt]:null,visual:n.vapp.visual}:null,x:Math.round(E.plane.x),gsKt:Math.round(n.gs),wind:[n.wind.dir,n.wind.kt],dest:pt.dest,wps:_t.wps.map(t=>t.name)}:null})(),atc:Object.assign(X5(E.atc),{text:E.atc.log.length?k5(Bt,E.atc.log[E.atc.log.length-1]):""}),traffic:(E.trafficList||[]).map(n=>({cs:n.cs,kind:n.kind,dist:Math.round(n.dist||0),dy:Math.round((n.dy||0)*oe),ta:!!n.ta})),settings:f0(),lastSave:E.lastSave,level:E.level,levels:bn,unlocked:E.unlocked,lv:E.lv||null,panelMax:E.panelMax,account:Ep(),community:(()=>{let n=Q3();return{source:ap()?"live":"demo",live:!!n.live,linked:fi.linked,sent:fi.sent,got:fi.got,online:n.online,flying:n.flying,registered:n.registered,simulated:n.simulated,top:n.score.slice(0,3).map(t=>t.name+"/"+t.cc+"/"+t.best),me:n.me,countries:n.countries.length,open:Mt.commOpen()}})(),guide:E.guide?{altT:E.guide.altT!=null?Math.round(E.guide.altT*oe):null,obst:E.guide.obst?{h:Math.round(E.guide.obst.o.h*oe),along:Math.round(E.guide.obst.along),danger:!!E.guide.obst.danger,pass:E.guide.obst.o.pass}:null,hint:E.guide.hint}:null,fuel:E.fuel?{startKg:E.fuel.startKg,remainingKg:Math.round(E.fuel.remainingKg),usedKg:Math.round(E.fuel.usedKg),burnKgH:Math.round(E.fuel.burnKgH),enduranceMin:E.fuel.enduranceMin,reserveKg:E.fuel.reserveKg,requiredBlockKg:Math.round(jetRequiredBlock(E.fms)*1000),predictedEFOBKg:Math.round(jetFuelPred(E.fms)*1000),pct:Math.round(E.fuel.remainingKg/E.fuel.startKg*100),flamedOut:!!E.fuel.flamedOut}:null,holdingExempt:!!E.holdExempt,missionPlan:E.routeFlight||null,missionLimitSec:jetMissionCap(),missionTime:Math.max(0,E.t-(E.holdTimeExcluded||0)),missionTimeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0,holdClearanceGrace:E.holdClearanceGrace||0,wpIdx:E.wpIdx,route:_t?{storms:_t.storms.map(n=>({x:Math.round(n.x),z:Math.round(n.z),r:n.r})),plan:Object.assign({},E.plan),stats:E.routeStats,misses:E.misses,wps:_t.wps.map(n=>({name:n.name,x:Math.round(n.x),z:Math.round(n.z),alt:Math.round(n.alt*oe)})),obst:_t.obst.map(n=>({kind:n.kind,pass:n.pass,x:Math.round(n.x),z:Math.round(n.z),h:Math.round(n.h*oe),r:Math.round(n.r)})),hdgOff:pt.ils.crs,dest:pt.dest,rwy:pt.ils.rwy}:null,gpws:E.gpws?{warn:E.gpws.warn,last:E.gpws.last,counts:Object.assign({},E.gpws.counts)}:null,efis:Object.assign({},E.efis),autoflight:{ap:!!E.plane.apOn,apN:E.plane.apN,athr:!!E.plane.athrOn,athrActive:!!E.plane.athr,spdTarget:Math.round(E.plane.spdTarget),fcu:Object.assign({},E.plane.fcu),lat:(E.guide||{}).latMode||"nav",vert:(E.guide||{}).vertMode||"man",att:{theta:+E.plane.theta.toFixed(2),aoa:+E.plane.aoa.toFixed(2),gamma:+E.plane.gamma.toFixed(2),fdPitch:E.guide?+(+E.guide.pitch).toFixed(2):null,v:+E.plane.v.toFixed(1),vy:+E.plane.vy.toFixed(2)}},fms:E.fms?{legs:E.fms.legs.map(n=>({name:n.name,seq:n.seq,alt:n.alt!=null?Math.round(n.alt*oe):null,spd:n.spd,ring:n.ring})),tmpy:!!E.fms.tmpy,ci:E.fms.ci,crzAlt:E.fms.crzAlt,vapp:E.fms.vapp,ils:E.fms.ilsFreq,fob:+E.fms.fob.toFixed(2),edits:E.fms.edits}:null,mcdu:{open:je.open,page:je.page,sp:je.sp,msg:je.msg},t:+E.t.toFixed(3),st:E.state==="boot"?"boot":E.state,nogl:td,stage:E.stage,phase:E.phase,runwaySignal:{simulated:true,source:jetTraffic.mode,clear:jetTraffic.clear,phase:jetTrafficAircraftAirborne()?'airborne':jetTraffic.phase,airport:jetTraffic.airport,liveCount:jetTraffic.live.length,arrivalId:jetTraffic.arrivalId||null,arrivalCallsign:jetTraffic.arrivalCallsign||null,departureId:jetTraffic.departureId||null,departureCallsign:jetTraffic.departureCallsign||null,departureRunway:jetTraffic.departureRunway||null,departureStage:jetTraffic.departureStage||null,departureBlocking:!!jetTraffic.departureBlocking,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null},taxi:E.groundTaxi?{mode:E.groundTaxi.mode,airport:E.groundTaxi.airport,runway:E.groundTaxi.runway,path:E.groundTaxi.waypoints.map(p=>[Math.round(p.x),Math.round(p.z)]),next:E.groundTaxi.next,total:E.groundTaxi.waypoints.length,distance:E.groundTaxi.distance||0,gateDistance:E.groundTaxi.gateDistance||0,headingError:E.groundTaxi.headingError||0,speedKt:E.groundTaxi.speedKt||0,atGate:!!E.groundTaxi.atGate}:null,won:E.won,gated:E.gated,outcome:E.outcome,progress:E.phase==="takeoff"?.15:E.phase==="route"?.3+.4*E.wpIdx/Math.max(1,_t.wps.length):E.phase==="approach"?.8:1,danger:+E.danger.toFixed(3),maxDanger:+E.maxDanger.toFixed(3),maxDangerByStage:E.maxDangerByStage,score:E.score,scenario:E.scenario,events:E.events.slice(),objects:E.objects,textures:Ip,assets:{loaded:Jl.loaded.slice(),fallback:Jl.fallback.slice()},loop:{zones:E.loop.zones,inFlight:E.loop.frames?+(E.loop.inFlightFrames/E.loop.frames).toFixed(3):0,firstRewardAt:E.loop.firstRewardAt,firstPayoffAt:E.loop.firstPayoffAt},scenery:_t?{dep:_t.from,arr:_t.dest,depCountry:Vn(_t.from),arrCountry:Vn(_t.dest),depLandmark:Xi(_t.from),arrLandmark:Xi(_t.dest),depBiome:C0(_t.from),arrBiome:C0(_t.dest),biomeK:E.biomeK||0,mode:kt("countryScenery"),built:It&&It.landmarks?It.landmarks.map(n=>n.userData.landmark+"@"+n.userData.icao):[],extras:{dep:Sa(_t.from,1),arr:Sa(_t.dest,1)},winter:{dep:h0(_t.from),arr:h0(_t.dest)},ocean:_t.oceanBand?[Math.round(_t.oceanBand.z0),Math.round(_t.oceanBand.z1)]:null,cities:It?It.cities:[],runways:It?It.extraRwys:[],enroute:It?It.enroute:null,airports:Ws.length}:null,paused:!!E.userPaused,shaders:Ap,fx:!0,flight:E.scen?{approach:_t?_t.app:null,mda:_t&&_t.app==="vor"?Math.round(_t.mda*oe):null,dmeSteps:_t&&_t.steps?_t.steps.map(n=>[n.dme,n.alt]):[],wind:(()=>{let n=Es(E);return{mode:n.mode,dir:Math.round(n.dir),kt:Math.round(n.kt),steady:Math.round(n.steady)}})(),weather:E.scen.wx,emergency:E.scen.em,engine:E.scen.eng,afterFix:E.scen.at,fired:!!E.scen.fired,active:!!E.scen.active,cleared:!!E.scen.cleared,memo:E.scen.memo?E.scen.memo.k:null,cat:(_t.cat||[]).length,fires:(_t.fires||[]).length,volcano:!!_t.volcano,ash:_t.storms.filter(n=>n.kind==="ash").length,storms:_t.storms.length}:null,params:{difficulty:$e.diff,thrustPower:kt("thrustPower"),turbulence:kt("turbulence"),stormCount:kt("stormCount")},layout:{design:"390x844",min:"320x480",critical:"390x600",framing:{farY:.3,playerY:.7,heroPx:Math.round(Ri.h*pe.s),groundWidth:16}},plane:{eng1:!!E.plane.eng1,eng2:!!E.plane.eng2,n1:Math.round(E.plane.n1),n1b:Math.round(E.plane.n1b),kt:Math.round(E.plane.v*wn),alt:Math.round(E.plane.y*oe),vs:Math.round(E.plane.vy*hi),hdg:Math.round($i(E.plane.psi)),lever:E.plane.lever,reverseThrust:!!E.plane.reverseThrust,gear:E.plane.gear,flaps:E.plane.flaps,spoilerMode:E.plane.spoilMode||0,spoilerPct:Math.round(100*(E.plane.spoilT||0)),spoilerActive:!!E.plane.spoilActive,damage:Math.round(E.plane.damage),tdFpm:E.plane.tdFpm}}):{st:E.state,won:!1,outcome:null,events:[],assets:{loaded:[],fallback:[]}}},flight(){let n=E.plane;return{phase:E.phase,t:E.t,alt:n.y*oe,vs:n.vy*hi,gpws:E.gpws?E.gpws.warn:null}},probe(){let n=E.plane;return{hero:{x:n.x,y:n.y,z:n.z,yaw:n.psi,scale:1},camera:{x:ui.position.x,y:ui.position.y,z:ui.position.z},counters:{score:{shown:Mt.shownScore(),real:E.score}}}},stats(){let n=Ye?Ye.info.render:{triangles:0,calls:0};return{tris:n.triangles,calls:n.calls,fps:+j3.toFixed(1)}},params(){return $e.list()},paramsSchema(){return $e.schema()},paramsValues(){return $e.values()},settingsValues(){return{cta_text:Oe.cta_text,locale:Oe.locale,difficulty:Oe.difficulty,max_play_time:Oe.max_play_time,hint_delay:Oe.hint_delay}},mcdu:{open:n=>yo(n),close:()=>je.close(),type:n=>{String(n).split("").forEach(t=>je.type(t))},clr:()=>je.clr(),lsk:(n,t)=>je.lsk(n,t),go:n=>je.go(n),key:n=>je.key(n)},setLevel(n){Ka(n),ii()},setParam(n,t){$e.set(n,t)&&(n==="background"&&sd(t),Wa(),Tn.params[n]&&Tn.params[n].apply==="restart"&&Vp()),d0()},showEnd(n){return pi?n===null?(Mt.hideEnd(),null):(Mt.showEnd(n,jl(),!0),Mt.endTexts()):null},audioLog(){return wt.log.slice()},renderAudio(n){return wt.renderAudio(n)}};function kp(){document.documentElement.lang=u0,Mt.relang(),je.relang();{let n=ir().settings;n&&n.muted&&!n0&&ka(!0)}if(td||!Ye){Ha("intro"),Mt.hideLoader(),np();return}if(!Is()){requestAnimationFrame(kp);return}DM().then(()=>{q5(),Rp(),kt("background")!==Tn.params.background.def&&sd(kt("background")),De.forEach((n,t)=>{Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,n)}),Hn&&Hn.params&&Object.keys(Hn.params).forEach(n=>{let t=wa(n);Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,Hn.params[n])}),Wa(),yp(),Ha("intro"),Is(),d0(),setTimeout(()=>q5(),1500),Mt.hideLoader(),Mt.showStart(),De.has("tune")&&Mt.buildTune($e,(n,t)=>window.__game.setParam(n,t),()=>ii(),Tn),np(),pi||requestAnimationFrame(Hp)})}function np(){if(Hn)try{Hn.onUpdate=XM,Hn.onCommand=YM,Hn.ready()}catch{}}function zp(n){let t=window.mraid;if(!t)return n();try{if(t.getState()==="loading"){t.addEventListener("ready",()=>zp(n));return}if(!t.isViewable()){let e=i=>{i&&(t.removeEventListener("viewableChange",e),n())};t.addEventListener("viewableChange",e);return}}catch{}n()}zp(kp);})();
 /*! Bundled license information:
 
 three/build/three.module.js:
