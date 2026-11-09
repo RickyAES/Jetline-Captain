@@ -5521,6 +5521,25 @@ function jetTrafficStartLocalLanding(a,match,now){
  track.localLanding=record;track.lastRadarAircraft={...a};track.callsign=record.callsign;
  return record;
 }
+// Both the visual position AND the nose direction derive from a single
+// monotonically increasing progress parameter along the established runway.
+// This avoids the reciprocal 20/02 approach facing backwards after the 1km
+// handover, even if ADS-B heading is stale or the player's runway differs.
+function jetTrafficLocalLandingPoint(landing,along){
+ const fraction=along/Math.max(1,jetTrafficGeoDistance(landing.threshold,landing.opposite));
+ const lat=landing.threshold[0]+(landing.opposite[0]-landing.threshold[0])*fraction;
+ const lon=landing.threshold[1]+(landing.opposite[1]-landing.threshold[1])*fraction;
+ const arrival=E.phase==='route'||E.phase==='approach'||E.phase==='taxiIn';
+ if(landing.airport==='WSSS'&&!arrival){
+  const lane=jetChangiRunways[landing.runwayBase];if(!lane||!_t)return null;
+  const geo=jetWSSSAlongCross(lat,lon,lane.threshold);
+  const world=qi(_t,lane.x+geo.cross*jetWSSSScale.across,
+   lane.z-geo.along*jetWSSSScale.along);
+  return {x:world[0],z:world[1]};
+ }
+ const world=jetTrafficWorldMapPoint(lat,lon);
+ return world?{x:world.x,z:world.z}:null;
+}
 function jetTrafficSimulatedLandingPosition(a,now){
  const track=jetTraffic.stableTracks.get(a.id),l=track?.localLanding;
  if(!l||l.airport!==jetTrafficActiveAirport())return null;
@@ -5539,27 +5558,20 @@ function jetTrafficSimulatedLandingPosition(a,now){
   along=Math.min(l.lengthMeters-90,190+850*(1-Math.exp(-rollout/13)));
   alt=.09;stage='LOCAL ROLLOUT';
  }
- const distance=jetTrafficGeoDistance(l.threshold,l.opposite);
- const frac=Math.max(-.5,Math.min(1.1,along/distance));
- const lat=l.threshold[0]+(l.opposite[0]-l.threshold[0])*frac;
- const lon=l.threshold[1]+(l.opposite[1]-l.threshold[1])*frac;
- let x,z,yaw;
- if(l.airport==='WSSS'&&E.phase!=='approach'&&E.phase!=='taxiIn'&&E.phase!=='route'){
-  const lane=jetChangiRunways[l.runwayBase];
-  if(!lane)return null;
-  const geo=jetWSSSAlongCross(lat,lon,lane.threshold);
-  const world=qi(_t,lane.x+geo.cross*jetWSSSScale.across,lane.z-geo.along*jetWSSSScale.along);
-  x=world[0];z=world[1];
-  const course=jetTrafficGeoBearing(l.threshold,l.opposite);
-  const relative=(course-jetWSSSCourseDeg)*Math.PI/180;
-  const vector=qi(_t,Math.sin(relative)*jetWSSSScale.across,-Math.cos(relative)*jetWSSSScale.along);
-  yaw=Math.atan2(-vector[0],-vector[1]);
- }else{
-  const p=jetTrafficWorldMapPoint(lat,lon);if(!p)return null;
-  x=p.x;z=p.z;yaw=jetTrafficWorldYaw(jetTrafficGeoBearing(l.threshold,l.opposite));
- }
- return {x,z,y:alt,yaw,stage,estimated:true,runway:l.runway,
-  runwayBase:l.runwayBase,localLanding:true,localLandingDone:seconds>approachSeconds+45};
+ const current=jetTrafficLocalLandingPoint(l,along);
+ if(!current)return null;
+ // Sample a point AHEAD on the same runway, in the same world/scenery
+ // coordinates as the aircraft. This is a forward direction, not a
+ // transponder heading and not the player's selected runway heading.
+ const ahead=jetTrafficLocalLandingPoint(l,along+30);
+ const dx=(ahead?.x??current.x)-current.x;
+ const dz=(ahead?.z??current.z)-current.z;
+ const horizontal=Math.hypot(dx,dz);
+ const course=jetTrafficGeoBearing(l.threshold,l.opposite);
+ const yaw=horizontal>1e-6?Math.atan2(-dx,-dz):jetTrafficWorldYaw(course);
+ return {x:current.x,z:current.z,y:alt,yaw,stage,estimated:true,runway:l.runway,
+  runwayBase:l.runwayBase,localLanding:true,localLandingDone:seconds>approachSeconds+45,
+  simulatedCourse:course};
 }
 function jetTrafficMaybeLocalLanding(a,match,now){
  const existing=jetTrafficSimulatedLandingPosition(a,now);
@@ -6558,7 +6570,9 @@ function jetTrafficDrawLiveContacts(dt){
    const k=1-Math.exp(-Math.min(.06,Math.max(.001,dt||.016))*7);
    entry.x+=(target.x-entry.x)*k;entry.z+=(target.z-entry.z)*k;
    entry.y+=(target.y-entry.y)*k;
-   entry.yaw+=(((target.yaw-entry.yaw+Math.PI*3)%(Math.PI*2))-Math.PI)*k;
+   // Heading is locked to forward runway motion at handover. An old
+   // reciprocal ADS-B heading must never leave the nose facing backwards.
+   entry.yaw=target.yaw;
    entry.vx=0;entry.vz=0;
   }else jetTrafficSmoothMotion(entry,target,a,dt,now);
   entry.group.position.set(entry.x,entry.y,entry.z);entry.group.rotation.y=entry.yaw;
@@ -6949,11 +6963,17 @@ function jcSurfaceDraw(force=false){
   ctx.strokeStyle=selected?'#ffffff':color;ctx.fillStyle=color;ctx.lineWidth=selected?2.5:1.2;
   ctx.beginPath();
   if(a.onGround){ctx.arc(px,py,selected?6:4.3,0,Math.PI*2);ctx.fill();}
-  else{const hd=jetTrafficObservedCourse(a)*Math.PI/180;
-   const rot=hd-jetWSSSCourseDeg*Math.PI/180;
-   ctx.moveTo(px+Math.sin(rot)*8,py-Math.cos(rot)*8);
-   ctx.lineTo(px-Math.cos(rot)*4-Math.sin(rot)*4,py-Math.sin(rot)*4+Math.cos(rot)*4);
-   ctx.lineTo(px+Math.cos(rot)*4-Math.sin(rot)*4,py+Math.sin(rot)*4+Math.cos(rot)*4);ctx.closePath();ctx.fill();}
+  else{
+   // Map arrow and 3D jet use exactly the same world-space yaw, including
+   // locally simulated reciprocal runway approaches.
+   const yaw=Number(pos.yaw);
+   const vector=Number.isFinite(yaw)?Js(_t,-Math.sin(yaw),-Math.cos(yaw)):[0,-1];
+   const length=Math.hypot(vector[0],vector[1])||1;
+   const fx=vector[0]/length,fz=vector[1]/length;
+   const sx=-fz,sz=fx;
+   ctx.moveTo(px+fx*8,py+fz*8);
+   ctx.lineTo(px-fx*5+sx*4,py-fz*5+sz*4);
+   ctx.lineTo(px-fx*5-sx*4,py-fz*5-sz*4);ctx.closePath();ctx.fill();}
   if(selected){ctx.beginPath();ctx.arc(px,py,11,0,Math.PI*2);ctx.stroke();}
   const name=jetTrafficCallsign(a);
   ctx.textAlign=px>W*.72?'right':'left';ctx.font=selected?'bold 13px system-ui':'11px system-ui';
