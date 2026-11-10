@@ -8668,12 +8668,12 @@ function jcEmReset(){jcCabinPAReset();jcEmRemoveRunway();Object.assign(jcEm,{act
  seatBonus:0,runway:null,advisory:'',manualStart:false,disasterTriggered:false});
  const b=document.getElementById('jc-emergency');if(b)b.style.display='none';
 }
-/* JC CABIN PA — original user-uploaded takeoff/landing recording PLUS a
-   separately synthesized male airborne seat-belt reminder. All files play
-   through the existing audio effects bus; this is NOT voice cloning. */
+/* JC CABIN PA — two user-supplied recordings: the existing takeoff/landing
+   recording and the user's new airborne announcement extracted from MP4.
+   Audio is played through the existing effects bus; no synthetic cloning. */
 const jcCabinPA={
  file:'audio/cabin_announcer_recorded.mp3',
- airborneFile:'audio/cabin_airborne_seatbelts.mp3',
+ airborneFile:'audio/cabin_airborne_seatbelts.mp3?v=user-recording-20261110',
  buffers:{},loads:{},failed:{},source:null,
  takeoffPlayed:false,landingPlayed:false,airbornePlayed:false,
  pending:'',lastAnnouncement:'',lastPhase:'',playCount:0,serial:0
@@ -8733,7 +8733,7 @@ function jcCabinPAPlay(kind){
   try{wt.play('chime',.22)}catch(_e){}
   source.start(ctx.currentTime+.28);jcCabinPA.source=source;
   jcCabinPA[field]=true;jcCabinPA.lastAnnouncement=kind;jcCabinPA.playCount++;
-  try{ee('cabin_pa_'+(kind==='airborne'?'synthesized_':'recorded_')+kind,'seat_belts_on')}catch(_e){}
+  try{ee('cabin_pa_recorded_'+kind,'seat_belts_on')}catch(_e){}
  }).finally(()=>{if(jcCabinPA.pending===kind)jcCabinPA.pending='';});
 }
 function jcCabinPAForPhase(justSwitchedOn=false){
