@@ -5255,14 +5255,14 @@ function jcChangiSync3DGates(){
  while(layer.children.length){
   const obj=layer.children[0];layer.remove(obj);
   // Shared materials belong to the layer factory, not to an individual plane.
-  obj.traverse?.(mesh=>mesh.geometry?.dispose?.());
+  // Shared plane geometry is reused across updates; do not dispose it here.
  }
  // The terminal geometry can depict gate-assigned aircraft, but only a feed
  // confirming stand occupancy can classify them as physically parked.
  const used=new Set();let drawn=0;
  for(const f of flights){
   const gate=String(f.gate||'').toUpperCase();
-  if(used.has(gate)||!jcChangiGateLookup.has(gate)||!f.flight)continue;
+  if(used.has(gate)||!jcChangiGateLookup.has(gate)||!f.flight||!f.confirmedParked)continue;
   if(drawn>=64)break;
   if(/DEPARTED|AIRBORNE|CANCELLED|CANCELED|LEFT GATE|TAXI|TAKEOFF/i.test(String(f.status||'')))continue;
   used.add(gate);drawn++;
@@ -5310,7 +5310,44 @@ function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
   parent.add(item);
  };
  jcChangiSync3DGates();
+ // Independent observed ADS-B ground aircraft: geometric positions are never
+ // snapped to a gate, because aircraft movement data cannot verify a stand.
+ const groundLayer=new me();groundLayer.name='JC_OBSERVED_GROUND_ADSB_V7';group.add(groundLayer);
+ jetTraffic.changiGroundLayer=groundLayer;
+ jetTraffic.changiGroundFactory=(parent,loc,contact)=>{
+  const item=new me();item.name='GROUND_'+contact.hex;
+  item.userData={hex:contact.hex,callsign:contact.callsign||'',lat:contact.lat,lon:contact.lon,source:'observed ADS-B ground position',gate:null};
+  make(item,loc,0,0,shapes.body,white,4.3);
+  make(item,loc,0,1,shapes.wing,silver,4.7);
+  make(item,loc,0,10,shapes.tail,navy,6.4);
+  parent.add(item);
+ };
+ jcChangiSync3DGround();
 }
+// Called whenever the independent WSSS ADS-B ground feed updates.
+function jcChangiSync3DGround(){
+ const layer=jetTraffic.changiGroundLayer,factory=jetTraffic.changiGroundFactory;
+ if(!layer||!factory)return;
+ const snapshot=window.__jcGroundSnapshot||{aircraft:[]};
+ const aircraft=Array.isArray(snapshot.aircraft)?snapshot.aircraft:[];
+ const stamp=snapshot.asOf||'';
+ const key=stamp+'|'+aircraft.map(a=>a.hex).join(',');
+ if(layer.userData.lastContactSnapshot===key)return;
+ layer.userData.lastContactSnapshot=key;
+ while(layer.children.length)layer.remove(layer.children[0]);
+ if(jetTrafficActiveAirport()!=='WSSS'||E.state!=='play')return;
+ const liveIds=new Set((jetTraffic.live||[]).filter(a=>a.onGround).map(a=>String(a.id||'').toLowerCase()));
+ let drawn=0;
+ for(const a of aircraft){
+  if(drawn>=65||liveIds.has(String(a.hex||'').toLowerCase()))continue;
+  if(!Number.isFinite(a.lat)||!Number.isFinite(a.lon)||a.onGround!==true)continue;
+  const pos=jetWSSSAlongCross(a.lat,a.lon);
+  factory(layer,{x:pos.cross*jetWSSSScale.across,z:-pos.along*jetWSSSScale.along},a);
+  drawn++;
+ }
+ layer.userData.rendered=drawn;
+}
+window.addEventListener('jc-changi-ground-updated',jcChangiSync3DGround);
 
 function jetChangiBuildTerminals(addBox,putSphere,group){
  const apron=new Xt({color:0x737d81,roughness:.97});
@@ -7688,6 +7725,21 @@ function jcSurfaceDraw(force=false){
   const label=`${name}${simulated?' · SIM 1KM':''}`;
   ctx.lineWidth=3;ctx.strokeStyle='#061324';ctx.strokeText(label,tx,ty);ctx.fillStyle=color;ctx.fillText(label,tx,ty);
   rendered++;
+ }
+ // Ground observations from the independent WSSS feed: display at exact
+ // reported coordinates, not a guessed gate or an inferred parking stand.
+ if(isWSSS){
+  const observed=window.__jcGroundSnapshot;
+  const fresh=observed?.asOf&&Date.now()-Date.parse(observed.asOf)<95000;
+  const known=new Set(live.map(a=>String(a.id||'').toLowerCase()));
+  if(fresh)for(const aircraft of (observed.aircraft||[]).slice(0,90)){
+   if(known.has(String(aircraft.hex||'').toLowerCase()))continue;
+   const pos=atGeo([aircraft.lat,aircraft.lon]);
+   if(!pos||pos[0]<-4||pos[0]>W+4||pos[1]<-4||pos[1]>H+4)continue;
+   ctx.fillStyle=aircraft.speedKt>=3?'#4df5b9':'#efb966';ctx.fillRect(pos[0]-3,pos[1]-3,6,6);
+   ctx.font='9px system-ui';ctx.textAlign='left';ctx.fillText(String(aircraft.callsign||aircraft.registration||aircraft.hex||'').slice(0,14),pos[0]+6,pos[1]-5);
+   rendered++;
+  }
  }
  const pilot=worldGeo(E.plane.x,E.plane.z);
  const pp=pilot&&atGeo(pilot);
@@ -12684,5 +12736,159 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
 })();
 </script>
 
-<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • CHANGI GATES v6</div></body>
+<style id="jc-ground-v7-css">
+#jc-gates-panel.jc-ground-active .jc-gate-help,#jc-gates-panel.jc-ground-active #jc-gate-source,
+#jc-gates-panel.jc-ground-active #jc-gate-count,#jc-gates-panel.jc-ground-active #jc-gate-list,
+#jc-gates-panel.jc-ground-active #jc-gate-terminal,#jc-gates-panel.jc-ground-active #jc-gate-search,
+#jc-gates-panel.jc-ground-active #jc-gate-refresh,#jc-gates-panel.jc-ground-active #jc-gate-paste,
+#jc-gates-panel.jc-ground-active #jc-gate-entry,#jc-gates-panel.jc-ground-active #jc-gate-message{display:none!important}
+#jc-ground-panel{display:none}
+#jc-gates-panel.jc-ground-active #jc-ground-panel{display:block}
+#jc-gates-panel .jc-ground-top{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:8px}
+#jc-gates-panel .jc-ground-top h3{font-size:14px;color:#85edff;margin:0}
+#jc-gates-panel .jc-ground-meta,#jc-gates-panel .jc-ground-legend{font-size:10px;color:#aee1ed;margin:9px 0;line-height:1.5}
+#jc-gates-panel #jc-ground-map{width:100%;height:auto;aspect-ratio:530/380;border:1px solid #33546b;border-radius:8px;background:#061525;display:block}
+#jc-gates-panel .jc-ground-table{overflow-y:auto;max-height:215px;border:1px solid #33546b;border-radius:8px}
+#jc-gates-panel .jc-ground-table table{width:100%;border-collapse:collapse;font:11px system-ui;text-align:left}
+#jc-gates-panel .jc-ground-table th,#jc-gates-panel .jc-ground-table td{padding:5px 4px;border-bottom:1px solid #233d53}
+#jc-gates-panel .jc-ground-table th{position:sticky;top:0;background:#153149;color:#adf0fa}
+#jc-gates-panel .jc-ground-table tr:hover,#jc-gates-panel .jc-ground-table tr.selected{background:#1a5470}
+#jc-gates-panel .jc-ground-table td small{font-size:9px;color:#a8d0dc;display:block}
+#jc-gates-panel .jc-ground-selected{font-size:10px;color:#e6f8ff;padding:8px;background:#112c43;margin-top:7px;border-radius:7px}
+#jc-gates-panel .jc-ground-note{font-size:10px;color:#b9d2db;line-height:1.5;margin:8px 0}
+</style>
+<script id="jc-ground-v7-script">
+(()=>{'use strict';
+ // WSSS live on-ground ADS-B contacts; this never claims Flightradar24 or gate occupancy.
+ const gatePanel=document.getElementById('jc-gates-panel');
+ if(!gatePanel)return;
+ const gateActions=gatePanel.querySelector('.jc-gate-actions');
+ const groundButton=document.createElement('button');groundButton.id='jc-ground-tab';groundButton.type='button';
+ groundButton.textContent='🛬 ON GROUND';groundButton.setAttribute('aria-pressed','false');
+ const backButton=document.createElement('button');backButton.id='jc-ground-back';backButton.type='button';backButton.textContent='✈ GATES';
+ backButton.style.display='none';gateActions.prepend(backButton,groundButton);
+ const groundSection=document.createElement('section');groundSection.id='jc-ground-panel';
+ groundSection.innerHTML=`<div class="jc-ground-top"><h3>WSSS · AIRCRAFT ON GROUND</h3><button id="jc-ground-refresh" type="button">↻ UPDATE</button></div>
+  <div class="jc-ground-meta" id="jc-ground-meta">Awaiting a ground-position feed</div>
+  <canvas id="jc-ground-map" width="530" height="380" aria-label="North-up Changi runways with reported ADS-B on-ground aircraft positions"></canvas>
+  <div class="jc-ground-legend">● OBSERVED GROUND POSITION · ◇ SELECTED AIRCRAFT · NORTH UP · RUNWAYS GEOGRAPHIC</div>
+  <div class="jc-ground-table" role="region" aria-label="Reported Changi ground aircraft"><table><thead><tr><th>CALLSIGN / REG</th><th>TYPE</th><th>GS</th><th>LAST FIX</th></tr></thead><tbody id="jc-ground-rows"></tbody></table></div>
+  <div id="jc-ground-selected" class="jc-ground-selected">Select an aircraft to inspect its reported position.</div>
+  <p class="jc-ground-note">ADS-B position is not a verified parking stand, gate, or ATC clearance. Stopped aircraft may be taxiing, holding, or parked. Coverage may miss aircraft completely. Airside layout is simplified. Source: <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer">ADSB.lol (ODbL 1.0)</a>. Reference: <a href="https://www.flightradar24.com/data/airports/sin/ground" target="_blank" rel="noopener noreferrer">Flightradar24 On Ground</a> (not accessed by this feed).</p>`;
+ gatePanel.querySelector('#jc-gate-count')?.before(groundSection);
+ const $=id=>document.getElementById(id);
+ let selected='',lastAttempt=0,loading=false;
+ let state={aircraft:[],asOf:null,source:'NOT CONNECTED',mode:'offline',status:'Ground feed not connected'};
+ window.__jcGroundSnapshot=state;
+ const toHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const northMap=[
+  {id:'02L / 20R',a:[1.34896389,103.97745000],b:[1.38225833,103.99150556]},
+  {id:'02C / 20C',a:[1.32875278,103.98496111],b:[1.36204722,103.99901667]},
+  {id:'02R / 20L',a:[1.32238611,103.99984722],b:[1.35568056,104.01390278]}
+ ];
+ function sanitizeRows(rows){
+  if(!Array.isArray(rows))return [];
+  const used=new Set(),out=[];
+  for(const r of rows){
+   if(!r||r.onGround!==true)continue;
+   const lat=Number(r.lat),lon=Number(r.lon),seen=Number(r.seenPos);
+   if(!Number.isFinite(lat)||!Number.isFinite(lon)||lat<1.285||lat>1.42||lon<103.93||lon>104.06||!Number.isFinite(seen)||seen<0||seen>60)continue;
+   const hex=String(r.hex||r.id||'').toLowerCase().replace(/[^0-9a-f]/g,'').slice(0,8);
+   if(!hex||used.has(hex))continue;used.add(hex);
+   const speed=Number(r.speedKt),heading=Number(r.heading);
+   out.push({hex,lat,lon,callsign:String(r.callsign||r.flight||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16),
+     registration:String(r.registration||'').toUpperCase().replace(/[^A-Z0-9-]/g,'').slice(0,16),type:String(r.type||'').toUpperCase().slice(0,12),
+     speedKt:r.speedKt==null||!Number.isFinite(speed)?null:Math.max(0,Math.min(450,speed)),
+     heading:r.heading==null||!Number.isFinite(heading)?null:((heading%360)+360)%360,
+     seenPos:seen,onGround:true,confirmedParked:false});
+  }
+  return out.slice(0,175).sort((a,b)=>(a.callsign||a.hex).localeCompare(b.callsign||b.hex));
+ }
+ function apply(raw,mode){
+  const updated=raw.asOf||raw.updatedAt||null;
+  const age=updated?Date.now()-new Date(updated).getTime():NaN;
+  const fresh=Number.isFinite(age)&&age>=-120000&&age<95000;
+  state={source:String(raw.source||'Ground position feed').slice(0,85),asOf:updated,
+   aircraft:fresh?sanitizeRows(raw.aircraft):[],mode:mode==='test'?'test':fresh?'live':'stale',
+   status:fresh?'':'Ground feed missing valid timestamp or is older than 95 seconds'};
+  window.__jcGroundSnapshot=state;
+  window.dispatchEvent(new Event('jc-changi-ground-updated'));
+  render();return state;
+ }
+ function xy(lat,lon,W,H){
+  const minLat=1.310,maxLat=1.399,minLon=103.960,maxLon=104.029;
+  return [23+(lon-minLon)/(maxLon-minLon)*(W-46),19+(maxLat-lat)/(maxLat-minLat)*(H-40)];
+ }
+ function renderMap(){
+  const c=$('jc-ground-map');if(!c)return;const ctx=c.getContext('2d');if(!ctx)return;
+  const W=c.width,H=c.height;ctx.clearRect(0,0,W,H);ctx.fillStyle='#061525';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#1d4055';ctx.lineWidth=1;for(let x=0;x<W;x+=43){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=43){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.font='bold 12px system-ui';ctx.fillStyle='#b7e9f7';ctx.fillText('N ↑',10,17);
+  northMap.forEach(r=>{
+   const a=xy(...r.a,W,H),b=xy(...r.b,W,H);
+   ctx.strokeStyle='#7d94a6';ctx.lineWidth=10;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();
+   ctx.setLineDash([10,7]);ctx.strokeStyle='#e4f5fc';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();ctx.setLineDash([]);
+   ctx.font='10px system-ui';ctx.fillStyle='#e7faff';ctx.textAlign='center';ctx.fillText(r.id,a[0],Math.min(H-5,a[1]+16));
+  });
+  ctx.textAlign='left';
+  for(const a of state.aircraft){
+   const p=xy(a.lat,a.lon,W,H);if(p[0]<5||p[0]>W-5||p[1]<5||p[1]>H-5)continue;
+   const chosen=selected===a.hex;
+   ctx.fillStyle=chosen?'#fff2a2':a.speedKt!=null&&a.speedKt>=3?'#59eac6':'#f9b96a';
+   ctx.beginPath();ctx.arc(p[0],p[1],chosen?6:4.5,0,2*Math.PI);ctx.fill();
+   if(chosen){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p[0],p[1],10,0,2*Math.PI);ctx.stroke();}
+   ctx.font='bold 10px system-ui';ctx.textAlign='left';ctx.fillText(a.callsign||a.registration||a.hex,Math.min(W-65,p[0]+6),Math.max(12,p[1]-6));
+  }
+ }
+ function render(){
+  const t=state.asOf?new Date(state.asOf):null;
+  const stamp=t&&!Number.isNaN(t.getTime())?t.toLocaleTimeString('en-SG',{timeZone:'Asia/Singapore',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' SGT':'unavailable';
+  $('jc-ground-meta').textContent=`${state.mode==='live'?'OBSERVED ADS-B':'NOT LIVE'} · ${state.aircraft.length} contacts · ${state.source} · ${stamp}${state.status?' · '+state.status:''}`;
+  const body=$('jc-ground-rows');body.textContent='';
+  for(const a of state.aircraft){
+   const tr=document.createElement('tr');tr.dataset.hex=a.hex;tr.tabIndex=0;tr.style.cursor='pointer';
+   if(a.hex===selected)tr.classList.add('selected');
+   tr.innerHTML=`<td><b>${toHtml(a.callsign||'NO CALLSIGN')}</b><small>${toHtml(a.registration||a.hex)}</small></td><td>${toHtml(a.type||'—')}</td><td>${a.speedKt==null?'—':Math.round(a.speedKt)+' kt'}</td><td>${Math.round(a.seenPos)}s ago</td>`;
+   const choose=()=>{selected=a.hex;render();};tr.addEventListener('click',choose);tr.addEventListener('keydown',ev=>{if(ev.key==='Enter'){choose();ev.preventDefault();}});body.append(tr);
+  }
+  if(!state.aircraft.length){const tr=document.createElement('tr');tr.innerHTML='<td colspan="4">No fresh reported ground positions. Check the feed and try again; this does not imply the airport is empty.</td>';body.append(tr);}
+  const chosen=state.aircraft.find(a=>a.hex===selected);
+  $('jc-ground-selected').textContent=chosen?`${chosen.callsign||chosen.hex} · ${chosen.registration||'registration unknown'} · ${chosen.type||'type unknown'} · ${chosen.lat.toFixed(5)}, ${chosen.lon.toFixed(5)} · HDG ${chosen.heading==null?'—':Math.round(chosen.heading)+'°'} · GROUND POSITION ONLY · GATE UNKNOWN`:'Select a reported aircraft to see its geographic position. Gate assignment and physical stand occupancy remain unknown.';
+  renderMap();
+ }
+ function toggle(show){
+  gatePanel.classList.toggle('jc-ground-active',show);groundButton.style.display=show?'none':'';backButton.style.display=show?'':'none';
+  groundButton.setAttribute('aria-pressed',String(show));
+  if(show) {refresh();render();}else gatePanel.scrollTop=0;
+ }
+ groundButton.addEventListener('click',()=>toggle(true));backButton.addEventListener('click',()=>toggle(false));
+ const openBtn=$('jc-gates-open');openBtn?.addEventListener('click',()=>{if(gatePanel.classList.contains('open')&&gatePanel.classList.contains('jc-ground-active'))refresh();});
+ async function refresh(){
+  if(loading||Date.now()-lastAttempt<15000)return;
+  loading=true;lastAttempt=Date.now();$('jc-ground-refresh').disabled=true;
+  try{
+   const resp=await fetch('/api/changi-ground',{cache:'no-store',headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});
+   if(!resp.ok)throw Error(`Ground feed HTTP ${resp.status}`);
+   const raw=await resp.json();if(!Array.isArray(raw.aircraft))throw Error('Invalid ground feed response');
+   apply(raw,'live');
+  }catch(err){
+   // Fail closed on stale data; do not preserve old positions as current.
+   const oldAge=state.asOf?Date.now()-new Date(state.asOf).getTime():Infinity;
+   if(oldAge>95000){state={aircraft:[],asOf:null,source:'NOT CONNECTED',mode:'offline',status:err.message};window.__jcGroundSnapshot=state;window.dispatchEvent(new Event('jc-changi-ground-updated'));}
+   else state.status='Refresh unavailable: '+err.message;
+   render();
+  }finally{loading=false;$('jc-ground-refresh').disabled=false;}
+ }
+ $('jc-ground-refresh').addEventListener('click',()=>{lastAttempt=0;refresh();});
+ const timer=setInterval(()=>{
+  if(document.hidden)return;
+  if(state.mode==='live'&&state.asOf&&Date.now()-Date.parse(state.asOf)>95000){state={...state,aircraft:[],mode:'stale',status:'Position feed expired'};window.__jcGroundSnapshot=state;window.dispatchEvent(new Event('jc-changi-ground-updated'));render();}
+  if(gatePanel.classList.contains('open')&&gatePanel.classList.contains('jc-ground-active'))refresh();
+ },30000);
+ window.__jcGroundControl={refresh,applyTestData:raw=>apply(raw,'test'),snapshot:()=>state,show:()=>{gatePanel.classList.add('open');toggle(true)}};
+ render();
+})();
+</script>
+<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • CHANGI GROUND v7</div></body>
 </html>
