@@ -7334,8 +7334,210 @@ function jcDesktopRunwayUiTick(){
  btn.style.display=show?'block':'none';
  if(!show&&jcDesktopRunwayOpen)jcDesktopRunwayToggle(false);
 }
+/* JC TAXIWAY DAY/NIGHT SIGNAGE v2
+ * Core 3D markings are independent of JC_NIGHT_RUNWAY_AND_TAXI_LIGHTS.
+ * Real runway identifiers come from flight/airport data. All taxiway names,
+ * connectors, signage placement and CAT scenarios are illustrative in this
+ * flight game, not the airport's real published ground-chart layout.
+ */
+const jcTaxiSigns={group:null,scene:null,signature:'',textures:[],lastCheck:0};
+function jcTaxiSignsDispose(){
+ const s=jcTaxiSigns;
+ if(s.group){s.group.parent?.remove(s.group);
+  const geos=new Set(),mats=new Set();
+  s.group.traverse?.(node=>{
+   if(node.geometry)geos.add(node.geometry);
+   if(node.material){for(const m of (Array.isArray(node.material)?node.material:[node.material]))mats.add(m);}
+  });
+  geos.forEach(g=>g.dispose?.());mats.forEach(m=>m.dispose?.());
+ }
+ s.textures.forEach(t=>t.dispose?.());
+ s.group=null;s.scene=null;s.signature='';s.textures=[];
+}
+function jcTaxiSignsPaintY(offset=0){
+ // On WSSS the additional 3-runway taxi road meshes are raised; drawing
+ // ground stripes at the old 0.19/0.35 level buries them UNDER the pavement.
+ // Other airports retain normal low pavement height.
+ return ((String(E.phase==='taxiIn'?pt.dest:pt.from||'').toUpperCase()==='WSSS')?1.09:.34)+offset;
+}
+function jcTaxiSignsLine(group,a,b,width,material,y=jcTaxiSignsPaintY()){
+ if(!a||!b)return;
+ const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);
+ if(!Number.isFinite(len)||len<.3)return;
+ // Same plane axis convention as the original jetTaxiDrawLine(): no mirrored
+ // or reversed centre lines for reciprocal 02/20 departures.
+ const mesh=new Tt(new Ge(width,len),material);
+ mesh.rotation.set(-Math.PI/2,0,-Math.atan2(dx,-dz));
+ mesh.position.set((a.x+b.x)/2,y,(a.z+b.z)/2);
+ mesh.name='JC_DAY_TAXI_LINE';mesh.renderOrder=7;
+ group.add(mesh);
+}
+function jcTaxiSignsCanvas(text,type){
+ const c=document.createElement('canvas');c.width=768;c.height=192;
+ const ctx=c.getContext('2d');if(!ctx)return null;
+ const red=type==='mandatory'||type==='cat'||type==='no-entry';
+ const dark=type==='location';
+ ctx.fillStyle=red?'#be1723':dark?'#111316':'#ffdd1e';
+ ctx.fillRect(4,4,760,184);
+ ctx.lineWidth=10;ctx.strokeStyle=dark?'#ffdf32':red?'#fcebed':'#151515';
+ ctx.strokeRect(9,9,750,174);
+ ctx.textAlign='center';ctx.textBaseline='middle';
+ if(type==='no-entry'){
+  ctx.strokeStyle='#fff';ctx.lineWidth=15;ctx.beginPath();ctx.arc(384,96,61,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='#fff';ctx.fillRect(344,88,80,16);
+ }else{
+  const msg=String(text||'').slice(0,24);
+  ctx.font=`900 ${msg.length>15?62:msg.length>10?82:108}px Arial,sans-serif`;
+  ctx.fillStyle=red?'#fff':dark?'#ffde24':'#090c0e';
+  ctx.fillText(msg,384,103,724);
+ }
+ const texture=new li(c);texture.colorSpace='srgb';texture.anisotropy=2;
+ jcTaxiSigns.textures.push(texture);return texture;
+}
+function jcTaxiSignsBoard(group,where,text,type,heading,width){
+ if(!where||!Number.isFinite(where.x)||!Number.isFinite(where.z))return;
+ const texture=jcTaxiSignsCanvas(text,type);if(!texture)return;
+ const w=width||32,h=9;
+ const mat=new be({map:texture,transparent:true,depthWrite:false,side:2,toneMapped:false});
+ const face=new Tt(new Ge(w,h),mat);
+ face.position.set(where.x,10.1,where.z);
+ // Plane normal faces the approaching direction of the taxiway.
+ face.rotation.y=heading;face.frustumCulled=false;
+ face.name='JC_DAY_NIGHT_AIRFIELD_SIGN_'+type;
+ group.add(face);
+ const postMat=new be({color:0x9ea8b0});
+ const post=new Tt(new Ae(.85,9.2,.85),postMat);
+ post.position.set(where.x,4.9,where.z);group.add(post);
+}
+function jcTaxiSignsByPath(group,path,index,text,type,side=1,offset=25,width=32){
+ if(!path||path.length<2)return;
+ const at=Math.max(0,Math.min(path.length-1,index));
+ const here=path[at],before=path[Math.max(0,at-1)],after=path[Math.min(path.length-1,at+1)];
+ const d=at===0?{x:after.x-here.x,z:after.z-here.z}:{x:here.x-before.x,z:here.z-before.z};
+ const len=Math.hypot(d.x,d.z)||1,ux=d.x/len,uz=d.z/len;
+ const right={x:-uz,z:ux};
+ const where={x:here.x+right.x*offset*side,z:here.z+right.z*offset*side};
+ jcTaxiSignsBoard(group,where,text,type,Math.atan2(-ux,-uz),width);
+}
+function jcTaxiSignsHoldLines(group,path,holdIndex,solid,markings){
+ if(!path||path.length<2)return;
+ const at=Math.max(1,Math.min(path.length-2,holdIndex));
+ const before=path[at-1],hold=path[at],after=path[at+1];
+ const vx=after.x-before.x,vz=after.z-before.z,len=Math.hypot(vx,vz)||1;
+ const ux=vx/len,uz=vz/len,rx=-uz,rz=ux;
+ // Four-line ILS/runway holding-position marking: solid on the taxiway
+ // approach side and dashed toward the runway. Sign locations are simulated.
+ for(const [advance,dashed] of [[-6,false],[-3,false],[3,true],[6,true]]){
+  const cx=hold.x+ux*advance,cz=hold.z+uz*advance;
+  if(!dashed){
+   jcTaxiSignsLine(group,{x:cx-rx*13,z:cz-rz*13},{x:cx+rx*13,z:cz+rz*13},.88,solid,jcTaxiSignsPaintY(.05));
+  }else{
+   for(const k of [-2,-1,0,1,2]){
+    const x0=k*5-1.35,x1=k*5+1.35;
+    jcTaxiSignsLine(group,{x:cx+rx*x0,z:cz+rz*x0},{x:cx+rx*x1,z:cz+rz*x1},.88,solid,jcTaxiSignsPaintY(.06));
+   }
+  }
+ }
+ // Enhanced centreline dashes beginning approximately 60 game metres before
+ // the hold line; never replace the main yellow centreline with cyan only.
+ for(let d=18;d<78;d+=16){
+  const c={x:hold.x-ux*d,z:hold.z-uz*d};
+  for(const side of [-1,1]){
+   jcTaxiSignsLine(group,{x:c.x+rx*side*5-ux*5,z:c.z+rz*side*5-uz*5},
+    {x:c.x+rx*side*5+ux*5,z:c.z+rz*side*5+uz*5},.65,markings,jcTaxiSignsPaintY(.04));
+  }
+ }
+}
+function jcTaxiSignsMake(){
+ if(!It?.scene||!_t||!E?.plane||E.state!=='play')return;
+ const mode=E.phase==='taxiIn'?'in':E.phase==='taxi'||E.phase==='takeoff'?'out':null;
+ if(!mode)return;
+ const runway=String((mode==='in'?(pt.ils?.rwy||pt.arrRwy):pt.depRwy)||'RWY')
+  .replace(/^RWY\s*/i,'').toUpperCase();
+ const rec=String(mode==='in'?pt.dest:pt.from||'').toUpperCase();
+ if(mode==='in'&&E.groundTaxi?.mode!=='in')return;
+ const path=mode==='in'?E.groundTaxi.waypoints:jetTaxiPathDeparture();
+ if(!Array.isArray(path)||path.length<2)return;
+ const sig=[rec,runway,mode,It.scene.uuid||'',path.map(p=>`${Math.round(p.x)},${Math.round(p.z)}`).join(';')].join('|');
+ if(jcTaxiSigns.scene===It.scene&&jcTaxiSigns.signature===sig&&jcTaxiSigns.group?.parent===It.scene)return;
+ jcTaxiSignsDispose();
+ const group=new me();group.name='JC_AIRFIELD_DAY_NIGHT_TAXI_MARKINGS_AND_SIGNS';
+ const center=new be({color:0xffd13b,depthWrite:false,side:2,toneMapped:false});
+ const holdMat=new be({color:0xffde37,depthWrite:false,side:2,toneMapped:false});
+ const edgeMat=new be({color:0xd4b63b,transparent:true,opacity:.8,depthWrite:false,side:2});
+ // Paint is always visible by DAY AND NIGHT: not a child of the night-lights group.
+ for(let i=1;i<path.length;i++){
+  const a=path[i-1],b=path[i],dx=b.x-a.x,dz=b.z-a.z;
+  const length=Math.hypot(dx,dz);if(length<1)continue;
+  jcTaxiSignsLine(group,a,b,1.25,center,jcTaxiSignsPaintY(.04));
+  if(length>50){const nx=-dz/length,nz=dx/length;
+   for(const side of [-1,1]){
+    jcTaxiSignsLine(group,{x:a.x+nx*10.7*side,z:a.z+nz*10.7*side},
+     {x:b.x+nx*10.7*side,z:b.z+nz*10.7*side},.48,edgeMat,jcTaxiSignsPaintY(.02));
+   }
+  }
+ }
+ // Airport-style signs are added at appropriate taxiway points. These are
+ // generated examples, not assertions about each airport's real taxiway names.
+ const holdIndex=mode==='out'?Math.min(path.length-2,E.groundTaxi?.holdIndex??3):null;
+ if(mode==='out'){
+  jcTaxiSignsHoldLines(group,path,holdIndex,holdMat,center);
+  jcTaxiSignsByPath(group,path,0,'A','location',-1,22,22);
+  jcTaxiSignsByPath(group,path,Math.min(1,path.length-1),'← B  C →','direction',1,26,41);
+  jcTaxiSignsByPath(group,path,Math.max(1,holdIndex-1),'→ '+runway,'direction',1,28,39);
+  jcTaxiSignsByPath(group,path,holdIndex,runway,'mandatory',-1,27,26);
+  // Dedicated low-visibility mandatory example (not a certified airport CAT).
+  const lowVis=E.scen?.k?.heavy||/FOG|STORM|SNOW/i.test(String(E.scen?.wx||''));
+  if(lowVis)jcTaxiSignsByPath(group,path,holdIndex,runway+' CAT II/III','cat',1,37,54);
+  else jcTaxiSignsByPath(group,path,holdIndex,runway+' CAT I','cat',1,37,43);
+  // NO ENTRY is a separate, off-route restricted-branch example; never show
+  // it on the path the pilot is instructed to taxi onto the departure runway.
+  if(path.length>5)jcTaxiSignsByPath(group,path,path.length-1,'','no-entry',1,105,23);
+ }else{
+  jcTaxiSignsByPath(group,path,0,runway+' EXIT','direction',1,25,47);
+  jcTaxiSignsByPath(group,path,Math.min(2,path.length-1),'A','location',-1,22,22);
+  jcTaxiSignsByPath(group,path,path.length-1,'← APRON','destination',1,27,45);
+  if(path.length>3)jcTaxiSignsByPath(group,path,path.length-2,'A  ||  ||','vacated',-1,30,42);
+ }
+ // A runway sign at the approach to each depicted runway is generated from
+ // the same geometry used on the ND, including reciprocal runway directions.
+ // Limit sign count on major airports to protect framerate on phones.
+ try{
+  const strips=jetTrafficNDRunwayGeometry(E).slice(0,10);
+  let placed=0;
+  for(const r of strips){
+   const a=r.centerStart,b=r.centerEnd;if(!a||!b)continue;
+   const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
+   if(!Number.isFinite(len)||len<100)continue;
+   const x=dx/len,z=dz/len,off=Math.min(90,len*.13);
+   const start={x:a[0]+x*off-z*67,z:a[1]+z*off+x*67};
+   const id=String(r.id||'').replace(/^RWY\s*/i,'').toUpperCase();
+   const opposite=String(r.opposite||'').replace(/^RWY\s*/i,'').toUpperCase();
+   if(!id)continue;
+   jcTaxiSignsBoard(group,start,opposite?`${id}-${opposite}`:id,'mandatory',Math.atan2(-x,-z),37);
+   placed++;
+   if(placed>=10)break;
+  }
+ }catch(_e){}
+ It.scene.add(group);
+ jcTaxiSigns.group=group;jcTaxiSigns.scene=It.scene;jcTaxiSigns.signature=sig;
+}
+function jcTaxiSignsTick(){
+ if(E.state!=='play'){if(jcTaxiSigns.group)jcTaxiSignsDispose();return;}
+ // For map/scenery scene transitions (including destination diversions), rebuild
+ // once; never perform per-frame mesh/texture allocation.
+ const now=Date.now();if(now-jcTaxiSigns.lastCheck<600)return;
+ jcTaxiSigns.lastCheck=now;
+ if(E.phase==='taxi'||E.phase==='takeoff'||E.phase==='taxiIn')jcTaxiSignsMake();
+ else if(jcTaxiSigns.group)jcTaxiSignsDispose();
+}
+window.__jcTaxiSigns={refresh:()=>{jcTaxiSignsDispose();jcTaxiSignsMake();},
+ state:()=>({built:!!jcTaxiSigns.group,mode:E.phase,count:jcTaxiSigns.group?.children?.length||0,
+  runway:jcTaxiSigns.signature.split('|')[1]||''})};
+
 function jcAirportUiTick(){
  jcDesktopRunwayUiTick();
+ jcTaxiSignsTick();
  if(!document.getElementById('jc-global-map-button')){
   const button=document.createElement('button');button.type='button';button.id='jc-global-map-button';
   button.setAttribute('data-ui','true');button.textContent='▣ RUNWAY MAP';
@@ -7608,7 +7810,12 @@ function jcNightDom(){
    '<br><strong>Approach strobes</strong> lead toward the landing threshold.</p>'+
    '<b>PAPI 4 LAMPS</b><p>4 white = high; 3 white/1 red = slightly high; '+
    '<strong>2 white/2 red = about 3° path</strong>; 1 white/3 red = low; 4 red = too low.</p>'+
-   '<small>Changi-inspired lighting; runway-specific equipment may differ. Not for navigation.</small>';
+   '<b>AIRFIELD SIGNS · DAY & NIGHT</b><p><strong>Black / yellow</strong> = taxiway location; '+
+   '<strong>yellow / black</strong> = direction, exit, or apron; '+
+   '<strong>red / white</strong> = runway hold, ILS CAT holding, or no entry.'+
+   '<br>Yellow taxiway centreline and the solid/dashed hold bars stay visible in daylight.</p>'+
+   '<small>Runway identifiers use airport data. Taxiway letters, CAT signs, connector roads and '+
+   'holding positions are fictional game examples, not published ground charts. Not for navigation.</small>';
   guide.querySelector('button').onclick=()=>{jcNight.guideOpen=false;guide.hidden=true;};
   document.body.appendChild(guide);
  }
