@@ -6879,47 +6879,164 @@ function jcFullOverlayEnsure(){
  root.setAttribute('data-ui','true');root.setAttribute('aria-label','Minimal flight controls');
  root.innerHTML=`<div class="jc-min-top"><span>TAXIING · <b id="jc-min-phase">FLIGHT</b></span><span id="jc-min-speed">SPD ---</span><span id="jc-min-hdg">HDG ---</span><span id="jc-min-alt">ALT ---</span><span id="jc-min-vs">V/S ---</span></div>
  <div class="jc-min-buttons">
-  <button type="button" data-jc-hold="left" aria-label="Steer left">◀ LEFT</button>
-  <button type="button" data-jc-hold="brake" aria-label="Hold brakes">BRAKE</button>
-  <button type="button" data-jc-hold="right" aria-label="Steer right">RIGHT ▶</button>
-  <button type="button" data-jc-hold="pitch-up" aria-label="Hold to pitch up">PITCH ↑</button>
-  <button type="button" data-jc-hold="pitch-down" aria-label="Hold to pitch down">PITCH ↓</button>
-  <button type="button" data-jc-action="throttle-down" aria-label="Reduce throttle">THR −</button>
-  <button type="button" data-jc-action="throttle-up" aria-label="Increase throttle">THR +</button>
-  <button type="button" data-jc-action="gear" id="jc-min-gear">GEAR</button>
-  <button type="button" data-jc-action="flaps" id="jc-min-flaps">FLAP</button>
-  <button type="button" data-jc-action="spoiler" id="jc-min-spoiler">SPLR</button>
-  <button type="button" data-jc-action="runways" id="jc-mini-runways-btn" aria-expanded="false">RWY INFO</button>
-  <button type="button" data-jc-action="map" id="jc-mini-map-btn">RUNWAY MAP</button>
-  <button type="button" data-jc-action="max" class="jc-min-max">PANEL 65%</button>
+  <div class="jc-min-five-cols jc-min-cockpit-controls" aria-label="Touch thrust lever, landing switches and Thrustmaster-style flight stick">
+   <div class="jc-min-side jc-min-left">
+    <button type="button" data-jc-hold="left" aria-label="Hold to steer left">◀ LEFT</button>
+    <button type="button" data-jc-hold="brake-left" aria-label="Hold left brake">BRAKE L</button>
+   </div>
+   <div id="jc-min-throttle-slide" class="jc-mini-throttle" role="slider" tabindex="0" aria-label="Thrust lever; drag upward to increase thrust, downward to decrease" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <span class="jc-control-heading">THRUST</span>
+    <div class="jc-thr-rail" aria-hidden="true"><span class="jc-thr-track"><i class="jc-thr-handle"></i></span><span class="jc-thr-mark"><span>MAX</span><span>CL</span><span>IDLE</span></span></div>
+    <output id="jc-min-throttle" class="jc-mini-thr-readout">THR 0%</output>
+   </div>
+   <div class="jc-min-devices" aria-label="Gear, flaps and spoilers switches">
+    <button type="button" data-jc-action="gear" class="jc-mini-device" aria-label="Toggle landing gear up or down"><span>GEAR</span><span class="jc-device-steps" aria-hidden="true"><i></i><i></i><i></i></span><output id="jc-min-gear">DN</output></button>
+    <button type="button" data-jc-action="flaps" class="jc-mini-device" aria-label="Cycle flap detents 0, 1 and 3"><span>FLAPS</span><span class="jc-device-steps" aria-hidden="true"><i></i><i></i><i></i></span><output id="jc-min-flaps">1</output></button>
+    <button type="button" data-jc-action="spoiler" class="jc-mini-device" aria-label="Cycle spoilers off, arm and on"><span>SPLR</span><span class="jc-device-steps" aria-hidden="true"><i></i><i></i><i></i></span><output id="jc-min-spoiler">OFF</output></button>
+   </div>
+   <div id="jc-min-stick-pad" class="jc-mini-stick" role="group" aria-label="Thrustmaster-style two axis joystick; drag the handle to roll and pitch">
+    <span class="jc-control-heading">FLIGHT STICK</span>
+    <div class="jc-stick-zone" aria-label="Drag to steer aircraft pitch and roll" tabindex="0" role="application">
+     <span class="jc-stick-ring"></span><span class="jc-stick-cross"></span>
+     <span class="jc-stick-grip" aria-hidden="true"><i class="jc-stick-trigger"></i><i class="jc-stick-shaft"></i><i class="jc-stick-thumb"></i></span>
+    </div>
+    <span class="jc-stick-caption">DRAG · RETURNS TO CENTRE</span>
+   </div>
+   <div class="jc-min-side jc-min-right">
+    <button type="button" data-jc-hold="right" aria-label="Hold to steer right">RIGHT ▶</button>
+    <button type="button" data-jc-hold="brake-right" aria-label="Hold right brake">BRAKE R</button>
+   </div>
+  </div>
+  <div class="jc-min-shortcuts" aria-label="Taxiing navigation controls">
+   <button type="button" data-jc-action="runways" id="jc-mini-runways-btn" aria-expanded="false">RWY INFO</button>
+   <button type="button" data-jc-action="map" id="jc-mini-map-btn">RUNWAY MAP</button>
+   <button type="button" data-jc-action="max" class="jc-min-max">PANEL 65%</button>
+  </div>
  </div>`;
  document.body.appendChild(root);
- const held={left:false,right:false,brake:false,'pitch-up':false,'pitch-down':false};
- root.__releaseHolds=()=>{for(const k of Object.keys(held))held[k]=false;syncHeld()};
+ const held={left:false,right:false,'brake-left':false,'brake-right':false};
+ const throttle=root.querySelector('#jc-min-throttle-slide');
+ const rail=throttle.querySelector('.jc-thr-rail');
+ const thumb=throttle.querySelector('.jc-thr-handle');
+ const stick=root.querySelector('#jc-min-stick-pad');
+ const zone=stick.querySelector('.jc-stick-zone');
+ const grip=stick.querySelector('.jc-stick-grip');
+ let throttlePointer=null,stickPointer=null;
+ const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
  function syncHeld(){
   $t.kx=(held.right?1:0)-(held.left?1:0);
   $t.kr=(held.right?1:0)-(held.left?1:0);
-  $t.ky=(held['pitch-down']?1:0)-(held['pitch-up']?1:0);
-  $t.kb=held.brake?1:0;
+  $t.kb=held['brake-left']||held['brake-right']?1:0;
   fn();
  }
+ function setThrottle(value){
+  if(E.state!=='play')return;
+  $t.lever=clamp(Number(value)||0,0,1);
+  if(E.plane?.reverseThrust)E.plane.reverseThrust=false;
+  drawThrottle();fn();
+ }
+ function drawThrottle(){
+  const pct=clamp(Math.round(Math.max(0,$t.lever)*100),0,100);
+  thumb.style.bottom=`${pct}%`;
+  throttle.setAttribute('aria-valuenow',String(pct));
+  throttle.setAttribute('aria-valuetext',`${pct} percent thrust`);
+  const readout=root.querySelector('#jc-min-throttle');if(readout)readout.textContent=`THR ${pct}%`;
+ }
+ function throttleAt(ev){const r=rail.getBoundingClientRect();if(r.height>0)setThrottle((r.bottom-ev.clientY)/r.height);}
+ throttle.addEventListener('pointerdown',ev=>{
+  if(throttlePointer!==null)return;
+  ev.preventDefault();ev.stopPropagation();throttlePointer=ev.pointerId;
+  try{throttle.setPointerCapture(ev.pointerId)}catch{}
+  throttleAt(ev);
+ });
+ throttle.addEventListener('pointermove',ev=>{if(ev.pointerId===throttlePointer){ev.preventDefault();ev.stopPropagation();throttleAt(ev)}});
+ const stopThrottle=ev=>{if(ev.pointerId!==throttlePointer)return;ev.stopPropagation();throttlePointer=null;};
+ for(const name of ['pointerup','pointercancel','lostpointercapture'])throttle.addEventListener(name,stopThrottle);
+ throttle.addEventListener('keydown',ev=>{
+  let delta=0;
+  if(ev.key==='ArrowUp'||ev.key==='ArrowRight')delta=.05;
+  else if(ev.key==='ArrowDown'||ev.key==='ArrowLeft')delta=-.05;
+  else if(ev.key==='PageUp')delta=.2;
+  else if(ev.key==='PageDown')delta=-.2;
+  else if(ev.key==='Home'){setThrottle(0);ev.preventDefault();ev.stopPropagation();return;}
+  else if(ev.key==='End'){setThrottle(1);ev.preventDefault();ev.stopPropagation();return;}
+  else return;
+  ev.preventDefault();ev.stopPropagation();setThrottle($t.lever+delta);
+ });
+ const resetStick=()=>{
+  $t.sx=0;$t.sy=0;
+  grip.style.left='50%';grip.style.top='50%';
+  stick.dataset.moving='0';fn();
+ };
+ function stickAt(ev){
+  if(E.state!=='play')return;
+  const r=zone.getBoundingClientRect();
+  const max=Math.max(15,Math.min(r.width,r.height)*.30);
+  const cx=r.left+r.width/2,cy=r.top+r.height/2;
+  let dx=clamp((ev.clientX-cx)/max,-1,1),dy=clamp((ev.clientY-cy)/max,-1,1);
+  const length=Math.hypot(dx,dy);if(length>1){dx/=length;dy/=length;}
+  if(Math.abs(dx)<.045)dx=0;if(Math.abs(dy)<.045)dy=0;
+  $t.sx=dx;$t.sy=dy;
+  grip.style.left=`calc(50% + ${dx*max}px)`;
+  grip.style.top=`calc(50% + ${dy*max}px)`;
+  stick.dataset.moving='1';fn();
+ }
+ zone.addEventListener('pointerdown',ev=>{
+  if(stickPointer!==null)return;
+  ev.preventDefault();ev.stopPropagation();stickPointer=ev.pointerId;
+  try{zone.setPointerCapture(ev.pointerId)}catch{}
+  stickAt(ev);
+ });
+ zone.addEventListener('pointermove',ev=>{if(ev.pointerId===stickPointer){ev.preventDefault();ev.stopPropagation();stickAt(ev)}});
+ const stopStick=ev=>{if(ev.pointerId!==stickPointer)return;ev.stopPropagation();stickPointer=null;resetStick()};
+ for(const name of ['pointerup','pointercancel','lostpointercapture'])zone.addEventListener(name,stopStick);
+ // Keyboard fallback; hardware Thrustmaster/Gamepad input remains supported by the base engine.
+ zone.addEventListener('keydown',ev=>{
+  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(ev.key))return;
+  ev.preventDefault();ev.stopPropagation();
+  const x=ev.key==='ArrowLeft'?-.55:ev.key==='ArrowRight'?.55:0;
+  const y=ev.key==='ArrowUp'?-.55:ev.key==='ArrowDown'?.55:0;
+  $t.sx=x;$t.sy=y;
+  const r=zone.getBoundingClientRect(),reach=Math.min(r.width,r.height)*.30;
+  grip.style.left=`calc(50% + ${x*reach}px)`;grip.style.top=`calc(50% + ${y*reach}px)`;
+  stick.dataset.moving='1';fn();
+ });
+ zone.addEventListener('keyup',ev=>{if(ev.key.startsWith('Arrow')){ev.preventDefault();ev.stopPropagation();resetStick()}});
+ zone.addEventListener('blur',resetStick);
+ root.__releaseHolds=()=>{
+  for(const k of Object.keys(held))held[k]=false;
+  throttlePointer=null;stickPointer=null;
+  resetStick();syncHeld();
+ };
+ root.__syncMiniThrottle=drawThrottle;
+ window.addEventListener('blur',()=>root.__releaseHolds?.());
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)root.__releaseHolds?.()});
  for(const b of root.querySelectorAll('[data-jc-hold]')){
   const k=b.getAttribute('data-jc-hold');
-  b.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();held[k]=true;syncHeld();try{b.setPointerCapture(ev.pointerId)}catch{}});
+  b.addEventListener('pointerdown',ev=>{
+   ev.preventDefault();ev.stopPropagation();held[k]=true;syncHeld();
+   try{b.setPointerCapture(ev.pointerId)}catch{}
+  });
   const release=ev=>{ev.stopPropagation();held[k]=false;syncHeld()};
-  b.addEventListener('pointerup',release);b.addEventListener('pointercancel',release);b.addEventListener('lostpointercapture',release);
+  for(const name of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(name,release);
  }
+ drawThrottle();resetStick();
  root.addEventListener('click',ev=>{
   const b=ev.target.closest('button[data-jc-action]');if(!b)return;
   ev.preventDefault();ev.stopPropagation();
   if(E.state!=='play')return;
   const type=b.getAttribute('data-jc-action');
-  if(type==='throttle-up'||type==='throttle-down'){
-   $t.lever=Math.max(-.28,Math.min(1,$t.lever+(type==='throttle-up'?.08:-.08)));fn();
-  }else if(type==='gear')tc(true);
-  else if(type==='flaps')ec(true);
+  if(type==='gear')tc(true);
+  else if(type==='flaps'){
+   const p=E.plane;
+   const max=p.hydFail?2:3;
+   const next=(p.flaps||0)===0?1:(p.flaps||0)<max?max:0;
+   p.flaps=next;wt.play('tap',.38);ee('flaps',next);fn();
+  }
   else if(type==='spoiler'){
-   E.plane.spoilMode=((Number(E.plane.spoilMode)||0)+1)%3;wt.play('tap',.38);fn();
+   const next=((Number(E.plane.spoilMode)||0)+1)%3;
+   if(window.__game?.setSpoilers)window.__game.setSpoilers(next);
+   else {E.plane.spoilMode=next;wt.play('tap',.38);fn();}
   }else if(type==='runways'){
    if(jetTrafficActiveAirport()!=='WSSS'){jcSurfaceToggle(true);return;}
    jcRunwayPanelOpen=!jcRunwayPanelOpen;
@@ -7037,6 +7154,7 @@ function jcMinControlTick(){
   if(jcMapVisible)jcSurfaceToggle(false);
  }
  if(!jcFullUI&&mobile)jcFullOverlayEnsure();
+ if(jcFullUI&&je.open)jcFullUI.__releaseHolds?.();
  if(jcFullUI){
   if(!mobile&&jcWasMobileMin)jcFullUI.__releaseHolds?.();
   jcFullUI.classList.toggle('active',mobile);
@@ -7050,9 +7168,17 @@ function jcMinControlTick(){
  set('jc-min-hdg',`HDG ${Math.round((p.psi*180/Math.PI+360)%360).toString().padStart(3,'0')}°`);
  set('jc-min-alt',`ALT ${Math.round((p.y||0)*oe)}FT`);
  set('jc-min-vs',`V/S ${Math.round((p.vy||0)*hi)}FPM`);
- set('jc-min-gear',`GEAR ${p.gear?'DN':'UP'}`);
- set('jc-min-flaps',`FLAP ${p.flaps||0}`);
- set('jc-min-spoiler',`SPLR ${['OFF','ARM','ON'][Number(p.spoilMode)||0]||'OFF'}`);
+ const gearInTransit=Number.isFinite(p.gearT)&&Math.abs(p.gearT-p.gear)>.18;
+ set('jc-min-gear',gearInTransit?'MOVING':p.gear?'DOWN':'UP');
+ set('jc-min-flaps',`F${p.flaps||0}`);
+ const spoilerIndex=Number(p.spoilMode)||0;
+ set('jc-min-spoiler',['OFF','ARM','ON'][spoilerIndex]||'OFF');
+ const buttons=[['gear',gearInTransit?1:(p.gear?2:0)],['flaps',(p.flaps||0)===0?0:(p.flaps||0)===1?1:2],['spoiler',Math.max(0,Math.min(2,spoilerIndex))]];
+ for(const [key,pos] of buttons){
+  const button=jcFullUI?.querySelector(`[data-jc-action="${key}"]`);
+  if(button)button.dataset.position=String(pos);
+ }
+ jcFullUI?.__syncMiniThrottle?.();
 }
 // Airport surface maps are NORTH-UP, just like the geographic radar.
 // Never use the flight-simulator's local x/z axes directly as map east/north:
@@ -11058,5 +11184,224 @@ body.jc-intro-flight-tools #jc-intro-tools-dock{display:block;}
 })();
 </script>
 
+
+<style id="jc-taxiing-five-column-layout-v2">
+/* TAXIING view: LEFT | THRUST | GEAR/FLAPS/SPOILERS | STICK | RIGHT.
+   Two brakes directly below steering; accessible 3-row center stack.
+   All native 65%/55% cockpit rules and right-side desktop remain intact. */
+body.jc-scene-min #jc-flight-min-overlay .jc-min-buttons{
+  display:flex!important;flex-direction:column!important;gap:5px!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols{
+  display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;
+  grid-template-rows:repeat(3,minmax(33px,auto))!important;gap:5px!important;
+  width:100%;align-items:stretch;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button{
+  min-width:0;min-height:38px!important;max-width:100%;padding:5px 2px!important;
+  font-size:clamp(9px,2.3vw,13px)!important;line-height:1.1!important;
+  font-weight:900;white-space:nowrap!important;overflow:hidden;text-overflow:clip;
+  border-radius:8px;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button[data-jc-hold^="brake"]{
+  background:#774330!important;border-color:#ffa66a!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button[data-jc-action^="throttle"]{
+  background:#123f4d!important;border-color:#63bdd5!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button[data-jc-hold^="pitch"],
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button[data-jc-hold="stick-neutral"]{
+  background:#1d3957!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button[data-jc-action="gear"],
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button[data-jc-action="flaps"],
+body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button[data-jc-action="spoiler"]{
+  background:#205258!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-blank{display:block;min-height:0;pointer-events:none}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-shortcuts{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;width:100%;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-shortcuts button{
+  min-width:0;min-height:32px!important;padding:4px 2px!important;
+  font-size:clamp(9px,2.2vw,12px)!important;white-space:nowrap!important;
+}
+body.jc-scene-min #jc-flight-min-overlay.active{
+  max-height:min(36dvh,350px)!important;overflow-x:hidden!important;overflow-y:auto!important;
+  padding:5px max(7px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left));
+}
+@media(max-height:530px) and (orientation:landscape){
+  body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols{
+    grid-template-rows:repeat(3,minmax(25px,auto))!important;gap:3px!important;
+  }
+  body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button{min-height:26px!important;font-size:10px!important;padding:3px 1px!important;}
+  body.jc-scene-min #jc-flight-min-overlay .jc-min-shortcuts button{min-height:26px!important;}
+  body.jc-scene-min #jc-flight-min-overlay.active{max-height:43dvh!important;}
+}
+@media(max-width:360px){
+  body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols{gap:3px!important;}
+  body.jc-scene-min #jc-flight-min-overlay .jc-min-five-cols button{font-size:9px!important;padding:3px 1px!important;}
+}
+</style>
+<style id="jc-compact-thrust-detent-labels">
+/* In 65% / 55% cockpit modes, keep the physical thrust detent legends legible
+   without the large FLX / CL / IDLE / REVERSE lettering overlapping. */
+body.jc-mobile-panel:not(.jc-scene-min) #ui.playing .det-lbl {
+ font-size:clamp(6px,0.85vw,9px)!important;line-height:1!important;letter-spacing:0!important;
+ text-shadow:0 1px 2px #000!important;
+}
+body.jc-mobile-panel:not(.jc-scene-min) #ui.playing .lever-lbl {
+ font-size:clamp(7px,1vw,10px)!important;line-height:1!important;letter-spacing:0!important;
+}
+body.jc-mobile-panel:not(.jc-scene-min) #jc-reverse-idle {
+ font-size:clamp(8px,1vw,10px)!important;min-width:0!important;min-height:14px!important;
+ padding:0 3px!important;letter-spacing:0!important;
+}
+</style>
+
+<style id="jc-mini-analog-controls-v3">
+/* TAXIING only: touchscreen analog throttle and pitch/roll stick; original
+   instruments and physical Gamepad/HOTAS controls remain untouched. */
+body.jc-scene-min #jc-flight-min-overlay .jc-min-cockpit-controls{
+ display:grid!important;
+ grid-template-columns: minmax(0,.91fr) minmax(0,.95fr) minmax(0,1fr) minmax(0,1.32fr) minmax(0,.91fr)!important;
+ grid-template-rows:minmax(135px,18.5dvh)!important;gap:5px!important;
+ width:100%;align-items:stretch;min-height:135px;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-control-col,
+body.jc-scene-min #jc-flight-min-overlay .jc-min-side,
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-throttle,
+body.jc-scene-min #jc-flight-min-overlay .jc-min-devices,
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-stick{
+ min-width:0;min-height:0;box-sizing:border-box;touch-action:none;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-side{
+ display:grid;grid-template-rows:1fr 1fr;gap:5px;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-side button{
+ padding:4px 1px!important;min-height:0!important;white-space:normal!important;
+ font-size:clamp(8px,2.25vw,12px)!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-side button[data-jc-hold^="brake"]{
+ background:#81452c!important;border-color:#e8a275!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-throttle{
+ display:flex;flex-direction:column;align-items:center;justify-content:space-around;
+ border:1px solid #3c90aa;border-radius:8px;background:linear-gradient(180deg,#1a3e55,#0a2438);
+ color:#eafaff;outline-offset:2px;cursor:ns-resize;user-select:none;-webkit-user-select:none;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-control-heading{
+ flex:0 0 auto;font:900 clamp(8px,1.9vw,11px)/1.1 system-ui;text-align:center;color:#9befff;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-thr-rail{
+ position:relative;flex:1 1 auto;align-self:stretch;margin:4px 8px 10px;min-height:50px;
+ display:flex;align-items:stretch;justify-content:center;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-thr-track{
+ height:100%;width:16px;border-radius:9px;background:#020b14;
+ box-shadow:inset 1px 1px 4px #000,0 0 0 1px #52798c;
+ position:relative;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-thr-handle{
+ position:absolute;left:50%;bottom:0;width:32px;height:17px;border-radius:5px;
+ transform:translate(-50%,50%);background:linear-gradient(145deg,#d9e1e9,#5e6d7a 45%,#273d54 60%,#b3c5d1);
+ border:1px solid #a6c9dd;box-shadow:1px 2px 4px #000b;pointer-events:none;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-thr-handle::after{
+ content:"";display:block;width:66%;height:2px;background:#3bdaeb;margin:7px auto 0;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-thr-mark{
+ position:absolute;top:0;right:0;bottom:0;font:700 7px/2.8 system-ui;color:#a4cbd4;
+ display:flex;flex-direction:column;justify-content:space-between;text-align:right;pointer-events:none;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-thr-readout{
+ flex:0 0 auto;font:900 clamp(8px,1.9vw,11px)/1.2 system-ui;color:#7afbe2;
+ white-space:nowrap;text-align:center;margin-bottom:3px;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-devices{
+ display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:5px;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-min-devices .jc-mini-device{
+ display:flex;flex-direction:column;align-items:center;justify-content:center;
+ padding:2px 1px!important;min-height:0!important;width:100%;
+ background:linear-gradient(#20516a,#112c43)!important;border:1px solid #5b9bb1!important;
+ font-size:clamp(8px,1.9vw,11px)!important;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-device output{
+ color:#b6fff1;font:900 clamp(8px,1.9vw,11px)/1.1 system-ui;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-device-steps{
+ display:flex;gap:4px;margin:2px 0;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-device-steps i{
+ display:block;width:10px;max-width:2.4vw;height:4px;border-radius:2px;background:#526c78;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-device[data-position="0"] .jc-device-steps i:first-child,
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-device[data-position="1"] .jc-device-steps i:nth-child(2),
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-device[data-position="2"] .jc-device-steps i:nth-child(3){
+ background:#56f6c9;box-shadow:0 0 5px #57f6c9;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-stick{
+ display:flex;flex-direction:column;gap:2px;align-items:center;justify-content:space-around;
+ border:1px solid #4c789a;border-radius:10px;background:linear-gradient(#203e58,#0a253e);
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-zone{
+ position:relative;flex:1 1 auto;width:100%;min-height:55px;
+ cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden;
+ outline-offset:-3px;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-ring{
+ position:absolute;left:50%;top:50%;width:min(76%,96px);aspect-ratio:1;
+ border-radius:50%;transform:translate(-50%,-50%);
+ background:radial-gradient(circle,#0c1928 0 28%,#243b50 38%,#080f1c 68%,#466d86 76%,#102b42 82%);
+ border:2px solid #4b7995;box-shadow:inset 0 4px 8px #000a,0 0 4px #0008;
+ pointer-events:none;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-cross{
+ position:absolute;left:50%;top:50%;width:55%;height:55%;
+ transform:translate(-50%,-50%);pointer-events:none;opacity:.3;
+ background:linear-gradient(transparent calc(50% - .5px),#b3dae8 50%,transparent calc(50% + .5px)),
+ linear-gradient(90deg,transparent calc(50% - .5px),#b3dae8 50%,transparent calc(50% + .5px));
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-grip{
+ position:absolute;left:50%;top:50%;width:27px;height:43px;
+ transform:translate(-50%,-51%) rotate(-9deg);border-radius:13px 11px 9px 9px;
+ background:linear-gradient(115deg,#243a4e,#101823 55%,#4b6278 89%);
+ border:1px solid #6e91ad;box-shadow:2px 5px 5px #000b;
+ transition:left .07s linear,top .07s linear;pointer-events:none;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-mini-stick[data-moving="1"] .jc-stick-grip{
+ transition:none;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-trigger{
+ position:absolute;width:11px;height:6px;left:-3px;top:12px;border-radius:3px;
+ background:linear-gradient(#ff9b53,#bc451f);box-shadow:0 1px 2px #000;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-shaft{
+ position:absolute;left:9px;bottom:-7px;width:9px;height:10px;border-radius:3px;background:#152234;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-thumb{
+ position:absolute;left:7px;top:4px;width:13px;height:7px;border-radius:5px;background:#476c86;
+ border:1px solid #89bacf;
+}
+body.jc-scene-min #jc-flight-min-overlay .jc-stick-caption{
+ font:800 clamp(6px,1.45vw,9px)/1 system-ui;color:#98bfd1;text-align:center;
+ margin-bottom:2px;
+}
+@media(max-height:530px) and (orientation:landscape){
+ body.jc-scene-min #jc-flight-min-overlay .jc-min-cockpit-controls{
+  grid-template-rows:minmax(108px,26dvh)!important;min-height:108px;gap:3px!important;
+ }
+ body.jc-scene-min #jc-flight-min-overlay .jc-min-cockpit-controls .jc-min-side button{min-height:0!important;}
+ body.jc-scene-min #jc-flight-min-overlay.active{max-height:47dvh!important;}
+ body.jc-scene-min #jc-flight-min-overlay .jc-stick-grip{height:31px;width:22px;}
+ body.jc-scene-min #jc-flight-min-overlay .jc-mini-stick .jc-stick-caption{display:none;}
+ body.jc-scene-min #jc-flight-min-overlay .jc-thr-mark{font-size:6px;}
+}
+@media(max-width:360px){
+ body.jc-scene-min #jc-flight-min-overlay .jc-thr-handle{width:27px;}
+ body.jc-scene-min #jc-flight-min-overlay .jc-mini-stick .jc-stick-caption{font-size:6px;}
+}
+</style>
 </body>
 </html>
