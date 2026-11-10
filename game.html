@@ -8668,14 +8668,17 @@ function jcEmReset(){jcCabinPAReset();jcEmRemoveRunway();Object.assign(jcEm,{act
  seatBonus:0,runway:null,advisory:'',manualStart:false,disasterTriggered:false});
  const b=document.getElementById('jc-emergency');if(b)b.style.display='none';
 }
-/* JC CABIN PA — two user-supplied recordings: the existing takeoff/landing
-   recording and the user's new airborne announcement extracted from MP4.
-   Audio is played through the existing effects bus; no synthetic cloning. */
+/* JC CABIN PA — three separately supplied recordings: departure, airborne,
+   and localiser-capture landing. All play through the existing effects bus.
+   Localiser capture uses the core flight simulator's LOC CAPTURED flag; it is
+   not inferred from proximity to the runway or radar traffic. */
 const jcCabinPA={
  file:'audio/cabin_announcer_recorded.mp3',
  airborneFile:'audio/cabin_airborne_seatbelts.mp3?v=user-recording-20261110',
+ landingFile:'audio/cabin_landing_localiser.mp3?v=loc-capture-20261110',
  buffers:{},loads:{},failed:{},source:null,
  takeoffPlayed:false,landingPlayed:false,airbornePlayed:false,
+ localizerHandled:false,
  pending:'',lastAnnouncement:'',lastPhase:'',playCount:0,serial:0
 };
 function jcCabinPAStop(){
@@ -8685,15 +8688,17 @@ function jcCabinPAStop(){
 }
 function jcCabinPAReset(){
  jcCabinPAStop();jcCabinPA.takeoffPlayed=false;jcCabinPA.landingPlayed=false;
- jcCabinPA.airbornePlayed=false;jcCabinPA.pending='';
+ jcCabinPA.airbornePlayed=false;jcCabinPA.localizerHandled=false;
+ jcCabinPA.pending='';
  jcCabinPA.lastAnnouncement='';jcCabinPA.lastPhase='';jcCabinPA.failed={};
 }
 function jcCabinPALoad(kind){
- const key=kind==='airborne'?'airborne':'original';
+ const key=kind==='airborne'?'airborne':kind==='landing'?'landing':'original';
  if(jcCabinPA.buffers[key])return Promise.resolve(jcCabinPA.buffers[key]);
  if(jcCabinPA.loads[key])return jcCabinPA.loads[key];
  try{wt.unlock()}catch(_e){}
- const file=kind==='airborne'?jcCabinPA.airborneFile:jcCabinPA.file;
+ const file=kind==='airborne'?jcCabinPA.airborneFile:
+  kind==='landing'?jcCabinPA.landingFile:jcCabinPA.file;
  const load=fetch(file,{cache:'force-cache'})
   .then(response=>{if(!response.ok)throw new Error('Cabin audio HTTP '+response.status);
    return response.arrayBuffer();})
@@ -8707,13 +8712,13 @@ function jcCabinPALoad(kind){
  return load;
 }
 function jcCabinPAValidPhase(kind){
- if(kind==='landing')return E.phase==='approach';
+ if(kind==='landing')return E.phase==='approach'&&jcCabinPA.localizerHandled;
  if(kind==='airborne')return !E.plane?.onGround&&
   (E.phase==='takeoff'||E.phase==='route');
  return E.phase==='taxi'||(E.phase==='takeoff'&&!!E.plane?.onGround);
 }
 function jcCabinPAPlay(kind){
- const key=kind==='airborne'?'airborne':'original';
+ const key=kind==='airborne'?'airborne':kind==='landing'?'landing':'original';
  if(E.state!=='play'||!jcEm.seatOn||jcCabinPA.failed[key]||
   !jcCabinPAValidPhase(kind)||jcCabinPA.pending===kind)return;
  const field=kind==='landing'?'landingPlayed':kind==='airborne'?'airbornePlayed':'takeoffPlayed';
@@ -8745,9 +8750,25 @@ function jcCabinPAForPhase(justSwitchedOn=false){
   if(justSwitchedOn)jcCabinPAPlay('airborne');
  }else if(jcCabinPAValidPhase('takeoff'))jcCabinPAPlay('takeoff');
 }
+// The core simulator sets E.flags.loc at the instant it awards LOC CAPTURED
+// (ILS tuned, localiser valid and <1 dot, on the approach). This is *not*
+// equivalent to entering the approach phase or merely seeing an ILS signal.
+function jcCabinPALocalizerCaptured(){
+ return E.state==='play'&&E.phase==='approach'&&
+  !!E.flags?.loc&&!E.plane?.onGround;
+}
 function jcCabinPATick(){
  if(E.state!=='play')return;
  jcCabinPA.lastPhase=E.phase;
+ if(!jcCabinPA.localizerHandled&&jcCabinPALocalizerCaptured()){
+  jcCabinPA.localizerHandled=true;
+  // Indication and voice are coupled to the same LOC CAPTURED event.
+  // If the pilot left the sign ON from takeoff, replay only the new LANDING
+  // message here. Never play the previous takeoff recording during approach.
+  if(!jcEm.seatOn)jcEmSeatToggle(true);
+  else jcCabinPAPlay('landing');
+  try{ee('cabin_seatbelt_auto_landing','loc_captured')}catch(_e){}
+ }
  if(jcEm.seatOn)jcCabinPAForPhase(false);
 }
 function jcEmSeatRequired(){
@@ -8989,6 +9010,7 @@ function jcEmTick(dt){
 
 window.__game={cabinPAInfo(){return {source:'original recording for takeoff/landing, separate male synthesis for airborne',
   file:jcCabinPA.file,airborneFile:jcCabinPA.airborneFile,
+  landingFile:jcCabinPA.landingFile,localizerHandled:jcCabinPA.localizerHandled,
   seatBeltOn:jcEm.seatOn,takeoffPlayed:jcCabinPA.takeoffPlayed,
   landingPlayed:jcCabinPA.landingPlayed,airbornePlayed:jcCabinPA.airbornePlayed,
   lastAnnouncement:jcCabinPA.lastAnnouncement,
