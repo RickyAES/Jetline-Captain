@@ -10918,5 +10918,137 @@ body.jc-mcdu-expanded #jc-desktop-runways-btn {display:none!important;}
  #jc-desktop-runways-btn{padding:4px 7px;font-size:10px;top:calc(23vh + 33px);}
 }
 </style>
+
+<!-- Flight-selection layout repair: no independent utility controls over airport/level menu. -->
+<style id="jc-intro-flight-tools-style">
+/* Only on the INTRO flight-selection page. In flight, existing cockpit and
+   operational controls keep their original behaviors and positions. */
+body.jc-intro-flight-tools #jc-night-toggle,
+body.jc-intro-flight-tools #jc-night-guide-btn,
+body.jc-intro-flight-tools #jc-weather-atc,
+body.jc-intro-flight-tools #jc-emergency,
+body.jc-intro-flight-tools #jc-panel-view-modes,
+body.jc-intro-flight-tools #jet-runway-traffic,
+body.jc-intro-flight-tools #jet-taxi-box,
+body.jc-intro-flight-tools #jc-desktop-runways-btn,
+body.jc-intro-flight-tools #jc-global-map-button,
+body.jc-intro-flight-tools #ui .comm.show {
+ display:none!important;visibility:hidden!important;pointer-events:none!important;
+}
+#jc-intro-tools-dock{display:none;position:fixed;
+ left:max(8px,env(safe-area-inset-left));top:clamp(96px,14vh,162px);
+ width:max-content;max-width:calc(100vw - 16px);z-index:115;
+ pointer-events:auto;color:#e6f7ff;font:700 12px/1.3 system-ui,Arial,sans-serif;
+}
+body.jc-intro-flight-tools #jc-intro-tools-dock{display:block;}
+#jc-intro-tools-dock button{touch-action:manipulation;cursor:pointer;}
+#jc-intro-tools-toggle{display:flex;align-items:center;justify-content:center;
+ min-height:40px;gap:6px;padding:7px 11px;border-radius:11px;
+ border:1.5px solid #6bd6f4;background:rgba(8,33,57,.94);color:#e4faff;
+ box-shadow:0 3px 12px #0018;font:800 12px/1.05 system-ui,sans-serif;
+}
+#jc-intro-tools-toggle[aria-expanded="true"]{background:#164769;border-color:#8cf4e5;}
+#jc-intro-tools-drawer{box-sizing:border-box;position:relative;margin-top:7px;
+ width:min(274px,calc(100vw - 20px));max-height:min(64dvh,550px);overflow-y:auto;
+ padding:10px;border-radius:13px;border:1px solid #68cce6;
+ background:rgba(4,21,38,.98);box-shadow:0 12px 29px #000b;
+ overscroll-behavior:contain;
+}
+#jc-intro-tools-drawer[hidden]{display:none!important;}
+#jc-intro-tools-drawer .jc-options-title{font:900 13px/1.2 system-ui;color:#91eaff;letter-spacing:.06em;margin:0 0 9px;}
+#jc-intro-tools-drawer .jc-options-sub{margin:9px 0 5px;color:#bcd4e3;font-size:10px;letter-spacing:.03em;}
+#jc-intro-tools-drawer .jc-options-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+#jc-intro-tools-drawer button.jc-options-action{display:block;width:100%;min-height:42px;
+ border:1px solid #427f9d;border-radius:8px;background:#153954;color:#e7f9ff;
+ padding:7px 8px;text-align:center;font:800 11px/1.15 system-ui,sans-serif;}
+#jc-intro-tools-drawer button.jc-options-action:hover,
+#jc-intro-tools-drawer button.jc-options-action:focus-visible{background:#215a75;border-color:#9beddc;outline:none;}
+#jc-intro-tools-drawer .jc-options-hint{font:600 10px/1.45 system-ui;color:#a2c7d6;
+ border-top:1px solid #315469;padding-top:8px;margin-top:8px;}
+#jc-intro-online{margin-top:8px;color:#8af4bd;font:750 11px/1.35 system-ui;}
+#jc-intro-tools-dock .jc-options-close{width:100%;margin-top:7px;padding:7px;
+ border-radius:7px;background:#14354c;border:1px solid #416c81;
+ color:#bedde9;font-weight:800;font-size:10px;}
+@media(max-width:550px){
+ #jc-intro-tools-dock{top:clamp(69px,12vh,108px);}
+ #jc-intro-tools-toggle{min-height:32px;font-size:10px;padding:6px 8px;}
+ #jc-intro-tools-drawer{width:min(254px,calc(100vw - 18px));max-height:56dvh;}
+}
+@media(max-height:500px) and (orientation:landscape){
+ #jc-intro-tools-dock{top:62px;}
+ #jc-intro-tools-drawer{max-height:calc(100dvh - 108px);}
+}
+</style>
+<script id="jc-intro-flight-tools-script">
+(()=>{
+ 'use strict';
+ if(document.getElementById('jc-intro-tools-dock'))return;
+ const dock=document.createElement('aside');dock.id='jc-intro-tools-dock';
+ dock.dataset.ui='true';dock.setAttribute('aria-label','Flight menu side options');
+ dock.innerHTML=`<button id="jc-intro-tools-toggle" type="button" aria-expanded="false"
+ aria-controls="jc-intro-tools-drawer" title="Flight menu options">☰ OPTIONS</button>
+ <div id="jc-intro-tools-drawer" hidden>
+ <div class="jc-options-title">FLIGHT OPTIONS</div>
+ <div class="jc-options-row">
+ <button class="jc-options-action" type="button" data-jc-intro-tool="day">☀ DAY / NIGHT</button>
+ <button class="jc-options-action" type="button" data-jc-intro-tool="lights">? RUNWAY LIGHTS</button>
+ <button class="jc-options-action" type="button" data-jc-intro-tool="wx">☁ WX RADAR ON</button>
+ <button class="jc-options-action" type="button" data-jc-intro-tool="ranking">🏆 LIVE PILOTS</button>
+ </div>
+ <div id="jc-intro-online" aria-live="off">Pilots: checking status…</div>
+ <div class="jc-options-sub">IN-FLIGHT SAFETY</div>
+ <div class="jc-options-hint">Seat belts, emergency scenarios and ATC diversion become available once the flight starts. These controls will appear during flight.</div>
+ <button class="jc-options-close" type="button">CLOSE OPTIONS</button>
+ </div>`;
+ document.body.appendChild(dock);
+ const toggle=dock.querySelector('#jc-intro-tools-toggle');
+ const drawer=dock.querySelector('#jc-intro-tools-drawer');
+ const close=()=>{drawer.hidden=true;toggle.setAttribute('aria-expanded','false')};
+ const open=()=>{drawer.hidden=false;toggle.setAttribute('aria-expanded','true')};
+ toggle.addEventListener('click',ev=>{ev.stopPropagation();drawer.hidden?open():close()});
+ dock.querySelector('.jc-options-close').addEventListener('click',ev=>{ev.stopPropagation();close()});
+ dock.addEventListener('pointerdown',ev=>ev.stopPropagation());
+ dock.addEventListener('click',ev=>ev.stopPropagation());
+ dock.querySelectorAll('[data-jc-intro-tool]').forEach(b=>b.addEventListener('click',ev=>{
+  ev.stopPropagation();const act=b.dataset.jcIntroTool;
+  if(act==='day') document.getElementById('jc-night-toggle')?.click();
+  else if(act==='lights') document.getElementById('jc-night-guide-btn')?.click();
+  else if(act==='wx') window.__game?.toggleWeatherRadar?.();
+  else if(act==='ranking'){
+   close();const ranking=document.querySelector('#ui .comm.show');
+   if(ranking)ranking.click();
+   else document.querySelector('[data-action="ranking"],#btnRanking')?.click();
+  }
+  update();
+ }));
+ document.addEventListener('keydown',ev=>{
+  if(ev.key==='Escape'&&!drawer.hidden){close();ev.stopPropagation();}
+ },true);
+ function update(){
+  const ui=document.getElementById('ui');
+  // The native flight selector controls are present only on the start screen.
+  // Do not infer state from viewport width: desktop and mobile share this menu.
+  const menuShown=!!ui&&!ui.classList.contains('playing')&&!ui.classList.contains('ended')&&
+   !!ui.querySelector('.lvsel.show,.aptsel,.start.show,.mcdu-open.show');
+  document.body.classList.toggle('jc-intro-flight-tools',menuShown);
+  if(!menuShown){if(!drawer.hidden)close();return;}
+  const native=document.getElementById('jc-night-toggle');
+  const mode=dock.querySelector('[data-jc-intro-tool="day"]');
+  if(native&&mode)mode.textContent=native.textContent.trim()+' · SCENE';
+  const wx=dock.querySelector('[data-jc-intro-tool="wx"]');
+  const weather=window.__game?.weatherInfo?.();
+  if(wx)wx.textContent='☁ WX RADAR '+(weather?.enabled===false?'OFF':'ON');
+  const comm=ui.querySelector('.comm.show');
+  const online=comm?.querySelector('.comm-on')?.textContent?.trim();
+  const flying=comm?.querySelector('.comm-fly')?.textContent?.trim();
+  dock.querySelector('#jc-intro-online').textContent=online?
+   `${online}${flying?' · '+flying:''}`:'ONLINE / PILOT STATUS IN RANKING';
+ }
+ update();
+ setInterval(update,400);
+ window.addEventListener('resize',update);
+})();
+</script>
+
 </body>
 </html>
