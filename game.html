@@ -8668,17 +8668,17 @@ function jcEmReset(){jcCabinPAReset();jcEmRemoveRunway();Object.assign(jcEm,{act
  seatBonus:0,runway:null,advisory:'',manualStart:false,disasterTriggered:false});
  const b=document.getElementById('jc-emergency');if(b)b.style.display='none';
 }
-/* JC CABIN PA — three separately supplied recordings: departure, airborne,
-   and localiser-capture landing. All play through the existing effects bus.
-   Localiser capture uses the core flight simulator's LOC CAPTURED flag; it is
-   not inferred from proximity to the runway or radar traffic. */
+/* JC CABIN PA — the same three supplied recordings, preserving each voice.
+   Landing triggers once on ILS localiser capture OR the start of a manually
+   flown approach (including the simulated MAYDAY emergency runway).
+   The sign is enforced while a game emergency is active. */
 const jcCabinPA={
  file:'audio/cabin_announcer_recorded.mp3',
  airborneFile:'audio/cabin_airborne_seatbelts.mp3?v=user-recording-20261110',
  landingFile:'audio/cabin_landing_localiser.mp3?v=loc-capture-20261110',
  buffers:{},loads:{},failed:{},source:null,
  takeoffPlayed:false,landingPlayed:false,airbornePlayed:false,
- localizerHandled:false,
+ localizerHandled:false,manualLandingHandled:false,landingTrigger:'',
  pending:'',lastAnnouncement:'',lastPhase:'',playCount:0,serial:0
 };
 function jcCabinPAStop(){
@@ -8689,6 +8689,7 @@ function jcCabinPAStop(){
 function jcCabinPAReset(){
  jcCabinPAStop();jcCabinPA.takeoffPlayed=false;jcCabinPA.landingPlayed=false;
  jcCabinPA.airbornePlayed=false;jcCabinPA.localizerHandled=false;
+ jcCabinPA.manualLandingHandled=false;jcCabinPA.landingTrigger='';
  jcCabinPA.pending='';
  jcCabinPA.lastAnnouncement='';jcCabinPA.lastPhase='';jcCabinPA.failed={};
 }
@@ -8712,7 +8713,8 @@ function jcCabinPALoad(kind){
  return load;
 }
 function jcCabinPAValidPhase(kind){
- if(kind==='landing')return E.phase==='approach'&&jcCabinPA.localizerHandled;
+ if(kind==='landing')return E.phase==='approach'&&
+  (jcCabinPA.localizerHandled||jcCabinPA.manualLandingHandled);
  if(kind==='airborne')return !E.plane?.onGround&&
   (E.phase==='takeoff'||E.phase==='route');
  return E.phase==='taxi'||(E.phase==='takeoff'&&!!E.plane?.onGround);
@@ -8750,26 +8752,51 @@ function jcCabinPAForPhase(justSwitchedOn=false){
   if(justSwitchedOn)jcCabinPAPlay('airborne');
  }else if(jcCabinPAValidPhase('takeoff'))jcCabinPAPlay('takeoff');
 }
-// The core simulator sets E.flags.loc at the instant it awards LOC CAPTURED
-// (ILS tuned, localiser valid and <1 dot, on the approach). This is *not*
-// equivalent to entering the approach phase or merely seeing an ILS signal.
+// The core simulator sets E.flags.loc when it awards LOC CAPTURED.
+// Manual approaches may NEVER capture a localiser (visual/VOR/emergency), so
+// they receive their own once-per-flight landing announcement trigger.
 function jcCabinPALocalizerCaptured(){
  return E.state==='play'&&E.phase==='approach'&&
   !!E.flags?.loc&&!E.plane?.onGround;
 }
+function jcCabinPAManualLandingReady(){
+ const p=E.plane;
+ return E.state==='play'&&E.phase==='approach'&&p&&!p.onGround&&
+  (jcEm.active||!p.apOn);
+}
 function jcCabinPATick(){
  if(E.state!=='play')return;
  jcCabinPA.lastPhase=E.phase;
- if(!jcCabinPA.localizerHandled&&jcCabinPALocalizerCaptured()){
-  jcCabinPA.localizerHandled=true;
-  // Indication and voice are coupled to the same LOC CAPTURED event.
-  // If the pilot left the sign ON from takeoff, replay only the new LANDING
-  // message here. Never play the previous takeoff recording during approach.
+ const loc=jcCabinPALocalizerCaptured();
+ const manual=jcCabinPAManualLandingReady();
+ if(!jcCabinPA.localizerHandled&&!jcCabinPA.manualLandingHandled&&(loc||manual)){
+  // Prefer true LOC capture when both events occur together. Otherwise a
+  // hand-flown approach triggers exactly once without waiting for an ILS.
+  if(loc)jcCabinPA.localizerHandled=true;
+  else jcCabinPA.manualLandingHandled=true;
+  jcCabinPA.landingTrigger=loc?'loc_captured':jcEm.active?'mayday_manual':'manual_approach';
   if(!jcEm.seatOn)jcEmSeatToggle(true);
   else jcCabinPAPlay('landing');
-  try{ee('cabin_seatbelt_auto_landing','loc_captured')}catch(_e){}
+  try{ee('cabin_seatbelt_auto_landing',jcCabinPA.landingTrigger)}catch(_e){}
  }
  if(jcEm.seatOn)jcCabinPAForPhase(false);
+}
+function jcEmEmergencyActive(){
+ if(E.state!=='play'||!E.plane)return false;
+ const scen=E.scen,p=E.plane;
+ // Works independently of the cockpit size/mode and during all flight phases.
+ // Prevent a routine weather advisory from being confused with an emergency.
+ return !!(jcEm.active||jcEm.disaster||
+  (scen?.fired&&scen?.active)||p.fire||p.hydFail||
+  E.fuel?.flamedOut||
+  (scen?.em==='engFail'&&scen?.active));
+}
+function jcEmAutoSeatForEmergency(){
+ if(!jcEmEmergencyActive()||jcEm.seatOn)return false;
+ jcEm.seatRequested=true;jcEm.seatAt=E.t;
+ jcEmSeatToggle(true);
+ try{ee('cabin_seatbelt_auto_emergency',jcEm.kind||jcEm.disaster||E.scen?.em||'emergency')}catch(_e){}
+ return true;
 }
 function jcEmSeatRequired(){
  const sc=String(E.scen?.wx||'').toLowerCase(),p=E.plane;
@@ -8780,7 +8807,14 @@ function jcEmSeatRequired(){
 function jcEmSeatToggle(force){
  if(E.state!=='play')return jcEm.seatOn;
  const wasOn=jcEm.seatOn;
- jcEm.seatOn=typeof force==='boolean'?force:!jcEm.seatOn;
+ // Keep the sign illuminated during a declared/active emergency. Otherwise a
+ // pilot OFF/ON tap could retrigger the cabin recording over and over.
+ const next=typeof force==='boolean'?force:!jcEm.seatOn;
+ if(!next&&jcEmEmergencyActive()){
+  try{Mt.banner('EMERGENCY · KEEP SEAT BELTS ON',1.4)}catch(_e){}
+  jcEmRender();return jcEm.seatOn;
+ }
+ jcEm.seatOn=next;
  try{wt.unlock();wt.play('chime',.18)}catch(_e){}
  if(!jcEm.seatOn){jcCabinPAStop();jcCabinPA.airbornePlayed=false;jcCabinPA.pending='';}
  else if(!wasOn)jcCabinPAForPhase(true);
@@ -8857,6 +8891,7 @@ function jcEmMayday(kind,manual){
  jcEm.advisory=(kind==='fire'?'ENGINE FIRE':'ELECTRICAL POWER FAILURE')+
   ' · MAYDAY · FLY MANUALLY · EMERGENCY RWY AHEAD · GEAR DOWN · LAND AND BRAKE';
  jcEmSceneMake();jcEm.seatRequested=true;jcEm.seatAt=E.t;
+ jcEmAutoSeatForEmergency();
  try{ee('mayday_runway_issued',kind);Mt.banner('MAYDAY · MANUAL EMERGENCY LANDING',4);
   jcWxRadar.open=false;jcWxShow();jcWxAnnounce('Mayday acknowledged. Simulated emergency landing runway ahead. Hand fly the aircraft.');}catch(_e){}
  jcEmRender();return true;
@@ -8869,6 +8904,7 @@ function jcEmTriggerDisaster(key,manual=true){
  if(E.scen){E.scen.wx=spec.wx;E.scen.k=Kl[spec.wx]||Kl.clear;
   E.scen.strength=Math.max(1.1,Number(E.scen.strength)||1);E.scen.wind={mode:'gusty',rel:70,gustK:1.8};}
  jcEm.seatRequested=true;jcEm.seatAt=E.t;
+ jcEmAutoSeatForEmergency();
  // Airport closure and severe approach hazards use existing airport diversion model.
  if(spec.divert){const ok=jcWxRequestDiversion(true);if(ok)jcWxRadar.open=false;
   else jcEm.advisory+=' · NO VERIFIED ALTERNATE IN GAME DIRECTORY';}
@@ -8976,6 +9012,7 @@ function jcEmTick(dt){
  const key=String(E.level)+'|'+String(E.plan?.dep)+'|'+String(E.t>0?'active':'new');
  if(jcEm.lastClock>E.t+2||jcEm.flightKey&&jcEm.flightKey!==key)jcEmReset();
  jcEm.flightKey=key;jcEm.lastClock=E.t;
+ jcEmAutoSeatForEmergency();
  jcCabinPATick();
  if(jcEmSeatRequired()&&!jcEm.seatRequested){jcEm.seatRequested=true;jcEm.seatAt=E.t;
   try{Mt.banner('TURBULENCE · SET SEAT BELTS ON',2.2);ee('cabin_seatbelt_request','turbulence')}catch(_e){}
@@ -8989,6 +9026,8 @@ function jcEmTick(dt){
   const keys=['cyclone','volcano','wildfire','quake','flood','thunder'];
   jcEmTriggerDisaster(keys[(E.level*3)%keys.length],false);
  }
+ // Mayday/disaster may have been activated during this tick.
+ jcEmAutoSeatForEmergency();
  if(jcEm.active){
   const p=E.plane;
   // Do not allow the autopilot or auto-thrust to fly the manually-assigned runway.
@@ -9008,9 +9047,11 @@ function jcEmTick(dt){
  const wx=document.getElementById('jc-weather-atc');if(wx&&jcEm.opened)wx.style.display='none';
 }
 
-window.__game={cabinPAInfo(){return {source:'original recording for takeoff/landing, separate male synthesis for airborne',
+window.__game={cabinPAInfo(){return {source:'user-supplied recorded clips for takeoff, airborne and landing',
   file:jcCabinPA.file,airborneFile:jcCabinPA.airborneFile,
   landingFile:jcCabinPA.landingFile,localizerHandled:jcCabinPA.localizerHandled,
+  manualLandingHandled:jcCabinPA.manualLandingHandled,landingTrigger:jcCabinPA.landingTrigger,
+  emergencySeatEnforced:jcEmEmergencyActive(),
   seatBeltOn:jcEm.seatOn,takeoffPlayed:jcCabinPA.takeoffPlayed,
   landingPlayed:jcCabinPA.landingPlayed,airbornePlayed:jcCabinPA.airbornePlayed,
   lastAnnouncement:jcCabinPA.lastAnnouncement,
