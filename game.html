@@ -271,6 +271,16 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 .rank-me{margin-top:2px;grid-template-columns:66px 30px 1fr 30px 56px}
 .rank-cty{font:700 12px/1.25 "Avenir Next Condensed","Roboto Condensed","Arial Narrow",Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:#2BEA5A;min-height:15px}
 </style>
+<style id="jc-unobstructed-landing-css">
+/* Runway status details live in the RUNWAY MAP / RWY INFO, not on the PFD/ND. */
+body.jc-clear-runway-captions .jc-parallel-runway-label,
+body.jc-clear-runway-captions .jc-sim-arrival-tag,
+body.jc-clear-runway-captions .tfc-tag,
+body.jc-clear-runway-captions #jc-changi-3-rwy-board,
+body.jc-clear-runway-captions #jc-desktop-runways-btn,
+body.jc-clear-runway-captions #jet-runway-traffic,
+body.jc-mcdu-overlay-clear #jc-weather-atc {display:none!important}
+</style>
 </head>
 <body>
 <script>window.__NETWORK="universal";window.__STORE={"ios":"","android":""};window.__UI_SKIN="";window.__LANG="";window.__DIFF="normal";window.__PARAMS={"end_sub":"","crosswind":10.0,"end_title":"","fog_color":"#9CC9F2","ui_accent":"#33E0FF","wind_gust":12.0,"wind_mode":"Random","background":"Frost","camera_fov":0.0,"camera_yaw":1.0,"panel_size":0.54,"path_color":"#2C4778","sfx_volume":81.0,"turbulence":1.6,"wind_speed":23.0,"camera_lead":0.9,"enemy_color":"#C2352B","flight_pace":0.8,"storm_count":6.0,"camera_pitch":-2.5,"camera_shake":1.1,"ground_color":"#3FA52E","music_volume":27.0,"player_color":"#35608E","reward_color":"#FF9A1F","rotate_speed":142.0,"thrust_power":1.3,"weather_mode":"Random","approach_type":"Random","camera_follow":0.9,"camera_height":1.0,"landing_limit":710.0,"player_color2":"#2BEA5A","sky_top_color":"#2F7FE8","callout_volume":59.0,"emergency_mode":"Random","waypoint_count":4.0,"camera_distance":1.15,"country_scenery":"Country","panel_maximized":"off","community_source":"Live server","weather_strength":1.1,"camera_intro_zoom":0.8,"stick_sensitivity":1.0,"camera_payoff_zoom":0.8,"locale":"auto","cta_text":"","difficulty":"normal","hint_delay":3.0,"max_play_time":5400.0,"endSub":"","endTitle":"","fogColor":"#9CC9F2","uiAccent":"#33E0FF","windGust":12.0,"windMode":"Random","cameraFov":0.0,"cameraYaw":1.0,"panelSize":0.54,"pathColor":"#2C4778","sfxVolume":81.0,"windSpeed":23.0,"cameraLead":0.9,"enemyColor":"#C2352B","flightPace":0.8,"stormCount":6.0,"cameraPitch":-2.5,"cameraShake":1.1,"groundColor":"#3FA52E","musicVolume":27.0,"playerColor":"#35608E","rewardColor":"#FF9A1F","rotateSpeed":142.0,"thrustPower":1.3,"weatherMode":"Random","approachType":"Random","cameraFollow":0.9,"cameraHeight":1.0,"landingLimit":710.0,"playerColor2":"#2BEA5A","skyTopColor":"#2F7FE8","calloutVolume":59.0,"emergencyMode":"Random","waypointCount":4.0,"cameraDistance":1.15,"countryScenery":"Country","panelMaximized":"off","communitySource":"Live server","weatherStrength":1.1,"cameraIntroZoom":0.8,"stickSensitivity":1.0,"cameraPayoffZoom":0.8,"ctaText":"","hintDelay":3.0,"maxPlayTime":5400.0};</script>
@@ -5259,6 +5269,10 @@ function jetTrafficThreeRunwayBoardTick(dt){
 }
 function jetTrafficParallelLabelsTick(){
  if(!jetTraffic.parallelGroup||!ui)return;
+ // Runway captions are taxi aids, NOT floating final-approach signs.
+ // Their HTML layer must never cover an open MCDU or the landing view.
+ const showTaxi=E.state==='play'&&E.phase==='taxi'&&E.plane?.onGround&&!je.open;
+ if(!showTaxi){for(const m of jetTraffic.parallelLabels)m.el.style.display='none';return;}
  const rect=document.querySelector('#game canvas')?.getBoundingClientRect();
  const vw=rect?.width||innerWidth,vh=rect?.height||innerHeight;
  for(const mark of jetTraffic.parallelLabels){
@@ -6722,7 +6736,7 @@ function jetTrafficDrawLiveContacts(dt){
     const nearCanvas=center.z>-1&&center.z<1&&projected.z>-1&&projected.z<1&&
      centerX>7&&centerX<innerWidth-7&&centerY>7&&centerY<innerHeight-7&&
      px>12&&px<innerWidth-12&&py>9&&py<innerHeight-18&&planePixels>=10;
-    tag.style.display=nearCanvas?'block':'none';
+    tag.style.display=nearCanvas&&!je.open?'block':'none';
     if(nearCanvas){tag.style.left=px+'px';tag.style.top=py+'px';}
    }catch{tag.style.display='none';}
   }
@@ -7404,6 +7418,7 @@ function jcTaxiSignsBoard(group,where,text,type,heading,width){
  // Plane normal faces the approaching direction of the taxiway.
  face.rotation.y=heading;face.frustumCulled=false;
  face.name='JC_DAY_NIGHT_AIRFIELD_SIGN_'+type;
+ face.userData.jcSignFace=true;
  group.add(face);
  const postMat=new be({color:0x9ea8b0});
  const post=new Tt(new Ae(.85,9.2,.85),postMat);
@@ -7524,12 +7539,27 @@ function jcTaxiSignsMake(){
 }
 function jcTaxiSignsTick(){
  if(E.state!=='play'){if(jcTaxiSigns.group)jcTaxiSignsDispose();return;}
+ // Keep yellow pavement markings in every lighting mode. Hide only the
+ // upright letter/mandatory sign faces when MCDU is expanded, airborne,
+ // or while the pilot needs an unobstructed landing approach.
+ const signVisible=!je.open&&E.plane?.onGround&&
+  (E.phase==='taxi'||E.phase==='taxiIn');
+ if(jcTaxiSigns.group){
+  if(jcTaxiSigns.signVisible!==signVisible){
+   for(const node of jcTaxiSigns.group.children){if(node.userData?.jcSignFace)node.visible=!!signVisible;}
+   jcTaxiSigns.signVisible=signVisible;
+  }
+ }
  // For map/scenery scene transitions (including destination diversions), rebuild
  // once; never perform per-frame mesh/texture allocation.
  const now=Date.now();if(now-jcTaxiSigns.lastCheck<600)return;
  jcTaxiSigns.lastCheck=now;
- if(E.phase==='taxi'||E.phase==='takeoff'||E.phase==='taxiIn')jcTaxiSignsMake();
- else if(jcTaxiSigns.group)jcTaxiSignsDispose();
+ if(E.phase==='taxi'||E.phase==='takeoff'||E.phase==='taxiIn'){
+  jcTaxiSignsMake();
+  if(jcTaxiSigns.group){for(const node of jcTaxiSigns.group.children){
+   if(node.userData?.jcSignFace)node.visible=!!signVisible;
+  }jcTaxiSigns.signVisible=signVisible;}
+ }else if(jcTaxiSigns.group)jcTaxiSignsDispose();
 }
 window.__jcTaxiSigns={refresh:()=>{jcTaxiSignsDispose();jcTaxiSignsMake();},
  state:()=>({built:!!jcTaxiSigns.group,mode:E.phase,count:jcTaxiSigns.group?.children?.length||0,
@@ -7850,7 +7880,11 @@ window.__jcNight={setMode:jcNightSetMode,getMode:()=>jcNight.mode,
  runways:jcNight.papis.length}),guide:()=>{jcNightDom();document.getElementById('jc-night-guide-btn')?.click();}};
 
 function jetTrafficSkyTick(dt){
- jcNightTick(dt);jcAirportUiTick();jcWxTick(dt);jcEmTick(dt);
+ jcNightTick(dt);jcAirportUiTick();jcWxTick(dt);jcEmTick(dt);jcLiveMetarTick();
+ // Hide floating runway text when MCDU takes focus or the pilot is landing.
+ const clearLabels=!!je.open||E.phase==='approach'||E.phase==='taxiIn'||E.phase==='route';
+ document.body.classList.toggle('jc-clear-runway-captions',clearLabels);
+ document.body.classList.toggle('jc-mcdu-overlay-clear',!!je.open);
  if(E.state!=='play'){const board=document.getElementById('jc-changi-3-rwy-board');if(board)board.style.display='none';return;}
  if(jetTrafficActiveAirport()==='WSSS'&&!['route','approach','taxiIn'].includes(E.phase)){
   jetTrafficParallelMake();jetTrafficParallelLabelsTick();jetTrafficThreeRunwayBoardTick(dt);
@@ -8172,6 +8206,47 @@ function jetRouteChooseAirports(dep,arr){
 const jcWxRadar={enabled:true,lastTick:0,lastFlight:'',lastClock:-1,
   issued:false,open:false,accepted:false,declined:false,from:'',to:'',choices:[],
   lastDest:'',lastMessage:'',weatherName:'',outcomeUntil:0,manual:false};
+/* AviationWeather.gov current airport METAR: backend cached, read-only.
+   Observed weather is displayed separately from simulated storm cells. */
+const jcLiveMetar={icao:'',current:null,loading:false,lastTry:0,controller:null,
+  nextTry:0,lastError:'',serial:0};
+function jcLiveMetarAirport(){
+ // Departure while taxi/takeoff; destination when enroute or on approach.
+ return String(jetTrafficActiveAirport()||
+  (['route','approach','taxiIn'].includes(E.phase)?pt.dest:pt.from)||'').toUpperCase();
+}
+function jcLiveMetarTick(){
+ if(E.state!=='play')return;
+ const code=jcLiveMetarAirport(),now=Date.now();
+ if(!/^[A-Z0-9]{4}$/.test(code))return;
+ if(jcLiveMetar.icao!==code){
+  jcLiveMetar.icao=code;jcLiveMetar.current=null;jcLiveMetar.nextTry=0;
+  jcLiveMetar.serial++;
+  if(jcLiveMetar.controller)jcLiveMetar.controller.abort();
+  jcLiveMetar.controller=null;jcLiveMetar.loading=false;
+ }
+ if(jcLiveMetar.loading||now<jcLiveMetar.nextTry)return;
+ jcLiveMetar.nextTry=now+180000; // METAR usually changes hourly: 3 minute check.
+ jcLiveMetar.loading=true;
+ const serial=++jcLiveMetar.serial;
+ const c=new AbortController();jcLiveMetar.controller=c;
+ const timer=setTimeout(()=>c.abort(),9000);
+ fetch('/api/airport-weather?icao='+encodeURIComponent(code),{signal:c.signal,cache:'no-store'})
+  .then(res=>res.ok?res.json():Promise.reject(new Error('METAR HTTP '+res.status)))
+  .then(result=>{
+   if(serial!==jcLiveMetar.serial||code!==jcLiveMetar.icao)return;
+   if(result?.ok&&result.icao===code){jcLiveMetar.current=result;jcLiveMetar.lastError='';}
+   else{jcLiveMetar.current=null;jcLiveMetar.lastError=String(result?.error||'No current METAR');}
+  }).catch(err=>{
+   if(serial!==jcLiveMetar.serial)return;
+   jcLiveMetar.lastError=String(err?.message||err).slice(0,90);
+   // Retain the last observation only while it remains within the 2-hour ND limit.
+  }).finally(()=>{clearTimeout(timer);if(serial===jcLiveMetar.serial){
+   jcLiveMetar.loading=false;jcLiveMetar.controller=null;
+  }});
+}
+window.__jcLiveMetar={info:()=>({...jcLiveMetar,controller:undefined}),refresh:()=>{
+ jcLiveMetar.nextTry=0;jcLiveMetarTick();}};
 function jcWxWeatherName(){
  const v=String(E.scen?.wx||'clear').toLowerCase();
  return ({thunderstorm:'THUNDERSTORM / CB',rain:'RAIN',fog:'FOG / LOW VIS',
@@ -8206,31 +8281,39 @@ function jcWxCandidateAlternates(){
 }
 function jcWxDrawND(ctx,width,height,state,project,view){
  if(!state?.route||!state?.plane)return;
- const weather=jcWxWeatherName(),on=jcWxRadar.enabled;
- const bad=jcWxHazard();
- const wind=Es(E);
- const dir=Number.isFinite(wind?.dir)?String(Math.round(wind.dir)%360).padStart(3,'0'):'---';
- const speed=Number.isFinite(wind?.kt)?Math.round(wind.kt):0;
- const gust=Math.round(Number(wind?.gmax)||0);
- const line1=on?'WX SIM · '+weather:'WX OFF';
- const line2=`WIND ${dir}°/${speed}KT${gust>0?' G'+Math.round(speed+gust):''}`;
- const fs=Math.max(7,Math.min(9,width*.023));
- const cx=14,y=String(view?.mode||'arc')==='arc'?Math.max(62,height*.25):20;
+ // METAR is an airport weather observation, NOT a weather-radar return.
+ const met=jcLiveMetar.current,icao=jcLiveMetarAirport();
+ const usable=met&&met.icao===icao&&met.ok&&met.reportedAt&&
+  Date.now()-new Date(met.reportedAt).getTime()<2*3600000;
+ const cat=usable?String(met.flightCategory||'').toUpperCase():'NO DATA';
+ const colored=cat==='LIFR'?'#f48ac1':cat==='IFR'?'#ff7878':cat==='MVFR'?'#9dc4ff':'#72e9b3';
+ const code=icao||'----';
+ const wx=usable?String(met.condition||'UNREPORTED').toUpperCase().slice(0,16):
+  jcLiveMetar.loading?'FETCHING':'UNAVAILABLE';
+ const wdir=usable?(met.windDir==null?'VRB':String(Math.round(met.windDir)).padStart(3,'0')):'---';
+ const wspd=usable&&Number.isFinite(met.windKt)?Math.round(met.windKt):'--';
+ const gst=usable&&Number.isFinite(met.gustKt)&&met.gustKt>met.windKt?'G'+Math.round(met.gustKt):'';
+ const vis=usable&&met.visKm!=null?' VIS '+Math.round(met.visKm*10)/10+'KM':'';
+ const lines=[`${code}  METAR ${usable?cat:'--'}`,
+  `WND ${wdir}/${wspd}${gst}KT${vis}`,
+  wx+(usable&&met.reportedAt?' · '+String(met.reportedAt).slice(11,16)+'Z':'')];
+ const fs=Math.max(6.5,Math.min(8.3,width*.022));
+ const x=9,y=String(view?.mode||'arc')==='arc'?Math.max(65,height*.25+5):Math.max(32,height*.12);
  ctx.save();ctx.font=`700 ${fs}px monospace`;
- const w=Math.min(width-20,Math.max(ctx.measureText(line1).width,ctx.measureText(line2).width)+20);
- ctx.fillStyle='rgba(0,15,30,.85)';ctx.fillRect(cx-5,y-13,w+12,30);
- ctx.strokeStyle=on?(bad?'#ffc46b':'#64eaa2'):'#7b93a6';ctx.lineWidth=.8;
- ctx.strokeRect(cx-5,y-13,w+12,30);
- ctx.fillStyle=on?(bad?'#ffcb71':'#7af6ba'):'#92aab9';ctx.fillText(line1,cx,y);
- ctx.fillStyle='#c1e9f3';ctx.fillText(line2,cx,y+12);
- if(on&&state.route?.storms?.length){
-  const sx=14,sy=height-32;
-  // Key always says SIM: existing storm-cell colors are fictional scenario returns.
+ const w=Math.min(width-15,Math.max(...lines.map(l=>ctx.measureText(l).width))+15);
+ const h=fs*3.65;
+ ctx.fillStyle='rgba(2,14,29,.86)';ctx.fillRect(x-3,y-12,w+4,h);
+ ctx.strokeStyle=usable?colored:'#6c8393';ctx.lineWidth=.85;ctx.strokeRect(x-3,y-12,w+4,h);
+ lines.forEach((line,i)=>{ctx.fillStyle=i===0?colored:(i===1?'#d4eaf7':'#ecde96');ctx.fillText(line,x,y+i*fs*1.12);});
+ // Existing weather cell colors belong to the simulated level scenario.
+ // Do not position METAR precipitation as though a live radar image existed.
+ if(jcWxRadar.enabled&&state.route?.storms?.length){
+  const sy=height-31;
   ctx.font=`700 ${Math.max(6,fs-1)}px monospace`;
-  ctx.fillStyle='#8bdc9a';ctx.fillText('▰',sx,sy);
-  ctx.fillStyle='#ffe16a';ctx.fillText('▰',sx+13,sy);
-  ctx.fillStyle='#ff6a65';ctx.fillText('▰',sx+26,sy);
-  ctx.fillStyle='#cbe4ee';ctx.fillText('PRECIP · SIM',sx+40,sy);
+  ctx.fillStyle='#9ddb9f';ctx.fillText('■',x,sy);
+  ctx.fillStyle='#f9df6b';ctx.fillText('■',x+12,sy);
+  ctx.fillStyle='#ff7171';ctx.fillText('■',x+24,sy);
+  ctx.fillStyle='#cee6f2';ctx.fillText('WX CELLS SIM',x+39,sy);
  }
  ctx.restore();
 }
