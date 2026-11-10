@@ -12674,7 +12674,12 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
    if(/DEPARTED|AIRBORNE|CANCELLED|CANCELED|OFF BLOCKS|LEFT GATE|TAXIING|TAKEOFF/.test(status))continue;
    seen.add(gate);parsed.push({gate,flight,terminal:registry.terminal,status,
     confirmedParked:r.confirmedParked===true||r.actualStandOccupied===true||r.standStatus==='PARKED',
-    scheduled:String(r.scheduled||r.time||'').slice(0,40)});
+    scheduled:String(r.scheduled||r.time||'').slice(0,40),
+    destination:String(r.destinationIata||r.destination||'').slice(0,44),
+    airline:String(r.airline||'').slice(0,60),
+    aircraft:String(r.aircraft||'').slice(0,20),
+    registration:String(r.registration||'').slice(0,24),
+    direction:String(r.direction||'departure').slice(0,12)});
   }
   return parsed;
  }
@@ -12716,7 +12721,10 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
    const f=flights.get(g.gate),card=document.createElement('div');
    card.className='jc-gate-card'+(f?(f.confirmedParked?' parked':' assigned'):'');
    const state=f?(f.confirmedParked?'PARKED REPORTED':'GATE ASSIGNED'):'NO FLIGHT DATA';
-   card.innerHTML=`<strong>${esc(g.gate)}</strong> · ${g.terminal}<small>${esc(f?.flight||'—')}</small><small>${esc(state)}</small>${f?`<small>${esc(f.status)}</small>`:''}`;
+   const sgt=f?.scheduled&&Number.isFinite(Date.parse(f.scheduled))?
+    new Date(f.scheduled).toLocaleTimeString('en-SG',{timeZone:'Asia/Singapore',hour:'2-digit',minute:'2-digit',hour12:false})+' SGT':'';
+   card.innerHTML=`<strong>${esc(g.gate)}</strong> · ${g.terminal}<small>${esc(f?.flight||'—')}</small><small>${esc(state)}</small>${f?`<small>${esc(f.status)}${sgt?' · '+esc(sgt):''}</small>${f.destination?`<small>TO ${esc(f.destination)}</small>`:''}${f.aircraft?`<small>ACFT ${esc(f.aircraft)}</small>`:''}`:''}`;
+   if(f)card.title=[f.flight,f.airline,f.destination,f.registration].filter(Boolean).join(' · ');
    frag.appendChild(card);
   }
   $('#jc-gate-list').replaceChildren(frag);
@@ -12781,9 +12789,11 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   }
  }
  $('#jc-gate-refresh').addEventListener('click',refresh);
- window.__jcGateControl={refresh,importData:d=>apply(d,'manual'),snapshot:()=>snapshot,gates:()=>gates.slice(),version:'v8'};
- render();refresh();
- setInterval(()=>{if(!document.hidden)refresh()},90000);
+ window.__jcGateControl={refresh,importData:d=>apply(d,'manual'),snapshot:()=>snapshot,gates:()=>gates.slice(),version:'v9 aviationstack trial'};
+ // Aviationstack free-tier testing: don't poll every 90 seconds (100 requests/month).
+ // Refresh manually when needed; the v8 gate UI continues to support imports.
+ snapshot.status='Press REFRESH to load Aviationstack gate assignments. Free plan: 100 requests/month. No automatic polling.';
+ render();
 })();
 </script>
 
