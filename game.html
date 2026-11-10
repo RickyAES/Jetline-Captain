@@ -280,6 +280,7 @@ body.jc-clear-runway-captions #jc-changi-3-rwy-board,
 body.jc-clear-runway-captions #jc-desktop-runways-btn,
 body.jc-clear-runway-captions #jet-runway-traffic,
 body.jc-mcdu-overlay-clear #jc-weather-atc {display:none!important}
+.jc-threshold-sign{position:absolute;z-index:13;pointer-events:none;display:none;transform:translate(-50%,-50%);padding:1px 4px;border-radius:4px;background:#061b31c9;border:1px solid #77d3e8;color:#e8fbff;font:900 9px/1 system-ui,sans-serif;white-space:nowrap;text-shadow:0 1px #000;letter-spacing:.02em;box-shadow:0 1px 6px rgba(0,0,0,.25)}
 </style>
 </head>
 <body>
@@ -5202,12 +5203,19 @@ function jetTrafficParallelMake(){
  }
  jetChangiBuildTaxiNetwork(addBox,group);
  const host=document.getElementById('ui')||document.body;
+ const oppositeEnd={"02L":"20R","02C":"20C","02R":"20L"};
  for(const id of ['02L','02C','02R']){
-  const lane=jetChangiRunways[id],el=document.createElement('div');
-  el.className='jc-parallel-runway-label';
-  el.textContent=`RWY ${id} / ${id==='02L'?'20R':id==='02C'?'20C':'20L'}${id==='02C'?' · YOUR RUNWAY':id==='02R'?' · CIVIL RESTRICTED':' · SCENERY'}`;
-  el.style.cssText='position:absolute;z-index:13;pointer-events:none;display:none;transform:translate(-50%,-100%);padding:2px 5px;border-radius:5px;background:#061b31de;border:1px solid #8ecade;color:#ddf5ff;font:800 10px system-ui;white-space:nowrap;text-shadow:0 1px #000';
-  host.appendChild(el);jetTraffic.parallelLabels.push({x:lane.x,z:lane.z-170,id,el});
+  const lane=jetChangiRunways[id],other=oppositeEnd[id];
+  const south=document.createElement('div');
+  south.className='jc-threshold-sign';
+  south.textContent=`${id} ↗`;
+  host.appendChild(south);
+  jetTraffic.parallelLabels.push({x:lane.x-44,z:lane.z-28,id,el:south});
+  const north=document.createElement('div');
+  north.className='jc-threshold-sign';
+  north.textContent=`↙ ${other}`;
+  host.appendChild(north);
+  jetTraffic.parallelLabels.push({x:lane.x+44,z:lane.z-lane.length+28,id,el:north});
  }
  It.scene.add(group);jetTraffic.parallelGroup=group;
  jetTraffic.changiClearedCount=jetChangiClearObstacles();
@@ -5279,7 +5287,7 @@ function jetTrafficParallelLabelsTick(){
   const pt3=jetWSSSCanonicalToWorld(mark.x,mark.z);
   const v=new K(pt3[0],6,pt3[1]);v.project(ui);
   const px=(v.x*.5+.5)*vw+(rect?.left||0),py=(-v.y*.5+.5)*vh+(rect?.top||0);
-  const visible=v.z>-1&&v.z<1&&px>24&&px<innerWidth-24&&py>25&&py<innerHeight-40;
+  const visible=v.z>-1&&v.z<1&&px>10&&px<innerWidth-10&&py>14&&py<innerHeight-14;
   mark.el.style.display=visible?'block':'none';
   if(visible){mark.el.style.left=px+'px';mark.el.style.top=py+'px';}
  }
