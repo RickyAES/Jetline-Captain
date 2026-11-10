@@ -12600,6 +12600,19 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
 #jc-gates-panel .jc-gate-entry.active{display:block}
 #jc-gates-panel textarea{box-sizing:border-box;width:100%;min-height:95px;padding:8px;border-radius:7px;border:1px solid #547b93;background:#0a1e31;color:#ecf9ff;font:12px/1.4 ui-monospace,monospace}
 #jc-gates-panel .jc-gate-warning{color:#ffd888;font-size:11px}
+#jc-gate-setup[hidden]{display:none!important}
+#jc-gate-setup{background:#0e283b;border:1px solid #c6a75a;border-radius:12px;padding:12px;margin-top:10px}
+#jc-gate-setup>strong{color:#ffe3a3;font:800 14px system-ui,sans-serif}
+#jc-gate-setup>p{font-size:12px;line-height:1.55;margin:8px 0}
+#jc-gate-setup .jc-gate-actions{margin:10px 0 5px;gap:7px}
+#jc-gate-setup .jc-gate-actions a{font-size:12px;border:1px solid #387a98;border-radius:7px;padding:8px;background:#143148;text-decoration:none}
+#jc-gate-setup details{margin-top:10px;padding-top:9px;border-top:1px solid #3a6278}
+#jc-gate-setup details summary{color:#80e6fa;font-size:12px;font-weight:700;cursor:pointer}
+#jc-gate-setup details p{font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+#jc-gate-setup code{color:#c0f4ff;overflow-wrap:anywhere}
+#jc-gate-list.jc-gate-empty{display:block;padding:10px;color:#b8d7e6;border:1px dashed #38607c;border-radius:8px}
+#jc-gate-list.jc-gate-empty p{margin:0;font-size:12px;line-height:1.5}
+#jc-gates-panel.jc-ground-active #jc-gate-setup{display:none!important}
 #jc-gates-panel a{color:#80e6fa}
 @media(max-width:600px){#jc-gates-open{top:8px;right:7px;font-size:10px;padding:6px 8px}#jc-gates-panel{top:55px;right:5px;width:calc(100vw - 10px);max-height:calc(100dvh - 63px)}}
 </style>
@@ -12612,7 +12625,7 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
  const CLEAN=/[^A-Z0-9]/g;
  const normalizeGate=x=>String(x==null?'':x).toUpperCase().replace(/^GATE\s*/,'').replace(CLEAN,'');
  const normalizeTerminal=x=>String(x==null?'':x).toUpperCase().replace(/[^0-9]/g,'').replace(/^/,'T');
- let lastFetch=0,storedManual=null,feedUrl='',feedEnabled=false;
+ let lastFetch=0,storedManual=null,feedUrl='',feedEnabled=false,showPositions=false;
  let snapshot={flights:[],source:'NOT CONNECTED',updatedAt:null,mode:'offline',status:'No authorized live gate feed configured'};
  window.__jcGateSnapshot=snapshot;
  const openBtn=document.createElement('button');openBtn.id='jc-gates-open';openBtn.type='button';openBtn.textContent='✈ CHANGI GATES';openBtn.setAttribute('data-ui','true');
@@ -12623,6 +12636,21 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
  <div class="jc-gate-actions"><select id="jc-gate-terminal" aria-label="Filter by terminal"><option value="ALL">ALL TERMINALS</option><option value="T1">T1 · C / D</option><option value="T2">T2 · E / F</option><option value="T3">T3 · A / B</option><option value="T4">T4 · G</option></select>
  <input id="jc-gate-search" type="search" placeholder="Find gate or flight" aria-label="Search gate or flight" style="width:120px"/><button id="jc-gate-refresh" type="button">↻ REFRESH</button><button id="jc-gate-paste" type="button">IMPORT DATA</button></div>
  <div class="jc-gate-warning" id="jc-gate-message"></div>
+ <section id="jc-gate-setup" class="jc-gate-setup" aria-label="Gate feed connection status">
+  <strong id="jc-gate-setup-title">LIVE GATE FEED NOT CONNECTED</strong>
+  <p id="jc-gate-setup-detail">This game has a gate layout, but no authorized source of live flight-to-gate assignments.</p>
+  <div class="jc-gate-actions jc-gate-setup-actions">
+   <button id="jc-gate-ground-shortcut" type="button">🛬 VIEW ON-GROUND AIRCRAFT</button>
+   <a href="https://www.changiairport.com/en/fly/flight-information/departures.html" rel="noopener noreferrer" target="_blank">CHANGI DEPARTURES</a>
+   <button id="jc-gate-show-positions" type="button" aria-pressed="false">SHOW GATE DIRECTORY</button>
+  </div>
+  <details id="jc-gate-setup-help"><summary>How to enable live gate assignments on Vercel</summary>
+   <p>1. Obtain an authorized flight-status provider that supplies Changi (SIN/WSSS) flight numbers, terminal, gate and update time. The public Changi App/FR24 pages are not a licensed API.</p>
+   <p>2. In Vercel open your Jetline Captain project → Settings → Environment Variables. Add <code>CHANGI_GATES_SOURCE_URL</code> with the HTTPS address of a permitted JSON feed. If needed, add <code>CHANGI_GATES_SOURCE_TOKEN</code>. Do not put API tokens in HTML.</p>
+   <p>3. The feed needs <code>{"updatedAt":"ISO timestamp","flights":[{"gate":"...","flight":"...","terminal":"T3","status":"..."}]}</code>. Your backend <code>api/changi-gates.js</code> normalizes these fields. Redeploy Vercel after setting environment variables.</p>
+   <p>4. Until a provider is connected, use IMPORT DATA for manual assignments, or ON GROUND for independently reported ADS-B positions. Neither implies a confirmed physical parking gate.</p>
+  </details>
+ </section>
  <div class="jc-gate-entry" id="jc-gate-entry"><p style="font-size:11px">Paste a JSON flight feed or CSV copied from an authorized flight board. Manual imports are labelled MANUAL—not live Changi App data.</p>
  <textarea id="jc-gate-raw" spellcheck="false" aria-label="Paste gate assignments" placeholder="Gate,Flight,Status,Terminal\nA18,SQ818,BOARDING,T3\nD47,TR732,BOARDING,T1"></textarea>
  <div class="jc-gate-actions"><button type="button" id="jc-gate-apply">APPLY</button><button type="button" id="jc-gate-clear">CLEAR DATA</button></div>
@@ -12672,8 +12700,16 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   $('#jc-gate-source').textContent=(isLive?'LIVE FEED · ':snapshot.mode==='manual'?'MANUAL IMPORT · ':'NOT LIVE · ')+snapshot.source+' · '+describeDate(snapshot.updatedAt);
   const filled=snapshot.flights.length;
   $('#jc-gate-count').textContent=`${gates.length} labelled game gates · ${filled} flight assignment${filled===1?'':'s'} · ${snapshot.flights.filter(f=>f.confirmedParked).length} reported parked`;
-  $('#jc-gate-message').textContent=snapshot.status||(isLive?'Feed assignments are informational only; gate numbers may change.':'No automatic Changi App access. Connect an authorized flight-gate provider or import data.');
+  $('#jc-gate-message').textContent=snapshot.status||(isLive?'Feed assignments are informational only; gate numbers may change.':'Live gate assignments require a licensed provider. ON GROUND observations use a separate ADS-B feed.');
+  const setup=$('#jc-gate-setup');
+  setup.hidden=!!filled;
+  $('#jc-gate-setup-title').textContent=isLive?'NO REPORTED GATE ASSIGNMENTS':snapshot.mode==='manual'?'NO MANUAL ASSIGNMENTS LOADED':'LIVE GATE FEED NOT CONNECTED';
+  $('#jc-gate-setup-detail').textContent=isLive?'The connected feed currently returned no valid Changi gate assignments.':snapshot.mode==='manual'?'Import valid flight and gate rows to populate the directory.':'Your Vercel site has no authorized gate-data source. The gate directory is available, but the game cannot invent live flights.';
   const terminal=$('#jc-gate-terminal').value,search=$('#jc-gate-search').value.trim().toUpperCase();
+  const compact=!filled&&!showPositions&&!search&&terminal==='ALL';
+  const list=$('#jc-gate-list');
+  list.classList.toggle('jc-gate-empty',compact);
+  if(compact){const p=document.createElement('p');p.textContent='No verified gate assignments received. Choose a terminal, search a gate, or use SHOW GATE DIRECTORY to view the schematic stands.';list.replaceChildren(p);return;}
   const matches=gates.filter(g=>(terminal==='ALL'||g.terminal===terminal)&&(!search||g.gate.includes(search)||(flights.get(g.gate)?.flight||'').includes(search)));
   const frag=document.createDocumentFragment();
   for(const g of matches){
@@ -12685,6 +12721,16 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   }
   $('#jc-gate-list').replaceChildren(frag);
  }
+ $('#jc-gate-show-positions').addEventListener('click',()=>{
+  showPositions=!showPositions;
+  $('#jc-gate-show-positions').textContent=showPositions?'HIDE EMPTY GATES':'SHOW GATE DIRECTORY';
+  $('#jc-gate-show-positions').setAttribute('aria-pressed',String(showPositions));render();
+ });
+ $('#jc-gate-ground-shortcut').addEventListener('click',()=>{
+  // The independent ADS-B tab is installed by the v7 ground script after this script runs.
+  if(window.__jcGroundControl?.show)window.__jcGroundControl.show();
+  else document.getElementById('jc-ground-tab')?.click();
+ });
  function parseInput(s){
   s=s.trim();if(!s)throw Error('Paste JSON or CSV gate rows.');
   if(s[0]==='{'||s[0]==='[')return JSON.parse(s);
@@ -12715,7 +12761,12 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   const now=Date.now();if(now-lastFetch<10000)return;lastFetch=now;
   try{
    const response=await fetch(feedUrl,{headers:{Accept:'application/json'},cache:'no-store'});
-   if(!response.ok)throw Error('Feed unavailable (HTTP '+response.status+')');
+   if(!response.ok){
+    const detail=await response.json().catch(()=>({}));
+    if(response.status===503&&detail.error==='NO_AUTHORIZED_GATE_FEED')
+     throw Error('SETUP REQUIRED: CHANGI_GATES_SOURCE_URL is missing in Vercel. Configure a licensed flight-data provider and redeploy.');
+    throw Error('Gate provider unavailable (HTTP '+response.status+')');
+   }
    const obj=await response.json();
    if(!Array.isArray(obj?.flights)&&!Array.isArray(obj?.data)&&!Array.isArray(obj))throw Error('Feed must contain flights[]');
    feedEnabled=true;apply(obj,'live');
@@ -12730,7 +12781,7 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   }
  }
  $('#jc-gate-refresh').addEventListener('click',refresh);
- window.__jcGateControl={refresh,importData:d=>apply(d,'manual'),snapshot:()=>snapshot,gates:()=>gates.slice()};
+ window.__jcGateControl={refresh,importData:d=>apply(d,'manual'),snapshot:()=>snapshot,gates:()=>gates.slice(),version:'v8'};
  render();refresh();
  setInterval(()=>{if(!document.hidden)refresh()},90000);
 })();
@@ -12890,5 +12941,5 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
  render();
 })();
 </script>
-<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • CHANGI GROUND v7</div></body>
+<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • GATE CONNECT v8</div></body>
 </html>
