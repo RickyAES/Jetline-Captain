@@ -8663,10 +8663,83 @@ function jcEmRemoveRunway(){
  }
  jcEm.meshScene=null;jcEm.meshGroup=null;
 }
-function jcEmReset(){jcEmRemoveRunway();Object.assign(jcEm,{active:false,opened:false,landed:false,completed:false,
+function jcEmReset(){jcCabinPAReset();jcEmRemoveRunway();Object.assign(jcEm,{active:false,opened:false,landed:false,completed:false,
  kind:'',disaster:'',issuedAt:0,seatOn:false,seatRequested:false,seatAwarded:false,seatAt:0,
  seatBonus:0,runway:null,advisory:'',manualStart:false,disasterTriggered:false});
  const b=document.getElementById('jc-emergency');if(b)b.style.display='none';
+}
+/* JC CABIN PA — same user-supplied recording, played through the game's
+   sound-effects bus (volume, global mute and game pause are respected).
+   No altered/impersonated speech: one uploaded source recording is reused for
+   both phases; a distinct landing sentence requires a distinct audio asset. */
+const jcCabinPA={
+ file:'audio/cabin_announcer_recorded.mp3',buffer:null,loading:null,failed:false,
+ source:null,takeoffPlayed:false,landingPlayed:false,pending:'',lastAnnouncement:'',
+ lastPhase:'',playCount:0
+};
+function jcCabinPAStop(){
+ if(jcCabinPA.source){try{jcCabinPA.source.stop()}catch(_e){}
+  try{jcCabinPA.source.disconnect()}catch(_e){}jcCabinPA.source=null;}
+}
+function jcCabinPAReset(){
+ jcCabinPAStop();jcCabinPA.takeoffPlayed=false;jcCabinPA.landingPlayed=false;
+ jcCabinPA.pending='';jcCabinPA.lastAnnouncement='';jcCabinPA.lastPhase='';jcCabinPA.failed=false;
+}
+function jcCabinPALoad(){
+ if(jcCabinPA.buffer)return Promise.resolve(jcCabinPA.buffer);
+ if(jcCabinPA.loading)return jcCabinPA.loading;
+ // The seat-belt tap supplies the browser's user activation for audio.
+ try{wt.unlock()}catch(_e){}
+ jcCabinPA.loading=fetch(jcCabinPA.file,{cache:'force-cache'})
+  .then(response=>{if(!response.ok)throw new Error('Cabin recording HTTP '+response.status);
+   return response.arrayBuffer();})
+  .then(bytes=>{const ctx=wt.ctx;if(!ctx)throw new Error('AudioContext unavailable');
+   return ctx.decodeAudioData(bytes.slice(0));})
+  .then(buffer=>(jcCabinPA.buffer=buffer))
+  .catch(error=>{jcCabinPA.failed=true;
+   console.warn('Jetline cabin recording unavailable:',error);return null;})
+  .finally(()=>{jcCabinPA.loading=null;});
+ return jcCabinPA.loading;
+}
+function jcCabinPAValidPhase(kind){
+ return kind==='landing'?E.phase==='approach':
+  (E.phase==='taxi'||E.phase==='takeoff');
+}
+function jcCabinPAPlay(kind){
+ if(E.state!=='play'||!jcEm.seatOn||jcCabinPA.failed||
+  !jcCabinPAValidPhase(kind)||jcCabinPA.pending===kind)return;
+ const field=kind==='landing'?'landingPlayed':'takeoffPlayed';
+ if(jcCabinPA[field])return;
+ // A phase is announced once, whether the sign was just switched on or
+ // remained on from an earlier stage of the flight.
+ jcCabinPA.pending=kind;jcCabinPA[field]=true;
+ jcCabinPALoad().then(buffer=>{
+  if(!buffer||E.state!=='play'||!jcEm.seatOn||!jcCabinPAValidPhase(kind))return;
+  const ctx=wt.ctx;if(!ctx||!wt.sfx)return;
+  jcCabinPAStop();
+  const source=ctx.createBufferSource(),gain=ctx.createGain();
+  source.buffer=buffer;gain.gain.value=.9;
+  source.connect(gain);gain.connect(wt.sfx);
+  source.onended=()=>{if(jcCabinPA.source===source)jcCabinPA.source=null;
+   try{gain.disconnect()}catch(_e){}};
+  try{wt.play('chime',.22)}catch(_e){}
+  // The file is the ORIGINAL supplied recording; no synthetic re-voicing.
+  source.start(ctx.currentTime+.28);jcCabinPA.source=source;
+  jcCabinPA.lastAnnouncement=kind;jcCabinPA.playCount++;
+  try{ee('cabin_pa_recorded_'+kind,'seat_belts_on')}catch(_e){}
+ }).finally(()=>{if(jcCabinPA.pending===kind)jcCabinPA.pending='';});
+}
+function jcCabinPAForPhase(){
+ if(E.state!=='play'||!jcEm.seatOn)return;
+ if(E.phase==='approach')jcCabinPAPlay('landing');
+ else if(E.phase==='taxi'||E.phase==='takeoff')jcCabinPAPlay('takeoff');
+}
+function jcCabinPATick(){
+ if(E.state!=='play')return;
+ // Trigger landing automatically if sign stays ON during the entire cruise.
+ // The 120 ms emergency update is not a second audio player: flags dedupe it.
+ jcCabinPA.lastPhase=E.phase;
+ if(jcEm.seatOn)jcCabinPAForPhase();
 }
 function jcEmSeatRequired(){
  const sc=String(E.scen?.wx||'').toLowerCase(),p=E.plane;
@@ -8676,8 +8749,11 @@ function jcEmSeatRequired(){
 }
 function jcEmSeatToggle(force){
  if(E.state!=='play')return jcEm.seatOn;
+ const wasOn=jcEm.seatOn;
  jcEm.seatOn=typeof force==='boolean'?force:!jcEm.seatOn;
  try{wt.unlock();wt.play('chime',.18)}catch(_e){}
+ if(!jcEm.seatOn)jcCabinPAStop();
+ else if(!wasOn)jcCabinPAForPhase();
  if(jcEm.seatOn&&jcEm.seatRequested&&!jcEm.seatAwarded){
   jcEm.seatAwarded=true;jcEm.seatBonus=(E.t-jcEm.seatAt<=25)?150:60;
   E.score+=jcEm.seatBonus;ee('cabin_seatbelt_on',jcEm.seatBonus);
@@ -8870,6 +8946,7 @@ function jcEmTick(dt){
  const key=String(E.level)+'|'+String(E.plan?.dep)+'|'+String(E.t>0?'active':'new');
  if(jcEm.lastClock>E.t+2||jcEm.flightKey&&jcEm.flightKey!==key)jcEmReset();
  jcEm.flightKey=key;jcEm.lastClock=E.t;
+ jcCabinPATick();
  if(jcEmSeatRequired()&&!jcEm.seatRequested){jcEm.seatRequested=true;jcEm.seatAt=E.t;
   try{Mt.banner('TURBULENCE · SET SEAT BELTS ON',2.2);ee('cabin_seatbelt_request','turbulence')}catch(_e){}
  }
@@ -8901,7 +8978,11 @@ function jcEmTick(dt){
  const wx=document.getElementById('jc-weather-atc');if(wx&&jcEm.opened)wx.style.display='none';
 }
 
-window.__game={emergencyInfo(){return {active:jcEm.active,kind:jcEm.kind,landed:jcEm.landed,completed:jcEm.completed,disaster:jcEm.disaster,seatBeltOn:jcEm.seatOn,runway:jcEm.runway?{...jcEm.runway}:null}},toggleSeatBeltSign(){return jcEmSeatToggle()},triggerEmergencyScenario(name){return name==='fire'||name==='elec'?jcEmMayday(name,true):jcEmTriggerDisaster(name,true)},weatherInfo(){return {enabled:jcWxRadar.enabled,condition:jcWxWeatherName(),hazard:jcWxHazard(),diversionOffered:jcWxRadar.issued,diverted:jcWxRadar.accepted,from:jcWxRadar.from,to:jcWxRadar.to,choices:jcWxRadar.choices}},toggleWeatherRadar(){jcWxRadar.enabled=!jcWxRadar.enabled;return jcWxRadar.enabled},requestWeatherDivert(){return jcWxRequestDiversion(true)},acceptWeatherDivert(code){const r=jcWxApplyDiversion(code);jcWxShow();return r},registerRouteAirport:jetRouteRegisterAirport,chooseRouteAirports:jetRouteChooseAirports,routeSelection(){return {dep:E.plan?.dep,arr:E.plan?.arr,phase:E.phase,state:E.state};},landmarkInfo(){return {departure:Xi(E.plan?.dep),destination:Xi(E.plan?.arr),visible:(It?.landmarks||[]).map(x=>({id:x.userData?.landmark,airport:x.userData?.icao})),extrasDeparture:Sa(E.plan?.dep,4),extrasDestination:Sa(E.plan?.arr,4)};},setAirportTraffic(data){return jetTrafficAccept(data)},airportTrafficInfo(){return {airport:jetTraffic.airport,phase:jetTraffic.phase,runwayClear:jetTraffic.clear,simulated:true,liveCount:jetTraffic.live.length,mode:jetTraffic.mode,liveModels:jetTraffic.liveModels.size,liveAgeMs:Date.now()-jetTraffic.liveAt,arrivalId:jetTraffic.arrivalId||null,arrivalCallsign:jetTraffic.arrivalCallsign||null,departureId:jetTraffic.departureId||null,departureCallsign:jetTraffic.departureCallsign||null,departureRunway:jetTraffic.departureRunway||null,departureStage:jetTraffic.departureStage||null,departureBlocking:!!jetTraffic.departureBlocking,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null}},setSpoilers(mode){
+window.__game={cabinPAInfo(){return {source:'uploaded original recording',
+  file:jcCabinPA.file,seatBeltOn:jcEm.seatOn,takeoffPlayed:jcCabinPA.takeoffPlayed,
+  landingPlayed:jcCabinPA.landingPlayed,lastAnnouncement:jcCabinPA.lastAnnouncement,
+  playCount:jcCabinPA.playCount,failed:jcCabinPA.failed}},
+ emergencyInfo(){return {active:jcEm.active,kind:jcEm.kind,landed:jcEm.landed,completed:jcEm.completed,disaster:jcEm.disaster,seatBeltOn:jcEm.seatOn,runway:jcEm.runway?{...jcEm.runway}:null}},toggleSeatBeltSign(){return jcEmSeatToggle()},triggerEmergencyScenario(name){return name==='fire'||name==='elec'?jcEmMayday(name,true):jcEmTriggerDisaster(name,true)},weatherInfo(){return {enabled:jcWxRadar.enabled,condition:jcWxWeatherName(),hazard:jcWxHazard(),diversionOffered:jcWxRadar.issued,diverted:jcWxRadar.accepted,from:jcWxRadar.from,to:jcWxRadar.to,choices:jcWxRadar.choices}},toggleWeatherRadar(){jcWxRadar.enabled=!jcWxRadar.enabled;return jcWxRadar.enabled},requestWeatherDivert(){return jcWxRequestDiversion(true)},acceptWeatherDivert(code){const r=jcWxApplyDiversion(code);jcWxShow();return r},registerRouteAirport:jetRouteRegisterAirport,chooseRouteAirports:jetRouteChooseAirports,routeSelection(){return {dep:E.plan?.dep,arr:E.plan?.arr,phase:E.phase,state:E.state};},landmarkInfo(){return {departure:Xi(E.plan?.dep),destination:Xi(E.plan?.arr),visible:(It?.landmarks||[]).map(x=>({id:x.userData?.landmark,airport:x.userData?.icao})),extrasDeparture:Sa(E.plan?.dep,4),extrasDestination:Sa(E.plan?.arr,4)};},setAirportTraffic(data){return jetTrafficAccept(data)},airportTrafficInfo(){return {airport:jetTraffic.airport,phase:jetTraffic.phase,runwayClear:jetTraffic.clear,simulated:true,liveCount:jetTraffic.live.length,mode:jetTraffic.mode,liveModels:jetTraffic.liveModels.size,liveAgeMs:Date.now()-jetTraffic.liveAt,arrivalId:jetTraffic.arrivalId||null,arrivalCallsign:jetTraffic.arrivalCallsign||null,departureId:jetTraffic.departureId||null,departureCallsign:jetTraffic.departureCallsign||null,departureRunway:jetTraffic.departureRunway||null,departureStage:jetTraffic.departureStage||null,departureBlocking:!!jetTraffic.departureBlocking,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null}},setSpoilers(mode){
   if(E.state!=="play"||!E.plane)return false;
   mode=Number(mode);
   if(!Number.isInteger(mode)||mode<0||mode>2)return false;
