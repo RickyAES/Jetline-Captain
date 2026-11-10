@@ -4887,7 +4887,7 @@ function jetTaxiPathDeparture(){
   const frame=jetWSSSDepartureFrame();
   // Taxiway centreline is 51% of the distance to the neighbouring runway.
   // This matches jetChangiBuildTaxiNetwork and the surface chart exactly.
-  const west=jetChangiRunways['02L'].x*.51;
+  const west=jetChangiRunways['02L'].x*.22;
   const east=jetChangiRunways['02R'].x*.51;
   // The selected runway can be L/C/R. Use the CLOSEST matching 3D taxiway
   // rather than crossing a whole parallel runway to reach a distant road.
@@ -5129,10 +5129,10 @@ function jetTrafficParallelFree(){
 function jetChangiProtectedLocal(x,z,margin=0){
  const runways=Object.values(jetChangiRunways);
  if(runways.some(lane=>Math.abs(x-lane.x)<(86+margin) && z<lane.z+155+margin && z>lane.z-lane.length-155-margin))return true;
- for(const xline of [jetChangiRunways['02L'].x*.51,jetChangiRunways['02R'].x*.51]){
+ for(const xline of [jetChangiRunways['02L'].x*.22,jetChangiRunways['02R'].x*.51]){
   if(Math.abs(x-xline)<49+margin && z>-4020-margin && z<200+margin)return true;
  }
- for(const zline of [-1330,-1400,-1720,-2050,-2080,-2270]){
+ for(const zline of [-1330,-1400,-2350,-2400]){
   if(x>jetChangiRunways['02L'].x-70-margin&&x<jetChangiRunways['02R'].x+70+margin&&Math.abs(z-zline)<52+margin)return true;
  }
  return false;
@@ -5179,7 +5179,7 @@ function jetChangiBuildTaxiNetwork(addBox,group){
  const yellow=new be({color:0xffd560,depthWrite:false});
  const edge=new be({color:0x83bed7,depthWrite:false});
  const left=jetChangiRunways['02L'].x,right=jetChangiRunways['02R'].x;
- const west=left*.51,east=right*.51;
+ const west=left*.22,east=right*.51;
  const minZ=-3950,maxZ=175,zC=(minZ+maxZ)/2,zL=maxZ-minZ;
  for(const x of [west,east]){
   addBox(x,zC,45,zL,.34,.29,shoulder);
@@ -5189,7 +5189,7 @@ function jetChangiBuildTaxiNetwork(addBox,group){
  }
  // Genuine stagger: western 02L does not connect at its southern edge where
  // it has no pavement. Choose links on the shared physical runway sections.
- for(const z of [-1330,-1720,-2080,-2270]){
+ for(const z of [-1330,-2350]){
   addBox((left+right)/2,z,right-left+90,46,.31,.34,shoulder);
   addBox((left+right)/2,z,right-left+90,34,.58,.13,asphalt);
   for(let x=left+18;x<=right-10;x+=86)addBox(x,z,26,1.2,.79,.07,yellow);
@@ -5200,7 +5200,7 @@ function jetChangiBuildTaxiNetwork(addBox,group){
   }
  }
  // Provide runway-to-taxiway connectors near both ends of each shared strip.
- for(const z of [-1400,-2050]){
+ for(const z of [-1400,-2400]){
   for(const [from,to] of [[left,west],[west,0],[0,east],[east,right]]){
    const w=Math.abs(to-from)+8,cx=(from+to)/2;
    addBox(cx,z,w,39,.37,.28,shoulder);addBox(cx,z,w,31,.61,.13,asphalt);
@@ -5210,17 +5210,134 @@ function jetChangiBuildTaxiNetwork(addBox,group){
  group.userData.taxiwayNetwork='Three interconnected Changi taxiways (SCHEMATIC, NOT FOR NAVIGATION)';
 }
 
+
+// CHANGI TERMINAL SCENERY v5: visual game art, airport-inspired rather than a
+// certified airside/terminal engineering plan. Coordinates use the SAME
+// canonical WSSS frame as runway pavements, taxiways and the surface map.
+// The terminal stays WEST of the playable 02C/20C runway and EAST of 02L/20R.
+function jetChangiBuildTerminals(addBox,putSphere,group){
+ const apron=new Xt({color:0x737d81,roughness:.97});
+ const concrete=new Xt({color:0x909ba3,roughness:.92});
+ const terminal=new Xt({color:0xc3ced4,roughness:.69,metalness:.12});
+ const white=new Xt({color:0xe4e8e5,roughness:.62});
+ const roof=new Xt({color:0x768b98,roughness:.75,metalness:.16});
+ const glass=new Xt({color:0x2b839d,metalness:.58,roughness:.19,transparent:true,opacity:.81});
+ const darkGlass=new Xt({color:0x244958,metalness:.63,roughness:.22});
+ const frames=new be({color:0xa8d7dc});
+ const lamps=new be({color:0xffefb2});
+ const path=new be({color:0xc9c1a7});
+ const planeMat=new Xt({color:0xf7f8f5,roughness:.48});
+ const planeBlue=new Xt({color:0x152d53,roughness:.52});
+ const planeGold=new be({color:0xe4ad58});
+
+ // Concrete apron between RWY 02L and 02C. No building overlaps a runway.
+ addBox(-275,-1800,268,1090,.06,.12,concrete);
+ addBox(-275,-1170,235,300,.05,.12,apron); // Terminal 4 apron
+ for(const x of [-403,-132])addBox(x,-1740,1.5,910,.16,.08,path);
+ // Roadway and kerb-side structure running longitudinally through the T1-T3 hub.
+ addBox(-298,-1810,67,720,1.1,2.1,roof);
+ addBox(-298,-1810,56,670,7.2,11,terminal);
+ addBox(-298,-1810,61,660,13.2,1.0,white);
+ for(const z of [-2060,-1850,-1640]){
+  addBox(-298,z,56,3,12.65,1.15,darkGlass);
+ }
+ // Changi-style long, staggered concourse fingers on each side of the hub.
+ const fingers=[
+  {tag:'T3',x:-377,z:-1630,w:66,d:328},
+  {tag:'T1',x:-300,z:-2030,w:108,d:176},
+  {tag:'T2',x:-198,z:-1650,w:75,d:350},
+  {tag:'T2S',x:-177,z:-1970,w:47,d:176},
+ ];
+ for(const f of fingers){
+  addBox(f.x,f.z,f.w+8,f.d+9,.27,.36,apron);
+  addBox(f.x,f.z,f.w,f.d,6.7,13.4,terminal);
+  addBox(f.x,f.z,f.w+4,f.d+5,14.0,1.25,roof);
+  for(const e of [-1,1]){
+   addBox(f.x+e*(f.w/2+.4),f.z,1.8,f.d-9,8.6,7.5,glass);
+  }
+  for(let step=f.z-f.d/2+22;step<f.z+f.d/2-10;step+=32){
+   addBox(f.x,step,f.w-6,1.0,14.8,.13,frames);
+  }
+ }
+ // Jewel-inspired indoor garden / glass dome near Terminal 1 (west side).
+ // Dome is a hemisphere, not a solid black ellipsoid obscuring the runways.
+ addBox(-302,-2200,98,100,2.6,5.2,terminal);
+ addBox(-302,-2200,86,88,5.7,.7,darkGlass);
+ putSphere(-302,-2200,43,23,5.9,new Xt({color:0x4ca3b3,metalness:.72,
+   roughness:.14,transparent:true,opacity:.69}),true);
+ putSphere(-302,-2200,43.5,23.7,5.9,new be({color:0xb3eff4,
+   transparent:true,opacity:.48,wireframe:true,depthWrite:false}),true);
+ // Characteristic southern satellite terminal, intentionally offset from runways.
+ addBox(-236,-1135,122,155,6.3,12,terminal);
+ addBox(-236,-1135,128,162,12.6,1.1,white);
+ addBox(-194,-1135,1.7,151,8,7.4,glass);
+ for(const z of [-1190,-1150,-1110,-1070])addBox(-235,z,113,1.4,13.5,.18,frames);
+
+ // Aircraft gates and short jetbridges facing aprons. Parked airliners are
+ // static decoration, NOT live ADS-B traffic and never create runway conflicts.
+ const gateZ=[-1555,-1665,-1775,-1885];
+ const gates=[...gateZ.map(z=>({side:-1,x:-395,z})),
+               ...gateZ.map(z=>({side:1,x:-141,z}))];
+ const aircraft=(x,z)=>{
+  addBox(x,z,8,25,3.4,5.3,planeMat);
+  addBox(x,z+2,35,5.7,4.3,1.0,planeMat);
+  addBox(x,z+12,13,4.5,5.5,.9,planeBlue);
+  addBox(x,z-11,2.1,4.4,7.5,5.1,planeBlue);
+  addBox(x,z-2,1.0,20,6.3,.25,planeGold);
+ };
+ for(const g of gates){
+  // Keep every parked wing at least ~70 compressed game metres from RWY 02L.
+  aircraft(g.x,g.z);
+  const bridgeStart=g.side<0?-385:-167;
+  addBox((bridgeStart+g.x)/2,g.z+17,Math.abs(bridgeStart-g.x)+4,6,5.4,2.1,glass);
+  addBox(g.x,g.z-33,30,1.0,.48,.15,path);
+  for(const dx of [-13,13])addBox(g.x+dx,g.z-28,1,18,.4,.12,path);
+ }
+ // Low-profile access/service-road bands (outside movement-area runways).
+ for(const z of [-1380,-2300])addBox(-277,z,250,2.1,.25,.06,path);
+ for(const x of [-411,-136])for(const z of [-1480,-1720,-1960]){
+  addBox(x,z,2.8,2.8,1.3,2.0,lamps);
+ }
+ group.userData.jcChangiTerminals={version:5,components:['T1','T2','T3','T4','JEWEL'],
+   source:'Changi-inspired simulation, not an aerodrome stand chart'};
+}
+
 function jetTrafficParallelMake(){
- if(!It?.scene||!_t||jetTrafficActiveAirport()!=='WSSS'||['route','approach','rollout','taxiIn'].includes(E.phase))return;
+ if(!It?.scene||!_t||jetTrafficActiveAirport()!=='WSSS'||E.phase==='route')return;
  if(jetTraffic.parallelScene===It.scene&&jetTraffic.parallelGroup)return;
  jetTrafficParallelFree();jetTraffic.parallelScene=It.scene;
  const group=new me();group.name='JC_CHANGI_02L_02C_02R_RUNWAYS';
- const rot=-(_t.depRot||0),pavement=new Xt({color:0x313941,roughness:.96}),
+ // On arrival use the destination runway's geographic reference, not the
+ // departure airport's rotated local frame. This places terminals at Changi
+ // for approach, rollout and taxi-in, including reciprocal RWY 20C arrivals.
+ const arrival=['approach','rollout','taxiIn'].includes(E.phase);
+ const landing=arrival?jcSurfaceReference('WSSS'):null;
+ const worldAt=(x,z)=>{
+  if(!arrival)return jetWSSSCanonicalToWorld(x,z);
+  const geo=jetWSSSCanonicalToGeo(x,z),h=landing.course*Math.PI/180;
+  const east=(geo[1]-landing.a[1])*111195*Math.cos(landing.a[0]*Math.PI/180);
+  const north=(geo[0]-landing.a[0])*111195;
+  const along=east*Math.sin(h)+north*Math.cos(h);
+  const across=east*Math.cos(h)-north*Math.sin(h);
+  const scale=Math.max(.17,Math.min(1.3,(Number(qs?.len)||2400)/Math.max(300,landing.length)));
+  return [across*scale,(Number(_t.thrB)||0)-along*scale];
+ };
+ const origin=worldAt(0,0),fwd=worldAt(0,-100),right=worldAt(100,0);
+ const rot=arrival?Math.atan2(-(fwd[0]-origin[0]),-(fwd[1]-origin[1])):-(_t.depRot||0);
+ const factorX=arrival?Math.hypot(right[0]-origin[0],right[1]-origin[1])/100:1;
+ const factorZ=arrival?Math.hypot(fwd[0]-origin[0],fwd[1]-origin[1])/100:1;
+ const pavement=new Xt({color:0x313941,roughness:.96}),
   edge=new be({color:0xe1e9ee}),centre=new be({color:0xf7fbff}),
   shoulder=new Xt({color:0x3e4951,roughness:.91}),taxiMat=new Xt({color:0x394c57,roughness:.9});
  const addBox=(x,z,w,d,y,thick,mat)=>{
-  const mesh=new Tt(new Ae(w,thick,d),mat);
-  const point=jetWSSSCanonicalToWorld(x,z);mesh.position.set(point[0],y,point[1]);
+  const mesh=new Tt(new Ae(w*factorX,thick,d*factorZ),mat);
+  const point=worldAt(x,z);mesh.position.set(point[0],y,point[1]);
+  mesh.rotation.y=rot;group.add(mesh);return mesh;
+ };
+ const putSphere=(x,z,r,height,y,mat,hemisphere=false)=>{
+  const geometry=new Nn(1,24,14,0,Math.PI*2,0,hemisphere?Math.PI/2:Math.PI);
+  const mesh=new Tt(geometry,mat),point=worldAt(x,z);
+  mesh.position.set(point[0],y,point[1]);mesh.scale.set(r*factorX,height,r*factorZ);
   mesh.rotation.y=rot;group.add(mesh);return mesh;
  };
  // Original 02C remains the playable runway. 02L/02R are raised visual
@@ -5247,6 +5364,7 @@ function jetTrafficParallelMake(){
    addBox(lane.x+dx,lane.z+tick,.6,1.2,1.06,.32,lamp);
  }
  jetChangiBuildTaxiNetwork(addBox,group);
+ jetChangiBuildTerminals(addBox,putSphere,group);
  const host=document.getElementById('ui')||document.body;
  const oppositeEnd={"02L":"20R","02C":"20C","02R":"20L"};
  for(const id of ['02L','02C','02R']){
@@ -5263,7 +5381,7 @@ function jetTrafficParallelMake(){
   jetTraffic.parallelLabels.push({x:lane.x+44,z:lane.z-lane.length+28,id,el:north});
  }
  It.scene.add(group);jetTraffic.parallelGroup=group;
- jetTraffic.changiClearedCount=jetChangiClearObstacles();
+ jetTraffic.changiClearedCount=arrival?0:jetChangiClearObstacles();
  jetTrafficThreeRunwayBoard();
 }
 function jetTrafficThreeRunwayBoard(){
@@ -7360,24 +7478,33 @@ function jcSurfaceDraw(force=false){
  ctx.lineWidth=1;ctx.strokeStyle='#25475a';
  for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
  for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
- // These connecting paths are schematic ONLY. The airport's published runway
- // bearings and threshold positions remain geographic and north-up.
+ // Match the three-dimensional airport taxiway geometry: avoid drawing
+ // phantom intersections THROUGH the newly added terminal and Jewel.
  if(isWSSS&&coords.length===3){
-  // Match the two real-in-game taxiway corridors and crossing links made by
-  // jetChangiBuildTaxiNetwork. These lines are explicitly SCHEMATIC.
   const L=jetChangiRunways['02L'],R=jetChangiRunways['02R'];
-  const west=L.x*.51,east=R.x*.51;
+  const west=L.x*.22,east=R.x*.51;
   const p=(x,z)=>atPoint([x,z]);
-  ctx.strokeStyle='#738795';ctx.lineWidth=Math.max(2.2,24*scale);ctx.setLineDash([]);
-  for(const x of [west,east]){
-   const a=p(x,175),b=p(x,-3950);
-   ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();
+  const line=(a,b)=>{ctx.beginPath();ctx.moveTo(...p(...a));ctx.lineTo(...p(...b));ctx.stroke();};
+  ctx.strokeStyle='#738795';ctx.lineWidth=Math.max(2.2,24*scale);
+  ctx.setLineDash([]);
+  for(const x of [west,east])line([x,175],[x,-3950]);
+  for(const z of [-1330,-2350,-1400,-2400])line([L.x,z],[R.x,z]);
+  // Terminal footprints - schematic shapes in the SAME canonical projection.
+  const buildings=[
+   [-298,-1810,67,720,'CENTRAL'],[-377,-1630,66,328,'T3'],
+   [-300,-2030,108,176,'T1'],[-198,-1650,75,350,'T2'],
+   [-177,-1970,47,176,'T2'],[-236,-1135,122,155,'T4']];
+  for(const [x,z,w,d] of buildings){
+   const a=p(x-w/2,z-d/2),b=p(x+w/2,z+d/2);
+   ctx.fillStyle='#527587';ctx.strokeStyle='#c1e8ee';ctx.lineWidth=1;
+   ctx.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
+   ctx.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
   }
-  ctx.lineWidth=Math.max(1.8,20*scale);
-  for(const z of [-1330,-1400,-1720,-2050,-2080,-2270]){
-   const a=p(L.x,z),b=p(R.x,z);
-   ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();
-  }
+  const dome=p(-302,-2200),radius=Math.max(5,43*scale);
+  ctx.beginPath();ctx.arc(dome[0],dome[1],radius,0,Math.PI*2);
+  ctx.fillStyle='#2c9eac';ctx.fill();ctx.strokeStyle='#dbfaff';ctx.lineWidth=1.3;ctx.stroke();
+  ctx.fillStyle='#ddfbff';ctx.font='bold 9px system-ui';ctx.textAlign='center';
+  ctx.fillText('JEWEL',dome[0],dome[1]-radius-5);
   ctx.setLineDash([]);
  }
  for(const lane of coords){
@@ -8223,8 +8350,10 @@ function jetTrafficSkyTick(dt){
  document.body.classList.toggle('jc-clear-runway-captions',clearLabels);
  document.body.classList.toggle('jc-mcdu-overlay-clear',!!je.open);
  if(E.state!=='play'){const board=document.getElementById('jc-changi-3-rwy-board');if(board)board.style.display='none';return;}
- if(jetTrafficActiveAirport()==='WSSS'&&!['route','approach','rollout','taxiIn'].includes(E.phase)){
-  jetTrafficParallelMake();jetTrafficParallelLabelsTick();jetTrafficThreeRunwayBoardTick(dt);
+ if(jetTrafficActiveAirport()==='WSSS'&&E.phase!=='route'){
+  jetTrafficParallelMake();
+  if(!['approach','rollout','taxiIn'].includes(E.phase))jetTrafficParallelLabelsTick();
+  jetTrafficThreeRunwayBoardTick(dt);
  }else if(jetTraffic.parallelGroup)jetTrafficParallelFree();
  if(jetTraffic.worldRunways.length)jetTrafficWorldPavementMake();
  // Aircraft are matched to THIS airport and this phase; no invented random fly-bys.
@@ -12266,7 +12395,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • ND WX v4 · ECAM v3';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI TERMINALS v5 · ND WX v4 · ECAM v3';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
