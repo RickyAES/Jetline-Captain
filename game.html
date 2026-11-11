@@ -6619,7 +6619,7 @@ window.__jcSmoothLandingV31=()=>({
   .map(t=>({flight:t.callsign,runway:t.localLanding.runway,
    stage:jetTrafficSimulatedLandingPosition({id:t.id},Date.now())?.stage,
    source:'LOCALLY SIMULATED · FROM OBSERVED FINAL'})),
- version:'31',mode:'Radar capture then independent 3D final and rollout'});
+ version:'32',mode:'Radar capture then independent 3D final and rollout + night aircraft lights'});
 function jetTrafficMaybeLocalLanding(a,match,now){
  const existing=jetTrafficSimulatedLandingPosition(a,now);
  if(existing)return existing;
@@ -7324,6 +7324,77 @@ function jetTrafficBuildLivePlane(a){
  jetTrafficApplyLivery(group,a);
  It.scene.add(group);return group;
 }
+// v32: Night aircraft lights are local to each 3D aircraft, not radar updates.
+// Geometry is deliberately small (no per-frame new meshes or extra shadow lights).
+function jcApproachLightRig(group){
+ if(group.userData.jcApproachLights)return group.userData.jcApproachLights;
+ const set=new me();set.name='JC_TRAFFIC_LIGHTS_V32';group.add(set);
+ const bulbs={};
+ const add=(name,x,y,z,color,radius)=>{
+  const mat=new be({color,transparent:true,opacity:1,depthWrite:false,depthTest:true});
+  const mesh=new Tt(new Nn(radius,8,6),mat);
+  mesh.name='JC_LIGHT_'+name;mesh.position.set(x,y,z);set.add(mesh);bulbs[name]=mesh;
+ };
+ // The plane points toward local -Z. Red port/left, green starboard/right.
+ add('port',-32.7,9.5,5.1,0xff2729,.90);
+ add('starboard',32.7,9.5,5.1,0x38ff7c,.90);
+ add('tail',0,9.4,29.4,0xffffff,.82);
+ add('strobeL',-33.5,9.8,5.1,0xe9faff,1.45);
+ add('strobeR',33.5,9.8,5.1,0xe9faff,1.45);
+ add('beaconTop',0,8.1,-2,0xff2738,1.25);
+ add('beaconBottom',0,2.6,-2,0xff2738,1.10);
+ add('landingL',-3.25,3.95,-17.7,0xfff8d2,1.25);
+ add('landingR',3.25,3.95,-17.7,0xfff8d2,1.25);
+ const rig={set,bulbs,enabled:false};group.userData.jcApproachLights=rig;
+ set.visible=false;return rig;
+}
+function jcApproachLightTick(group,a,target,now=Date.now()){
+ const rig=group.userData.jcApproachLights||jcApproachLightRig(group);
+ const night=jcNightEnabled();
+ if(!night){rig.set.visible=false;rig.enabled=false;return;}
+ rig.enabled=true;rig.set.visible=true;
+ const phase=String(target?.stage||a.phase||'').toUpperCase();
+ const ground=phase.includes('ROLLOUT')||a.onGround;
+ const final=!!target?.localLanding||phase.includes('FINAL')||phase.includes('APPROACH')||
+  phase.includes('FLARE')||phase.includes('LANDING')||phase.includes('ROLLOUT')||
+  (a.altFt!=null&&a.altFt<4500&&!a.onGround&&a.verticalRate<0);
+ // Two brief white strobe flashes per cycle; beacons alternate more slowly.
+ const key=String(a.id||'');let seed=0;for(let i=0;i<key.length;i++)seed=(seed*31+key.charCodeAt(i))%997;
+ const clock=((now+seed*3)%1400+1400)%1400;
+ const strobe=(clock<80)||(clock>155&&clock<220);
+ const beacon=((now+seed*5)%1100+1100)%1100<170;
+ const b=rig.bulbs;
+ b.port.visible=true;b.starboard.visible=true;b.tail.visible=true;
+ b.strobeL.visible=strobe;b.strobeR.visible=strobe;
+ b.beaconTop.visible=beacon;b.beaconBottom.visible=beacon;
+ // Landing lights switch off after rollout; anti-collision/nav remain lit.
+ b.landingL.visible=final&&!ground;
+ b.landingR.visible=final&&!ground;
+}
+// For locally simulated finals, power follows approach, flare, touchdown,
+// reverse-thrust deceleration and final low-speed rollout. This is a game
+// thrust estimate, not an engine telemetry field from ADS-B.
+function jcTrafficThrustProfile(a,target){
+ const stage=String(target?.stage||'').toUpperCase();
+ const speed=Math.max(0,Number(target?.speedKt??a?.speedKt)||0);
+ if(stage.includes('SIMULATED FINAL'))return {thrust:.51,mode:'APPROACH'};
+ if(stage.includes('SIMULATED FLARE'))return {thrust:.25,mode:'FLARE'};
+ if(stage.includes('SIMULATED ROLLOUT')){
+  // Initial reverse roar gives way to idle as ground speed decreases.
+  if(speed>80)return {thrust:.87,mode:'REVERSE'};
+  if(speed>35)return {thrust:.57,mode:'REVERSE'};
+  return {thrust:.13,mode:'IDLE'};
+ }
+ if(a?.onGround)return {thrust:Math.min(.78,Math.max(.12,speed/125)),mode:'TAXI'};
+ if(a?.phase==='CLIMBING')return {thrust:.93,mode:'CLIMB'};
+ if(a?.phase==='DESCENDING')return {thrust:.57,mode:'DESCENT'};
+ return {thrust:.66,mode:'CRUISE'};
+}
+window.__jcAircraftNightLightsV32={
+ getStatus:()=>({night:jcNightEnabled(),modelsWithLights:[...jetTraffic.liveModels.values()]
+  .filter(e=>!!e.group.userData.jcApproachLights).length}),
+ thrust:jcTrafficThrustProfile
+};
 function jetTrafficPosition(a,now){
  const lat0=jetTraffic.liveRef[0],lon0=jetTraffic.liveRef[1];
  const wsss=jetTrafficActiveAirport()==='WSSS';
@@ -7638,7 +7709,8 @@ function jetTrafficDrawLiveContacts(dt){
   const listener=E.plane||ui.position;
   const range=Math.hypot(target.x-listener.x,target.y-(listener.y||0),target.z-listener.z);
   if(range<4400&&(!a.onGround||target.localLanding||a.speedKt>=5)){
-   trafficAudio.push({id:a.id,distance:range,
+   const power=jcTrafficThrustProfile(a,target);
+   trafficAudio.push({id:a.id,distance:range,thrust:power.thrust,thrustMode:power.mode,
     speedKt:target.speedKt??a.speedKt,onGround:target.stage==='SIMULATED ROLLOUT'||a.onGround,
     localLanding:!!target.localLanding,stage:target.stage,phase:a.phase,
     pan:Math.max(-1,Math.min(1,(target.x-ui.position.x)/Math.max(100,range*.72)))});
@@ -7677,6 +7749,7 @@ function jetTrafficDrawLiveContacts(dt){
   entry.group.userData.localSimulatedLanding=!!target.localLanding;
   const isTracked=a.id===jetTraffic.arrivalId||a.id===jetTraffic.departureId;
   jetTrafficApplyLivery(entry.group,a,target);
+  jcApproachLightTick(entry.group,a,target,now);
   // Distant aircraft can be smaller than one device pixel while their HTML
   // callsign remains large. Use a modest distance-dependent VISUAL LOD size
   // boost (never move the radar position). This is a game visibility aid.
@@ -10801,6 +10874,7 @@ window.__game={cabinPAInfo(){return {source:'user-supplied recorded clips for ta
   return {state:E.state,phase:E.phase,paused:!!(E.userPaused||E.hostPaused||E.visPaused),
     muted:!!wt.muted,holding:!!E.holdExempt,emergency:!!E.scen?.active,
     danger:Number(E.danger)||0,n1:((Number(p.n1)||22)+(Number(p.n1b)||22))/2,
+    lever:Number(p.lever??$t?.lever??0),reverse:!!p.reverseThrust,
     airborne:!!p.airborne,onGround:!!p.onGround,engine1:!!p.eng1,engine2:!!p.eng2};
 },mcduIsOpen(){return !!je.open;},reverseInfo(){return{active:!!(E.plane&&E.plane.reverseThrust),eligible:!!(E.state==="play"&&E.plane?.onGround&&E.plane?.landed&&(E.plane?.eng1||E.plane?.eng2)),speedKt:E.plane?Math.round(E.plane.v*wn):0,lever:$t.lever,state:E.state,paused:!!E.userPaused};},setReverseThrust(n){
   const p=E.plane,eligible=!!(E.state==="play"&&p&&p.onGround&&p.landed&&(p.eng1||p.eng2)&&!p.crashed);
@@ -11346,7 +11420,7 @@ window.__holdHud={update};
    const turbine=c.createOscillator();turbine.type='sawtooth';turbine.frequency.value=95;
    const soft=c.createBiquadFilter();soft.type='lowpass';soft.frequency.value=550;
    const toneGain=c.createGain();toneGain.gain.value=.055;turbine.connect(soft);soft.connect(toneGain);toneGain.connect(eng);
-   noise.start();turbine.start();api.engineNoise=noise;api.engineTone=turbine;api.engineFilter=filter;api.engineToneFilter=soft;
+   noise.start();turbine.start();api.engineNoise=noise;api.engineTone=turbine;api.engineFilter=filter;api.engineToneFilter=soft;api.engineToneGain=toneGain;
    nextAmbient=c.currentTime+.08;nextChallenge=c.currentTime+.08;
    tickInterval=setInterval(schedule,125);
    return c;
@@ -11510,15 +11584,15 @@ window.__holdHud={update};
     // Approaching aircraft roar audibly before passing the runway camera.
     // Sound fades naturally with listener distance; the gain is bounded.
     const falloff=1/(1+Math.pow(range/460,1.55));
-    const landing=!!contact.localLanding;
-    const rolling=landing&&contact.stage==='SIMULATED ROLLOUT';
-    const thrust=rolling?.67:landing?.98:
-     contact.onGround?Math.min(1,Math.max(.24,(contact.speedKt||0)/95)):
-     contact.phase==='CLIMBING'?.95:contact.phase==='DESCENDING'?.86:.78;
-    v.amp.gain.setTargetAtTime(Math.min(.52,.62*falloff*thrust),now,.26);
-    v.tone.frequency.setTargetAtTime(105+164*thrust,now,.24);
-    v.low.frequency.setTargetAtTime(580+1050*thrust,now,.27);
-    v.wash.frequency.setTargetAtTime(710+1550*thrust,now,.27);
+    const thrust=clamp(Number(contact.thrust)||.42,.08,1);
+    const reverse=contact.thrustMode==='REVERSE';
+    const intensity=reverse?.84:.20+.80*thrust;
+    v.amp.gain.setTargetAtTime(Math.min(.59,.74*falloff*intensity),now,.19);
+    v.tone.frequency.setTargetAtTime(88+205*thrust+(reverse?25:0),now,.20);
+    v.low.frequency.setTargetAtTime(440+1650*thrust+(reverse?270:0),now,.19);
+    v.wash.frequency.setTargetAtTime(620+1820*thrust+(reverse?530:0),now,.20);
+    v.tg.gain.setTargetAtTime(.08+.15*thrust,now,.18);
+    v.ag.gain.setTargetAtTime(.29+.52*thrust+(reverse?.25:0),now,.18);
     if(v.pan)v.pan.pan.setTargetAtTime(clamp(Number(contact.pan)||0,-1,1)*.7,now,.25);
    }
    for(const [id,v] of api.trafficVoices){
@@ -11571,17 +11645,23 @@ window.__holdHud={update};
    // Engine noise continues during powered taxi as well as airborne flight.
    const powered=active&&enginesOn;
    const n1=clamp((Number(info.n1)||22)/100,0,1);
-   const engineLevel=prefs.engine&&powered?(.027+.115*n1)*prefs.engineVolume/100:0;
-   api.trafficBus.gain.setTargetAtTime(prefs.engine&&active?(.90*prefs.engineVolume/100):0,now,.25);
+   const lever=clamp(Number(info.lever)||0,-.4,1);
+   const reverse=!!info.reverse||lever<-.03;
+   // N1 reflects engine spool-up; commanded thrust adds a faster response to
+   // TOGA/FLX/CL/IDLE/REVERSE without causing jumps in the engine loop.
+   const power=clamp(.70*n1+.30*Math.max(0,lever),0,1);
+   const engineLevel=prefs.engine&&powered?(.021+.128*power+(reverse?.036:0))*prefs.engineVolume/100:0;
+   api.trafficBus.gain.setTargetAtTime(prefs.engine&&active?(.90*prefs.engineVolume/100):0,now,.20);
    trafficSounds(c,now,prefs.engine&&active&&!mute&&!hidden);
-   api.engineBus.gain.setTargetAtTime(engineLevel,now,.24);
-   api.engineFilter.frequency.setTargetAtTime(420+1900*n1,now,.18);
-   api.engineToneFilter.frequency.setTargetAtTime(360+1100*n1,now,.18);
-   api.engineTone.frequency.setTargetAtTime(75+150*n1,now,.18);
+   api.engineBus.gain.setTargetAtTime(engineLevel,now,.18);
+   api.engineFilter.frequency.setTargetAtTime(300+2150*power+(reverse?380:0),now,.15);
+   api.engineToneFilter.frequency.setTargetAtTime(340+1250*power+(reverse?210:0),now,.15);
+   api.engineTone.frequency.setTargetAtTime(70+190*power,now,.15);
+   api.engineToneGain?.gain?.setTargetAtTime(.025+.090*power,now,.19);
    $('jc-audio-mode').textContent=api.currentMode;
    const hint=panel.querySelector('#jc-audio-info');
    if(mute)hint.textContent='Game is muted. Unmute it to hear the soundtrack and engine.';
-   else hint.textContent='Nearby landing jets use smooth local 3D movement after final-approach capture. Their engine roar grows as they approach and fades on rollout. Tap to unlock sound if your browser is silent.';
+   else hint.textContent='Nearby landing jets use smooth local 3D movement after final-approach capture. Their thrust-dependent engines change through final, flare, reverse and rollout. Cockpit engines follow N1 and thrust lever. Tap to unlock sound if silent.';
  }
  setInterval(update,350);
  document.addEventListener('visibilitychange',()=>{if(!api.ctx)return;if(document.hidden)api.ctx.suspend().catch(()=>{});else if(api.unlocked)api.ctx.resume().catch(()=>{})});
@@ -13632,7 +13712,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • SMOOTH LANDING v31 · STABLE GATE SCENERY';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • NIGHT LIGHTS + THRUST AUDIO v32 · STABLE GATE SCENERY';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -14425,7 +14505,7 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • SMOOTH LANDING v31</div>
+<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • NIGHT LIGHTS + THRUST AUDIO v32</div>
 <style id="jc-clear-nd-gate-controls-v23">
 /* No floating buttons may cover the navigation display at WSSS. */
 #jc-gate-camera-panel{display:none!important;pointer-events:none!important}
@@ -14449,6 +14529,6 @@ html.jc-hosted-game [data-jc-ground-act="gates"]{display:none!important}
 })();
 </script>
 <div id="jc-smooth-landing-v31" style="position:fixed;left:8px;bottom:34px;z-index:12;
- pointer-events:none;font:700 9px system-ui;color:#a6f2ff;opacity:.8">JETLINE • SMOOTH LANDING v31</div>
+ pointer-events:none;font:700 9px system-ui;color:#a6f2ff;opacity:.8">JETLINE • NIGHT LIGHTS + THRUST AUDIO v32</div>
 </body>
 </html>
