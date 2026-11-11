@@ -1,5 +1,5 @@
 /**
- * Jetline Captain v10 — Aviationstack SIN flight → gate board.
+ * Jetline Captain v11 — Aviationstack SIN flight → gate board with SQ targeted lookup.
  * Vercel Node serverless API, no browser key; no HTML scraping.
  *
  * Set AVIATIONSTACK_API_KEY in Vercel Production, then redeploy.
@@ -82,6 +82,11 @@ const headers = res => {
 export default async function handler(req,res){
  headers(res);
  if(req.method!=='GET')return res.status(405).json({error:'METHOD_NOT_ALLOWED'});
+ // Query ?airline=SQ prioritizes Singapore Airlines results in a separately
+ // paginated provider search; ordinary SIN queries alone omit most SQ flights.
+ const requestedAirline=str(req.query?.airline,8).toUpperCase();
+ if(requestedAirline && requestedAirline!=='SQ')return res.status(400).json({error:'UNSUPPORTED_AIRLINE_FILTER'});
+ const sqOnly=requestedAirline==='SQ';
  const key=process.env.AVIATIONSTACK_API_KEY;
  if(!key)return res.status(503).json({error:'AVIATIONSTACK_API_KEY_MISSING',message:'Set AVIATIONSTACK_API_KEY in Vercel and redeploy.'});
  const maxPages=Math.min(12,Math.max(1,parseInt(process.env.AVIATIONSTACK_MAX_PAGES||'1',10)||1));
@@ -89,7 +94,7 @@ export default async function handler(req,res){
  const directions=process.env.AVIATIONSTACK_INCLUDE_ARRIVALS==='false'?['departure']:['departure','arrival'];
  const now=Date.now();
  const entries=[], warnings=[];
- const coverage={directions,limitPerPage:100,maxPages,scannedPages:{},providerTotals:{},incomplete:false,requests:0};
+ const coverage={directions,airlineFilter:sqOnly?'SQ':'ALL',limitPerPage:100,maxPages,scannedPages:{},providerTotals:{},incomplete:false,requests:0};
  try{
   for (const direction of directions){
    coverage.scannedPages[direction]=0;
@@ -98,6 +103,7 @@ export default async function handler(req,res){
     const url=new URL('https://api.aviationstack.com/v1/flights');
     url.searchParams.set('access_key',key);
     url.searchParams.set(direction==='departure'?'dep_iata':'arr_iata','SIN');
+    if(sqOnly)url.searchParams.set('airline_iata','SQ');
     url.searchParams.set('limit','100');
     url.searchParams.set('offset',String(page*100));
     const reply=await fetch(url,{headers:{Accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(14000)});
@@ -119,13 +125,15 @@ export default async function handler(req,res){
     coverage.scannedPages[direction]++;
     const meta=body.pagination||{};
     if(Number.isFinite(+meta.total))lastTotal=+meta.total;
-    entries.push(...flightRows(body.data,direction,now,lookaheadHours));
+    // Guard against non-matching results from the upstream provider.
+    const parsed=flightRows(body.data,direction,now,lookaheadHours);
+    entries.push(...(sqOnly?parsed.filter(r=>r.airlineIata==='SQ'||/^SQ[0-9]/.test(r.flight)):parsed));
     const count=body.data.length;
     const offset=page*100;
     if(count<100||(lastTotal!=null&&offset+count>=lastTotal)) {finished=true;break;}
    }
    coverage.providerTotals[direction]=lastTotal;
-   if(!finished){coverage.incomplete=true;warnings.push('Only the first '+(coverage.scannedPages[direction]*100)+' '+direction+' records were scanned; increase AVIATIONSTACK_MAX_PAGES on a suitable plan for wider coverage.');}
+   if(!finished){coverage.incomplete=true;warnings.push('Only the first '+(coverage.scannedPages[direction]*100)+' '+(sqOnly?'SQ ':'')+direction+' records were scanned; increase AVIATIONSTACK_MAX_PAGES on a suitable plan for wider coverage.');}
   }
   const seen=new Set();
   // Preserve multiple sequential flights at the same gate; only remove exact
@@ -135,12 +143,12 @@ export default async function handler(req,res){
    if(seen.has(k))return false;seen.add(k);return true;
   }).sort((a,b)=>a.gate.localeCompare(b.gate,undefined,{numeric:true})||
     Date.parse(a.estimated||a.scheduled||a.actual)-Date.parse(b.estimated||b.scheduled||b.actual));
-  return res.status(200).json({source:'Aviationstack · SIN gate assignments',updatedAt:new Date().toISOString(),
+  return res.status(200).json({source:sqOnly?'Aviationstack · SIN · SQ filtered':'Aviationstack · SIN gate assignments',scope:sqOnly?'SQ':'ALL',updatedAt:new Date().toISOString(),
    airport:'WSSS',flights,flightCount:flights.length,
    assignedGateCount:new Set(flights.map(f=>f.gate)).size,
    coverage:{...coverage,complete:!coverage.incomplete},warnings,
    gateOccupancyVerified:false,
-   note:'Provider-reported flight-to-gate assignments only, not verified aircraft parking. All available matching records from scanned pages; blank gate/time fields cannot be filled.'});
+   note:'Provider-reported flight-to-gate assignments only, not verified aircraft parking or SIA operating carrier. SQ numbers may be codeshares. All available matching records from scanned pages; blank gate/time fields cannot be filled.'});
  }catch(error){
   return res.status(502).json({error:'AVIATIONSTACK_REQUEST_FAILED',message:'Flight-data request failed or timed out. Check provider status and Vercel logs.'});
  }
