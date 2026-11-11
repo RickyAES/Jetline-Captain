@@ -5040,6 +5040,7 @@ function jetTrafficClearModels(){
 function jetTrafficFree(){
   jetTrafficParallelFree();jetTrafficWorldPavementFree();
   jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
+  jetTraffic.changiBridgeLayer=null;jetTraffic.changiGateSignLayer=null;
  jetTrafficDispose(jetTraffic.plane);jetTrafficDispose(jetTraffic.lights);jetTrafficClearModels();
  jetTraffic.plane=null;jetTraffic.lights=null;jetTraffic.lightMaterials=[];jetTraffic.scene=null;
 }
@@ -5121,6 +5122,7 @@ function jetTrafficParallelFree(){
  if(jetTraffic.parallelGroup)jetTrafficDispose(jetTraffic.parallelGroup);
   jetTraffic.parallelGroup=null;jetTraffic.parallelScene=null;
   jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
+  jetTraffic.changiBridgeLayer=null;jetTraffic.changiGateSignLayer=null;
  for(const label of jetTraffic.parallelLabels)label.el.remove();
  jetTraffic.parallelLabels=[];
  const board=document.getElementById('jc-changi-3-rwy-board');if(board)board.remove();
@@ -5413,6 +5415,7 @@ function jcChangiSync3DGates(){
  layer.userData.rendered=layer.children.length;
  layer.userData.simulated=true;
  layer.userData.standOccupied=used.size;
+ jcChangiSyncPassengerBridges();
 }
 function jcChangiAnimateFleet(now=Date.now()){
  const layer=jetTraffic.changiGateLayer;
@@ -5433,6 +5436,7 @@ function jcChangiAnimateFleet(now=Date.now()){
   }else plane.rotation.y=0;
   plane.userData.stage=pose.stage;
  }
+ jcChangiSyncPassengerBridges();
 }
 window.addEventListener('jc-changi-gates-updated',jcChangiSync3DGates);
 function jcChangiBuildStandLayer(addBox,group){
@@ -5445,8 +5449,138 @@ function jcChangiBuildStandLayer(addBox,group){
  }
  group.userData.jcGateRegistry=jcChangiGateRegistry.length;
 }
+
+// JETLINE CHANGI GATE SIGNS + PASSENGER AEROBRIDGES v17.
+// Signs remain at fixed terminals; jet bridges are separate from taxiing planes.
+// Geometry is scenic, not a surveyed stand drawing. All coordinates share the
+// existing canonical WSSS gate registry and runway transform.
+const jcGateV17Style={
+ sign:'#14284b',stroke:'#f0d86f',text:'#ffffff'
+};
+function jcGatePierWall(stand){
+ // Edge of the relevant concourse, not the centre of the apron.
+ const prefix=stand.gate[0];
+ if(prefix==='G')return stand.face==='W'?344:412;
+ return {A:-338,B:-192,C:-338,D:-189,E:-191,F:-339}[prefix]??(stand.x+(stand.face==='W'?20:-20));
+}
+function jcGateTexture(gate){
+ const canvas=document.createElement('canvas');canvas.width=192;canvas.height=88;
+ const ctx=canvas.getContext('2d');if(!ctx)return null;
+ ctx.fillStyle=jcGateV17Style.sign;ctx.fillRect(2,2,188,84);
+ ctx.strokeStyle=jcGateV17Style.stroke;ctx.lineWidth=6;ctx.strokeRect(4,4,184,80);
+ ctx.fillStyle=jcGateV17Style.text;ctx.font='bold 57px Arial,sans-serif';
+ ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(gate),96,45,177);
+ const tex=new li(canvas);tex.colorSpace=ke;tex.needsUpdate=true;return tex;
+}
+function jcChangiBuildNumberSigns(group,worldAt){
+ const signs=new me();signs.name='JC_NUMBERED_GATE_SIGNS_V17';group.add(signs);
+ const poleMat=new Xt({color:0x8b9da9,roughness:.49,metalness:.55});
+ const warm=new be({color:0xf9da72});
+ // Sprite text always faces the camera; gate names therefore remain legible
+ // when entering the gate-view camera from either side of the terminal.
+ for(const stand of jcChangiGateRegistry){
+  const wall=jcGatePierWall(stand),side=stand.face==='W'?-1:1;
+  const [x,z]=worldAt(wall+side*5.5,stand.z-7.5);
+  const tex=jcGateTexture(stand.gate);if(!tex)continue;
+  const face=new j1(new ia({map:tex,color:0xffffff,transparent:true,
+   depthWrite:false,depthTest:true,sizeAttenuation:true,fog:false}));
+  face.name='GATE_SIGN_'+stand.gate;
+  face.scale.set(15.5,7.1,1);face.position.set(x,18.8,z);
+  face.userData={gate:stand.gate,terminal:stand.terminal};signs.add(face);
+  const post=new Tt(new Ae(.8,13,.8),poleMat);
+  post.position.set(x,8.0,z);post.name='GATE_SIGN_POST_'+stand.gate;signs.add(post);
+  const strip=new Tt(new Ae(4,.52,1.0),warm);
+  strip.position.set(x,14.9,z);signs.add(strip);
+ }
+ signs.userData.labelledGates=jcChangiGateRegistry.length;
+ jetTraffic.changiGateSignLayer=signs;
+ return signs;
+}
+function jcChangiBuildPassengerBridge(stand,worldAt,factorX){
+ const group=new me();group.name='JC_PASSENGER_AEROBRIDGE_'+stand.gate;
+ group.userData={gate:stand.gate,terminal:stand.terminal,connected:true,
+  source:'SIMULATED_GATE_SCENERY_NOT_LIVE'};
+ const side=stand.face==='W'?-1:1,wall=jcGatePierWall(stand);
+ const start={x:wall+side*1.5,z:stand.z-7.5};
+ // Parked aircraft's forward passenger door, ahead of the wing, not nose tip.
+ const door={x:stand.x-side*2.7,z:stand.z-7.5};
+ const a=worldAt(start.x,start.z),b=worldAt(door.x,door.z);
+ const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
+ if(!Number.isFinite(len)||len<3||len>105)return group;
+ const yaw=Math.atan2(dx,dz),wx=dx/len,wz=dz/len,
+  sideX=-wz,sideZ=wx,half=Math.min(2.0,Math.max(.9,1.8*factorX));
+ const cabin=new Xt({color:0xd9e4e7,metalness:.32,roughness:.47});
+ const roof=new Xt({color:0x718a9a,metalness:.4,roughness:.51});
+ const glass=new Xt({color:0x377d9d,metalness:.35,roughness:.18,
+  transparent:true,opacity:.70,depthWrite:false,side:2});
+ const support=new Xt({color:0x6d7782,metalness:.51,roughness:.41});
+ const tyre=new Xt({color:0x252d38,roughness:.9});
+ const addTube=(material,width,height,y,off=0,zTrim=0)=>{
+  const mesh=new Tt(new Ae(width,height,Math.max(.7,len-zTrim)),material);
+  mesh.position.set((a[0]+b[0])/2+sideX*off,y,(a[1]+b[1])/2+sideZ*off);
+  mesh.rotation.y=yaw;mesh.name='BRIDGE_'+stand.gate;
+  group.add(mesh);return mesh;
+ };
+ // Real 3D tunnel: floor, roof and glass sides with metal guide rails.
+ addTube(cabin,half*2.4,.55,4.95);
+ addTube(roof,half*2.65,.48,8.18);
+ for(const m of [-1,1]){
+  addTube(glass,.15,2.3,6.63,m*half);
+  addTube(cabin,.16,.2,7.81,m*half);
+  addTube(support,.22,.30,5.42,m*half);
+ }
+ const hood=new Tt(new Ae(half*2.8,3.4,3.8),cabin);
+ hood.position.set(b[0]-wx*1.2,6.45,b[1]-wz*1.2);hood.rotation.y=yaw;
+ hood.name='BRIDGE_DOCK_'+stand.gate;group.add(hood);
+ for(const h of [-1,1]){
+  const gx=b[0]-wx*5+sideX*h*(half+.4),gz=b[1]-wz*5+sideZ*h*(half+.4);
+  const leg=new Tt(new Ae(.64,3.65,.64),support);
+  leg.position.set(gx,3.25,gz);group.add(leg);
+  const wheel=new Tt(new an(.83,.83,.65,10),tyre);
+  wheel.rotation.z=Math.PI/2;wheel.position.set(gx,1.24,gz);group.add(wheel);
+ }
+ return group;
+}
+function jcChangiSyncPassengerBridges(){
+ const fleet=jetTraffic.changiGateLayer,bridges=jetTraffic.changiBridgeLayer;
+ if(!fleet||!bridges||jetTrafficActiveAirport()!=='WSSS')return;
+ const parked=new Map();
+ for(const p of fleet.children){
+  if(p.visible!==false&&p.userData?.gate&&
+   /(?:AT GATE|PARKED)/.test(String(p.userData.stage||'')))
+    parked.set(p.userData.gate,p);
+ }
+ const byGate=bridges.userData.byGate;
+ for(const [gate,bridge] of byGate){
+  if(parked.has(gate))continue;
+  bridges.remove(bridge);byGate.delete(gate);
+  bridge.traverse(node=>{node.geometry?.dispose?.();
+   if(Array.isArray(node.material))node.material.forEach(m=>m?.dispose?.());
+   else node.material?.dispose?.();});
+ }
+ for(const [gate] of parked){
+  if(byGate.has(gate))continue;
+  const stand=jcChangiGateLookup.get(gate);if(!stand)continue;
+  const bridge=jcChangiBuildPassengerBridge(stand,fleet.userData.worldAt,
+   fleet.userData.factorX||1);
+  bridges.add(bridge);byGate.set(gate,bridge);
+ }
+ bridges.userData.connectedCount=byGate.size;
+}
+window.__jcChangiGateSceneryStatus=()=>({
+ labelled:jetTraffic.changiGateSignLayer?.userData.labelledGates||0,
+ connectedBridges:jetTraffic.changiBridgeLayer?.userData.connectedCount||0,
+ parked:jetTraffic.changiGateLayer?.children.filter(p=>p.visible!==false&&
+  /(?:AT GATE|PARKED)/.test(String(p.userData?.stage||''))).length||0,
+ source:'CHANGI GATE SCENERY · SIMULATED'
+});
+
 function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
- const layer=new me();layer.name='JC_GATE_ASSIGNMENTS_SIM_V16';group.add(layer);layer.userData.worldAt=worldAt;layer.userData.baseYaw=rot;
+ jcChangiBuildNumberSigns(group,worldAt);
+ const bridgeLayer=new me();bridgeLayer.name='JC_PASSENGER_AEROBRIDGES_V17';
+ bridgeLayer.userData.byGate=new Map();bridgeLayer.userData.connectedCount=0;
+ group.add(bridgeLayer);jetTraffic.changiBridgeLayer=bridgeLayer;
+ const layer=new me();layer.name='JC_GATE_ASSIGNMENTS_SIM_V16';group.add(layer);layer.userData.worldAt=worldAt;layer.userData.baseYaw=rot;layer.userData.factorX=factorX;
  jetTraffic.changiGateLayer=layer;
  const white=new Xt({color:0xebf0f6,roughness:.53,metalness:.08});
  const navy=new Xt({color:0x233f67,roughness:.63});
@@ -9016,7 +9150,7 @@ function jcGateViewUpdate(){
  jcGateView.selected=u.gate;jcGateView.lastSource=u.source||'';jcGateView.lastStage=u.stage||'';
  const reported=!!u.confirmedParked;
  root.querySelector('#jc-gate-camera-label').textContent=
-  `${u.gate} · ${u.flight||'AIRCRAFT'}\n${reported?'REPORTED PARKING':'SIMULATED APRON MODEL'}`;
+  `${u.gate} · ${u.flight||'AIRCRAFT'}\n${reported?'REPORTED PARKING':'SIMULATED APRON MODEL'} · ${jetTraffic.changiBridgeLayer?.userData?.byGate?.has(u.gate)?'AEROBRIDGE CONNECTED':'BRIDGE DISCONNECTED'}`;
  root.querySelector('#jc-gate-camera-label').style.whiteSpace='pre-line';
 }
 function jcGateViewApply(camera){
@@ -13101,7 +13235,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI TERMINAL MAP v16 · GATE VIEW v15';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • GATE SIGNS / AEROBRIDGES v17 · GATE VIEW v15';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -13841,5 +13975,6 @@ render();
 })();
 </script>
 
+<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • GATE SIGNS + AEROBRIDGES v17</div>
 </body>
 </html>
