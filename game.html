@@ -12543,7 +12543,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI GATES v10 · ND WX v4 · ECAM v3';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • SQ GATES v11 · ND WX v4 · ECAM v3';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -12625,17 +12625,18 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
  const CLEAN=/[^A-Z0-9]/g;
  const normalizeGate=x=>String(x==null?'':x).toUpperCase().replace(/^GATE\s*/,'').replace(CLEAN,'');
  const normalizeTerminal=x=>String(x==null?'':x).toUpperCase().replace(/[^0-9]/g,'').replace(/^/,'T');
- let lastFetch=0,storedManual=null,feedUrl='',feedEnabled=false,showPositions=false;
+ let lastFetchByScope={ALL:0,SQ:0},allFeed=null,sqFeed=null,storedManual=null,feedUrl='',feedEnabled=false,showPositions=false;
  let snapshot={flights:[],source:'NOT CONNECTED',updatedAt:null,mode:'offline',status:'No authorized live gate feed configured'};
  window.__jcGateSnapshot=snapshot;
  const openBtn=document.createElement('button');openBtn.id='jc-gates-open';openBtn.type='button';openBtn.textContent='✈ CHANGI GATES';openBtn.setAttribute('data-ui','true');
  const panel=document.createElement('section');panel.id='jc-gates-panel';panel.setAttribute('data-ui','true');panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Changi airport flight gates');
  panel.innerHTML=`<div class="jc-gate-head"><h2>WSSS · TERMINAL GATES</h2><button type="button" id="jc-gate-close">✕ CLOSE</button></div>
- <p class="jc-gate-help">Flight board from your authorized Aviationstack feed, grouped by gate. Multiple flights can use a gate at different times. These are assignments, not verified parked aircraft. 3D stand locations are schematic.</p>
+ <p class="jc-gate-help">Flight board from your authorized Aviationstack feed, grouped by gate. Multiple flights can use a gate at different times. These are assignments, not verified parked aircraft. SQ-numbered codeshares may be operated by another airline. 3D stand locations are schematic.</p>
  <div class="jc-gate-metadata" id="jc-gate-source" aria-live="polite">NO LIVE GATE FEED CONNECTED</div>
  <div class="jc-gate-actions"><select id="jc-gate-terminal" aria-label="Filter by terminal"><option value="ALL">ALL TERMINALS</option><option value="T1">T1 · C / D</option><option value="T2">T2 · E / F</option><option value="T3">T3 · A / B</option><option value="T4">T4 · G</option></select>
+ <select id="jc-gate-airline" aria-label="Filter by airline"><option value="ALL">ALL AIRLINES</option><option value="SQ">✈ SINGAPORE AIRLINES (SQ)</option></select>
  <select id="jc-gate-direction" aria-label="Filter flight direction"><option value="ALL">ALL FLIGHTS</option><option value="departure">DEPARTURES</option><option value="arrival">ARRIVALS</option></select>
- <input id="jc-gate-search" type="search" placeholder="Flight / gate / destination" aria-label="Search gates flights destinations" style="min-width:165px;flex:1"/><button id="jc-gate-refresh" type="button">↻ LOAD FLIGHTS</button><button id="jc-gate-show-positions" type="button" aria-pressed="false">SHOW EMPTY GATES</button><button id="jc-gate-paste" type="button">IMPORT DATA</button></div>
+ <input id="jc-gate-search" type="search" placeholder="Flight / gate / destination" aria-label="Search gates flights destinations" style="min-width:165px;flex:1"/><button id="jc-gate-refresh" type="button">↻ LOAD FLIGHTS</button><button id="jc-gate-sq" type="button">✈ LOAD SQ FLIGHTS</button><button id="jc-gate-show-positions" type="button" aria-pressed="false">SHOW EMPTY GATES</button><button id="jc-gate-paste" type="button">IMPORT DATA</button></div>
  <div class="jc-gate-warning" id="jc-gate-message"></div>
  <section id="jc-gate-setup" class="jc-gate-setup" aria-label="Gate feed connection status">
   <strong id="jc-gate-setup-title">LIVE GATE FEED NOT CONNECTED</strong>
@@ -12648,7 +12649,7 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
    <p>1. Obtain an authorized flight-status provider that supplies Changi (SIN/WSSS) flight numbers, terminal, gate and update time. The public Changi App/FR24 pages are not a licensed API.</p>
    <p>2. In Vercel → Settings → Environment Variables, add <code>AVIATIONSTACK_API_KEY</code> to Production. Use the v10 <code>api/changi-gates.js</code> file and redeploy. Keep your key private.</p>
    <p>3. For wider paging on a suitable Aviationstack plan, set <code>AVIATIONSTACK_MAX_PAGES</code> (1–12). <code>AVIATIONSTACK_INCLUDE_ARRIVALS=true</code> is the default. Each page and direction costs a provider request on a cache miss. The Free plan is limited to 100 requests/month. The client never auto-polls.</p>
-   <p>4. Press LOAD FLIGHTS. The board shows all valid flights returned by the scanned pages; it reports if only part of the provider dataset was scanned. Missing gate fields cannot be inferred. ON GROUND is a separate ADS-B source.</p>
+   <p>4. Press LOAD FLIGHTS for available airport flights, or LOAD SQ FLIGHTS to run a targeted Singapore Airlines query. The board shows all valid flights returned by the scanned pages; it reports if only part of the provider dataset was scanned. Missing gate fields cannot be inferred. ON GROUND is a separate ADS-B source.</p>
   </details>
  </section>
  <div class="jc-gate-entry" id="jc-gate-entry"><p style="font-size:11px">Paste a JSON flight feed or CSV copied from an authorized flight board. Manual imports are labelled MANUAL—not live Changi App data.</p>
@@ -12680,6 +12681,7 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
    const id=[gate,flight,direction,scheduled,estimated,actual].join('|');
    if(seen.has(id))continue;seen.add(id);
    parsed.push({gate,flight,terminal,status,direction,scheduled,estimated,actual,
+    airlineIata:String(r.airlineIata||'').toUpperCase().slice(0,5),
     confirmedParked:r.confirmedParked===true||r.actualStandOccupied===true||r.standStatus==='PARKED',
     destination:String(r.destination||r.destinationIata||'').slice(0,85),
     destinationIata:String(r.destinationIata||'').slice(0,8),
@@ -12715,12 +12717,13 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   const srcLabel=isLive?'REPORTED SNAPSHOT · ':snapshot.mode==='manual'?'MANUAL IMPORT · ':'NOT CURRENT · ';
   $('#jc-gate-source').textContent=srcLabel+snapshot.source+' · '+describeDate(snapshot.updatedAt);
   const total=snapshot.flights.length;
+  const sqCount=snapshot.flights.filter(f=>/^SQ\d/.test(f.flight)||f.airlineIata==='SQ').length;
   const perGate=new Map();
   for(const f of snapshot.flights){if(!perGate.has(f.gate))perGate.set(f.gate,[]);perGate.get(f.gate).push(f);}
   const assigned=perGate.size;
   const cov=snapshot.coverage;
   const coverageText=cov?(cov.complete?' · PROVIDER PAGES SCANNED':' · PARTIAL COVERAGE')+` · ${cov.requests||0} API request(s)`:'';
-  $('#jc-gate-count').textContent=`${assigned} gates with assignments · ${total} reported flights · ${gates.length} schematic game gates${coverageText}`;
+  $('#jc-gate-count').textContent=`${assigned} gates with assignments · ${total} reported flights · ${sqCount} SQ flight numbers · ${gates.length} schematic game gates${coverageText}`;
   const warningText=[snapshot.status,
     ...(snapshot.warnings||[]),
     isLive?'Gate assignment ≠ aircraft parked. Flight information may be delayed or revised.':'',
@@ -12731,9 +12734,12 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   $('#jc-gate-setup-title').textContent=total?'FLIGHTS LOADED':isLive?'NO GATE ASSIGNMENTS IN RETURNED DATA':snapshot.mode==='manual'?'NO MANUAL ASSIGNMENTS LOADED':'FLIGHT FEED NOT READY';
   $('#jc-gate-setup-detail').textContent=isLive?'The provider returned no flights with valid gates from the selected pages and time window.':snapshot.mode==='manual'?'Import flight-to-gate rows to display them.':'Press LOAD FLIGHTS after uploading the v10 API file and setting AVIATIONSTACK_API_KEY in Vercel.';
   const terminal=$('#jc-gate-terminal').value;
+  const airline=$('#jc-gate-airline').value;
+  $('#jc-gate-refresh').textContent=airline==='SQ'?'↻ REFRESH SQ':'↻ LOAD ALL FLIGHTS';
   const direction=$('#jc-gate-direction').value;
   const search=$('#jc-gate-search').value.trim().toUpperCase();
   const visible=snapshot.flights.filter(f=>(terminal==='ALL'||f.terminal===terminal)&&
+    (airline==='ALL'||/^SQ\d/.test(f.flight)||f.airlineIata==='SQ')&&
     (direction==='ALL'||f.direction===direction)&&
     (!search||[f.gate,f.flight,f.airline,f.destination,f.destinationIata,f.aircraft,f.registration].some(x=>String(x||'').toUpperCase().includes(search))));
   const grouped=new Map();
@@ -12744,7 +12750,7 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
   $('#jc-gate-show-positions').textContent=showPositions?'HIDE EMPTY GATES':'SHOW ALL GAME GATES';
   const list=$('#jc-gate-list');list.classList.toggle('jc-gate-empty',!display.length);
   if(!display.length){const p=document.createElement('p');
-   p.textContent=total? 'No matching flights. Try ALL FLIGHTS, another terminal or SHOW ALL GAME GATES.':'No flight-to-gate assignments received yet. Press LOAD FLIGHTS, or view schematic gate positions.';
+   p.textContent=airline==='SQ'?'No SQ flights in the current records. Tap LOAD SQ FLIGHTS to query Aviationstack for Singapore Airlines specifically. Gate details may be missing or codeshare-only.':total?'No matching flights. Try ALL FLIGHTS, another terminal or SHOW ALL GAME GATES.':'No flight-to-gate assignments received yet. Press LOAD FLIGHTS, or view schematic gate positions.';
    list.replaceChildren(p);return;}
   const frag=document.createDocumentFragment();
   for(const g of display){
@@ -12786,7 +12792,7 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
    const bits=line.split(',');return Object.fromEntries(fields.map((k,i)=>[k,(bits[i]||'').trim()]));
   })};
  }
- $('#jc-gate-terminal').addEventListener('change',render);$('#jc-gate-direction').addEventListener('change',render);$('#jc-gate-search').addEventListener('input',render);
+ $('#jc-gate-terminal').addEventListener('change',render);$('#jc-gate-airline').addEventListener('change',render);$('#jc-gate-direction').addEventListener('change',render);$('#jc-gate-search').addEventListener('input',render);
  const close=()=>panel.classList.remove('open');
  openBtn.addEventListener('click',()=>{panel.classList.toggle('open');if(panel.classList.contains('open'))render()});
  $('#jc-gate-close').addEventListener('click',close);
@@ -12802,9 +12808,17 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
  feedUrl=configured.startsWith('/')&&!configured.startsWith('//')?configured:(/^https:\/\//.test(configured)?configured:'');
  async function refresh(){
   if(!feedUrl){snapshot.status='No authorized gate feed URL configured';render();return;}
-  const now=Date.now();if(now-lastFetch<10000)return;lastFetch=now;
+  const sqSelected=$('#jc-gate-airline').value==='SQ';
+  const scope=sqSelected?'SQ':'ALL';
+  const now=Date.now();if(now-lastFetchByScope[scope]<10000)return;
+  lastFetchByScope[scope]=now;
+  const target=new URL(feedUrl,document.baseURI);
+  if(sqSelected)target.searchParams.set('airline','SQ');
+  else target.searchParams.delete('airline');
+  const btn=$('#jc-gate-refresh');btn.disabled=true;
+  $('#jc-gate-message').textContent='Requesting '+(sqSelected?'SQ-filtered':'SIN airport')+' records from Aviationstack…';
   try{
-   const response=await fetch(feedUrl,{headers:{Accept:'application/json'}});
+   const response=await fetch(target.toString(),{headers:{Accept:'application/json'}});
    if(!response.ok){
     const detail=await response.json().catch(()=>({}));
     if(response.status===503&&detail.error==='AVIATIONSTACK_API_KEY_MISSING')
@@ -12813,7 +12827,24 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
    }
    const obj=await response.json();
    if(!Array.isArray(obj?.flights)&&!Array.isArray(obj?.data)&&!Array.isArray(obj))throw Error('Feed must contain flights[]');
-   feedEnabled=true;apply(obj,'live');
+   feedEnabled=true;
+   // Keep previously retrieved airline assignments when fetching SQ-specific
+   // results. Never merge a stale provider snapshot with fresh data.
+   const fresh=x=>x&&x.updatedAt&&Date.now()-Date.parse(x.updatedAt)<65*60000;
+   if(sqSelected)sqFeed=obj;else allFeed=obj;
+   const sources=[allFeed,sqFeed].filter(fresh);
+   const newest=sources.sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))[0]||obj;
+   const seen=new Set(),flights=[];
+   for(const src of sources){for(const f of src.flights||[]){
+    const k=[f.gate,f.direction,f.flight,f.scheduled].join('|');
+    if(!seen.has(k)){seen.add(k);flights.push(f);}
+   }}
+   // Combined coverage is only partial; two targeted searches do not prove
+   // complete SIN airport coverage or actual gate occupancy.
+   const merged={...newest,flights,source:sources.length>1?'Aviationstack · SIN + SQ targeted':newest.source,
+    coverage:{...(newest.coverage||{}),complete:sources.length===1?!!newest.coverage?.complete:false},
+    warnings:[...new Set(sources.flatMap(x=>x.warnings||[]))]};
+   apply(merged,'live');
   }catch(err){
    feedEnabled=false;
    // Never replace live data with a claim of freshness after the feed fails.
@@ -12822,17 +12853,30 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
    if(snapshot.mode!=='manual'&&stale){snapshot={flights:[],source:'NOT CONNECTED',updatedAt:null,mode:'offline',status:'Automatic gate feed unavailable: '+err.message};window.__jcGateSnapshot=snapshot;window.dispatchEvent(new Event('jc-changi-gates-updated'));}
    else snapshot.status='Feed refresh failed: '+err.message+' · '+(snapshot.mode==='manual'?'showing manual data':'last data may be delayed');
    render();
-  }
+  }finally{btn.disabled=false;}
  }
  $('#jc-gate-refresh').addEventListener('click',refresh);
- window.__jcGateControl={refresh,importData:d=>apply(d,'manual'),snapshot:()=>snapshot,gates:()=>gates.slice(),version:'v10 all reported gate flights'};
+ $('#jc-gate-sq').addEventListener('click',()=>{
+  showPositions=false;$('#jc-gate-show-positions').setAttribute('aria-pressed','false');
+  $('#jc-gate-airline').value='SQ';$('#jc-gate-terminal').value='ALL';
+  $('#jc-gate-direction').value='ALL';$('#jc-gate-search').value='';
+  render();refresh();
+ });
+ window.__jcGateControl={refresh,importData:d=>apply(d,'manual'),snapshot:()=>snapshot,gates:()=>gates.slice(),version:'v11 SQ-targeted flight search and all-gate board'};
  // Aviationstack free-tier testing: don't poll every 90 seconds (100 requests/month).
  // Refresh manually when needed; the v8 gate UI continues to support imports.
- snapshot.status='Press LOAD FLIGHTS. v10 shows multiple flights per gate from scanned Aviationstack pages. Free plan: 100 calls/month; no automatic polling.';
+ snapshot.status='Press LOAD FLIGHTS for SIN or LOAD SQ FLIGHTS for an SQ-specific query. v11 preserves multiple flights per gate. Free plan: 100 calls/month; no automatic polling.';
  render();
 })();
 </script>
 
+<style id="jc-gates-v11-style">
+#jc-gates-panel #jc-gate-sq{background:#163d67;border-color:#65d6ff;color:#f4fcff;font-weight:800}
+#jc-gates-panel #jc-gate-sq:focus-visible{outline:2px solid #ffcf75}
+#jc-gates-panel #jc-gate-airline{max-width:100%;font-weight:700;min-width:180px}
+#jc-gates-panel #jc-gate-refresh:disabled{opacity:.55;cursor:progress}
+@media(max-width:600px){#jc-gates-panel #jc-gate-airline{flex:1 1 100%}#jc-gates-panel #jc-gate-sq{flex:1 1 150px}}
+</style>
 <style id="jc-changi-gates-v10-style">
 #jc-gates-panel:not(.jc-ground-active) #jc-gate-list.jc-gate-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,235px),1fr));gap:9px}
 #jc-gates-panel .jc-gate-card{padding:10px;min-height:55px}
@@ -12857,6 +12901,7 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
 #jc-gates-panel.jc-ground-active #jc-gate-count,#jc-gates-panel.jc-ground-active #jc-gate-list,
 #jc-gates-panel.jc-ground-active #jc-gate-terminal,#jc-gates-panel.jc-ground-active #jc-gate-direction,
 #jc-gates-panel.jc-ground-active #jc-gate-show-positions,#jc-gates-panel.jc-ground-active #jc-gate-search,
+#jc-gates-panel.jc-ground-active #jc-gate-airline,#jc-gates-panel.jc-ground-active #jc-gate-sq,
 #jc-gates-panel.jc-ground-active #jc-gate-refresh,#jc-gates-panel.jc-ground-active #jc-gate-paste,
 #jc-gates-panel.jc-ground-active #jc-gate-entry,#jc-gates-panel.jc-ground-active #jc-gate-message{display:none!important}
 #jc-ground-panel{display:none}
@@ -13007,5 +13052,5 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
  render();
 })();
 </script>
-<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • GATE CONNECT v8</div></body>
+<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • SQ GATES v11</div></body>
 </html>
