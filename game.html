@@ -5269,31 +5269,51 @@ const jcChangiCampusV18={
   {label:'TERMINAL 4',terminal:'T4',x:-116,z:-860,w:74,d:232}
  ],
  piers:[
-  {label:'A · T3',terminal:'T3',x:-392,z:-2680,w:35,d:670},
-  {label:'B · T3',terminal:'T3',x:-225,z:-2510,w:34,d:340},
-  {label:'C · T1',terminal:'T1',x:-132,z:-2935,w:34,d:640},
-  {label:'D · T1',terminal:'T1',x:-78,z:-2375,w:33,d:610},
-  {label:'E · T2',terminal:'T2',x:-146,z:-1760,w:34,d:660},
-  {label:'F · T2',terminal:'T2',x:-376,z:-1815,w:35,d:730},
-  {label:'G · T4',terminal:'T4',x:-101,z:-880,w:32,d:505}
+  {label:'A · T3',terminal:'T3',x:-345,z:-2680,w:35,d:670},
+  {label:'B · T3',terminal:'T3',x:-255,z:-2510,w:34,d:340},
+  {label:'C · T1',terminal:'T1',x:-210,z:-2935,w:34,d:640},
+  {label:'D · T1',terminal:'T1',x:-195,z:-2375,w:33,d:610},
+  {label:'E · T2',terminal:'T2',x:-220,z:-1760,w:34,d:660},
+  {label:'F · T2',terminal:'T2',x:-345,z:-1815,w:35,d:730},
+  {label:'G · T4',terminal:'T4',x:-190,z:-880,w:32,d:505}
  ],
  connectors:[
-  {label:'T3 A LINK',terminal:'T3',x:-336,z:-2498,w:102,d:41},
-  {label:'T3 B LINK',terminal:'T3',x:-249,z:-2438,w:41,d:49},
+  {label:'T3 A LINK',terminal:'T3',x:-323,z:-2498,w:76,d:41},
+  {label:'T3 B LINK',terminal:'T3',x:-269,z:-2438,w:41,d:49},
   {label:'T3–T1',terminal:'T1',x:-247,z:-2390,w:36,d:170},
-  {label:'T1 C LINK',terminal:'T1',x:-173,z:-2588,w:38,d:286},
-  {label:'T1 D LINK',terminal:'T1',x:-148,z:-2270,w:74,d:43},
+  {label:'T1 C LINK',terminal:'T1',x:-201,z:-2588,w:38,d:286},
+  {label:'T1 D LINK',terminal:'T1',x:-195,z:-2270,w:72,d:43},
   {label:'T1–T2 CENTRAL SPINE',terminal:'T1',x:-240,z:-1985,w:34,d:562},
-  {label:'T2 F/E LINK',terminal:'T2',x:-258,z:-1666,w:234,d:42},
-  {label:'T4 G LINK',terminal:'T4',x:-110,z:-870,w:41,d:41}
+  {label:'T2 F/E LINK',terminal:'T2',x:-282,z:-1666,w:170,d:42},
+  {label:'T4 G LINK',terminal:'T4',x:-162,z:-870,w:55,d:41}
  ],
  jewel:{label:'JEWEL · T1',x:-232,z:-2210,r:28},
  greenLink:{label:'JEWEL–T1 LINK',x:-207,z:-2235,w:34,d:14},
  aprons:[{x:-240,z:-2225,w:448,d:2270},
   {x:-110,z:-860,w:182,d:650}]
 };
+
+// V25 VISIBILITY FIX: ALL aircraft must be OUTSIDE their pier building meshes.
+// Keep the chart-inspired gate order/z while using a physically usable stand
+// centerline, 36 to 40 game metres beyond the terminal facade.
+for(const stand of jcChangiGateRegistry){
+ const pier=jcChangiCampusV18.piers.find(p=>p.label[0]===stand.gate[0]);
+ if(!pier)continue;
+ const side=stand.face==='W'?-1:1;
+ stand.x=pier.x+side*(pier.w/2+38);
+ // Prevent a model from colliding with the main west or east runway pavement.
+ const westLimit=jetChangiRunways['02L'].x+90;
+ const eastLimit=jetChangiRunways['02C'].x-94;
+ stand.x=Math.max(westLimit,Math.min(eastLimit,stand.x));
+}
+window.__jcGateParkingQA=()=>jcChangiGateRegistry.map(g=>{
+ const p=jcChangiCampusV18.piers.find(o=>o.label[0]===g.gate[0]);
+ return {gate:g.gate,terminal:g.terminal,x:g.x,z:g.z,
+  facadeX:p?.x+(g.face==='W'?-1:1)*(p?.w||0)/2,
+  clearance:p?(g.x-p.x)*(g.face==='W'?-1:1)-p.w/2:null};
+});
 window.__jcChangiCampusV18=jcChangiCampusV18;
-window.__jcChangiLayoutStatus=()=>({build:'v24',gateCount:jcChangiGateRegistry.length,
+window.__jcChangiLayoutStatus=()=>({build:'v25',gateCount:jcChangiGateRegistry.length,
  terminals:Object.fromEntries(['T1','T2','T3','T4'].map(t=>
   [t,jcChangiGateRegistry.filter(g=>g.terminal===t).length])),
  jewel:jcChangiCampusV18.jewel,
@@ -5455,6 +5475,7 @@ function jcChangiFleetCandidates(now=Date.now()){
  return [...grouped.values()].sort((a,b)=>a.score-b.score);
 }
 window.__jcChangiFleetCandidates=jcChangiFleetCandidates;
+window.__jcGateRebuild=()=>{jetTraffic.changiGateLayer&&(jetTraffic.changiGateLayer.userData.lastGateSnapshot='');jcChangiSync3DGates();};
 
 function jcChangiSync3DGates(){
  const layer=jetTraffic.changiGateLayer,factory=jetTraffic.changiGateFactory;
@@ -5464,7 +5485,10 @@ function jcChangiSync3DGates(){
   String(window.__jcGroundSnapshot?.asOf||'')+'|'+
   (window.__jcGroundSnapshot?.aircraft?.length||0)+'|'+
   (jcTrafficDemo.enabled?'DEMO':'NORMAL');
- if(layer.userData.lastGateSnapshot===stamp)return;
+ if(jetTrafficActiveAirport()!=='WSSS'||E.state!=='play'){
+  layer.userData.lastGateSnapshot='';return;
+ }
+ if(layer.userData.lastGateSnapshot===stamp&&layer.userData.rendered>0)return;
  layer.userData.lastGateSnapshot=stamp;
  layer.userData.observedParkedHex=new Set();
  layer.userData.observedParkedCount=0;
@@ -5490,16 +5514,16 @@ function jcChangiSync3DGates(){
   if(layer.children.length>=cap-1)break;
   const label=item.aircraft.callsign||item.aircraft.registration||('GROUND '+item.stand.gate);
   const pseudo={flight:label,gate:item.stand.gate,airline:'OBSERVED ON GROUND',
-   airlineIata:item.airlineIata,confirmedParked:true};
+   airlineIata:item.airlineIata,confirmedParked:false};
   factory(layer,item.stand,pseudo);
   const model=layer.children[layer.children.length-1];
   model.name='OBSERVED_STAND_'+item.stand.gate+'_'+item.hex;
   model.userData.gate=item.stand.gate;
   model.userData.flight=label;
   model.userData.terminal=item.stand.terminal;
-  model.userData.confirmedParked=true;
-  model.userData.source='OBSERVED ON GROUND · ESTIMATED STAND';
-  model.userData.stage='OBSERVED PARKED · ESTIMATED STAND';
+  model.userData.confirmedParked=false;
+  model.userData.source='ADS-B POSITION · SIMULATED NEARBY STAND';
+  model.userData.stage='SIM PARKED · ADS-B NEARBY';
   model.userData.hex=item.hex;
   model.userData.callsign=item.aircraft.callsign||'';
   model.userData.registration=item.aircraft.registration||'';
@@ -5514,7 +5538,7 @@ function jcChangiSync3DGates(){
  }
  // Always keep a small, physically separated visible scenery fleet, even
  // when the gate feed is partial or every returned flight is a codeshare.
- const decor=['D31','D38','F32','F44','B1','G3','G14','A2','A9','C2','C12','E3','E14','A16','C21','E25'];
+ const decor=['C20','C24','D30','D35','D42','E20','E25','E4','B2','B7','A3','A10','A17','F30','F40','F50','F58','G4','G12'];
  for(const gate of decor){
   if(layer.children.length>=cap||used.has(gate))continue;
   const stand=jcChangiGateLookup.get(gate);if(!stand)continue;
@@ -5626,7 +5650,8 @@ function jcChangiBuildPassengerBridge(stand,worldAt,factorX){
  const door={x:stand.x-side*2.7,z:stand.z-7.5};
  const a=worldAt(start.x,start.z),b=worldAt(door.x,door.z);
  const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
- if(!Number.isFinite(len)||len<3||len>105)return group;
+ if(!Number.isFinite(len)||len<6||len>125){group.userData.geometryError='INVALID_LENGTH_'+len;return group;}
+ group.userData.length=len;
  const yaw=Math.atan2(dx,dz),wx=dx/len,wz=dz/len,
   sideX=-wz,sideZ=wx,half=Math.min(2.0,Math.max(.9,1.8*factorX));
  const cabin=new Xt({color:0xd9e4e7,metalness:.32,roughness:.47});
@@ -5688,12 +5713,17 @@ function jcChangiSyncPassengerBridges(){
  bridges.userData.connectedCount=byGate.size;
 }
 window.__jcChangiGateSceneryStatus=()=>({
+ sceneReady:!!jetTraffic.parallelGroup,
+ gameState:E.state,phase:E.phase,airport:jetTrafficActiveAirport(),
  labelled:jetTraffic.changiGateSignLayer?.userData.labelledGates||0,
  connectedBridges:jetTraffic.changiBridgeLayer?.userData.connectedCount||0,
+ bridgeGeometry:jetTraffic.changiBridgeLayer?.children.filter(b=>b.children.length>0).length||0,
  parked:jetTraffic.changiGateLayer?.children.filter(p=>p.visible!==false&&
   /(?:AT GATE|PARKED)/.test(String(p.userData?.stage||''))).length||0,
- observedParked:jetTraffic.changiGateLayer?.userData?.observedParkedCount||0,
- source:'CHANGI GATE SCENERY · ASSIGNMENTS + OBSERVED GROUND SNAP'
+ totalAirframes:jetTraffic.changiGateLayer?.children.length||0,
+ observedNearStands:jetTraffic.changiGateLayer?.userData?.observedParkedCount||0,
+ examples:(jetTraffic.changiGateLayer?.children||[]).slice(0,8).map(p=>p.userData.gate),
+ source:'CHANGI GATE SCENERY · LIVE OBSERVATIONS DIFFERENT FROM SIMULATED PARKING'
 });
 
 function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
@@ -5708,10 +5738,10 @@ function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
  const silver=new Xt({color:0xa9cbd0,roughness:.59,metalness:.14});
  const blue=new be({color:0x75dbf4,transparent:true,opacity:.84});
  // Geometry/materials are shared across aircraft so refresh is quick.
- const shapes={body:new Ae(5.2*factorX,3.2,25*factorZ),
-  wing:new Ae(29*factorX,.64,5.0*factorZ),
-  tail:new Ae(1.5*factorX,6.0,4.5*factorZ),
-  markings:new Ae(15*factorX,.3,1.1*factorZ)};
+ const shapes={body:new Ae(6.2*factorX,3.8,34*factorZ),
+  wing:new Ae(38*factorX,.74,6.3*factorZ),
+  tail:new Ae(1.8*factorX,8.2,5.8*factorZ),
+  markings:new Ae(17*factorX,.33,1.2*factorZ)};
  const make=(parent,at,dx,dz,geom,mat,y)=>{
   const mesh=new Tt(geom,mat),p=worldAt(at.x+dx,at.z+dz);
   mesh.position.set(p[0],y,p[1]);mesh.rotation.y=rot;parent.add(mesh);
@@ -5731,17 +5761,17 @@ function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
    const mesh=new Tt(geom,mat),p=worldAt(stand.x+dx,stand.z+dz);
    mesh.position.set(p[0]-base[0],y,p[1]-base[1]);mesh.rotation.y=rot;item.add(mesh);
   };
-  makeRel(0,0,shapes.body,white,4.25);
-  makeRel(0,1,shapes.wing,white,4.7);
-  makeRel(0,10,shapes.tail,tint,6.35);
-  makeRel(0,-9,shapes.markings,tint,6.05);
+  makeRel(0,0,shapes.body,white,4.55);
+  makeRel(0,1,shapes.wing,white,5.1);
+  makeRel(0,12,shapes.tail,tint,8.05);
+  makeRel(0,-13,shapes.markings,tint,6.15);
   // Two engine nacelles and high-contrast cockpit make the parking aircraft
   // legible from a mobile-height apron camera, not just abstract rectangles.
   for(const side of [-1,1]){
    makeRel(side*7,-1,new Ae(2.6*factorX,2.8,6.8*factorZ),silver,3.7);
    makeRel(side*13,0,new Ae(1.2*factorX,1.45,2.4*factorZ),tint,5.15);
   }
-  makeRel(0,-11,new Ae(2.8*factorX,.48,3.5*factorZ),navy,5.15);
+  makeRel(0,-15.5,new Ae(3.5*factorX,.5,3.8*factorZ),navy,5.55);
   parent.add(item);
  };
  jcChangiSync3DGates();
@@ -9281,11 +9311,11 @@ function jcGateViewApply(camera){
  // Put camera outside the terminal wall on the face where gates sit.
  // East-facing gates D/F/B face 02C, west-facing gates A/C/E/G face 02L.
  const side=stand.face==='W'?-1:1;
- const vantage=worldAt(stand.x+side*72,stand.z+32);
+ const vantage=worldAt(stand.x+side*92,stand.z+34);
  const point=item.getWorldPosition(new K());
- camera.position.set(vantage[0],31,vantage[1]);
+ camera.position.set(vantage[0],39,vantage[1]);
  camera.lookAt(point.x,7,point.z);
- if(camera.fov>56){camera.fov=56;camera.updateProjectionMatrix();}
+ if(camera.fov!==62){camera.fov=62;camera.updateProjectionMatrix();}
 }
 window.__jcTerminalMapOpen=()=>jcTerminalMapOpen();
 window.__jcGateView={
@@ -13355,7 +13385,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI SYNC v24 · MAP + GATES + GROUND';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • VISIBLE PARKED AIRCRAFT + AEROBRIDGES v25';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -14146,7 +14176,7 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI SYNC v24 · GATE MAP + 3D GATES + GROUND PARKING</div>
+<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • PARKED GATES v25 · 3D APRON CLEARANCE</div>
 <style id="jc-clear-nd-gate-controls-v23">
 /* No floating buttons may cover the navigation display at WSSS. */
 #jc-gate-camera-panel{display:none!important;pointer-events:none!important}
