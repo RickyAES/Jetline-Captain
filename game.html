@@ -8403,7 +8403,6 @@ function jcGroundHUDEnsure(){
  <button type="button" data-jc-ground-act="lights">LIGHTS</button>
  <button type="button" data-jc-ground-act="weather">WX / ATC</button>
  <button type="button" data-jc-ground-act="emergency">EMERGENCY</button>
- <button type="button" data-jc-ground-act="gates" aria-label="Show Changi flight and gate data">✈ CHANGI GATES</button>
  </div>
  <div class="jc-rollout-controls" id="jc-rollout-controls" hidden>
   <div class="jc-rollout-indicator" id="jc-rollout-indicator">SPOILERS · DEPLOYED</div>
@@ -8434,7 +8433,6 @@ function jcGroundHUDEnsure(){
   else if(action==='lights')document.getElementById('jc-night-guide-btn')?.click();
   else if(action==='weather')document.querySelector('#jc-weather-atc .jcwx-mini')?.click();
   else if(action==='emergency')document.querySelector('#jc-emergency .jce-emergency')?.click();
-  else if(action==='gates')document.getElementById('jc-gates-open')?.click();
   tools.hidden=true;toolsButton.setAttribute('aria-expanded','false');
  });
  dock.querySelector('#jc-rollout-reverse').addEventListener('click',e=>{
@@ -9126,7 +9124,6 @@ function jcGateViewControls(){
  root.setAttribute('data-ui','true');root.innerHTML=`
   <button type="button" id="jc-gate-camera-toggle" data-ui="true" aria-label="View parked aircraft at Changi airport terminal gates">✈ GATE VIEW</button>
   <button type="button" id="jc-gate-map-open" data-ui="true" aria-label="View Changi terminal gate map">⌗ GATE MAP</button>
-  <button type="button" id="jc-gate-camera-data-toggle" data-ui="true" aria-label="Open Changi gate flight information">✈ GATES</button>
   <div id="jc-gate-camera-toolbar" data-ui="true" hidden>
    <span id="jc-gate-camera-label">SIMULATED AIRCRAFT</span>
    <div><button type="button" id="jc-gate-camera-next" data-ui="true">NEXT GATE ›</button>
@@ -9150,7 +9147,6 @@ function jcGateViewControls(){
  root.addEventListener('pointerdown',e=>e.stopPropagation());
  root.addEventListener('click',e=>e.stopPropagation());
  root.querySelector('#jc-gate-map-open').addEventListener('click',()=>jcTerminalMapOpen());
- root.querySelector('#jc-gate-camera-data-toggle').addEventListener('click',()=>document.getElementById('jc-gates-open')?.click());
  root.querySelector('#jc-gate-camera-toggle').addEventListener('click',()=>{
   const list=jcGateViewItems();
   if(!list.length){jcGateView.enabled=false;return;}
@@ -13268,7 +13264,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI GATES DOCK v20 · CLEAR FCU';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI TERMINALS v19 · ALL GATES + JEWEL';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -13304,15 +13300,6 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
 </style>
 <script id="jc-nd-wxr-v4-build">window.__JC_ND_WXR_VERSION='4.0 - Storm WX + lightning / clear flight plan';</script>
 
-<style id="jc-gate-controls-clear-v20">
-/* No floating airport button over Airbus FCU / EFIS controls, at any width.
-   The original #jc-gates-open stays in the DOM for existing handlers.
-   Use existing TOOLS (ground) and GATE VIEW (other visible Changi phases). */
-#jc-gates-open{display:none!important;pointer-events:none!important}
-#jc-gate-camera-data-toggle{max-width:100%;white-space:nowrap}
-body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
-@media(max-width:600px){#jc-gate-camera-data-toggle{font-size:10px!important;padding:6px!important}}
-</style>
 <style id="jc-changi-gates-v6-css">
 #jc-gates-open{position:fixed;top:10px;right:12px;z-index:64;padding:9px 13px;border:2px solid #55dcf5;border-radius:12px;background:#092542;color:#ddfaff;font:800 13px system-ui,sans-serif;box-shadow:0 2px 12px #0008;cursor:pointer}
 #jc-gates-panel{display:none;position:fixed;z-index:125;top:clamp(55px,11vh,90px);right:12px;width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 105px);overflow:auto;padding:15px;box-sizing:border-box;border:1px solid #69dff3;border-radius:14px;background:#071827f5;color:#e9faff;box-shadow:0 6px 32px #000b;font:13px/1.4 system-ui,sans-serif}
@@ -14017,6 +14004,6 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI GATES DOCK v20 · NO FCU OVERLAP</div>
+<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI TERMINALS v19 · 4 TERMINALS BETWEEN 02L/02C</div>
 </body>
 </html>
