@@ -5119,6 +5119,8 @@ function jetWSSSCanonicalToGeo(x,z){
 }
 const jetChangiRwyActivity={lastMs:0,byRunway:{}};
 function jetTrafficParallelFree(){
+ if(jetTraffic.parallelGroup?.userData?.jcSingaporeWaterTexture)
+  jetTraffic.parallelGroup.userData.jcSingaporeWaterTexture.dispose();
  if(jetTraffic.parallelGroup)jetTrafficDispose(jetTraffic.parallelGroup);
   jetTraffic.parallelGroup=null;jetTraffic.parallelScene=null;
   jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
@@ -5945,6 +5947,188 @@ function jetChangiBuildTerminals(addBox,putSphere,group){
   source:'Reference-matched Changi conceptual terminal and gate layout; all 4 terminals between 02L and 02C; NOT surveyed'};
 }
 
+
+// JETLINE v33 — Singapore arrival environment.
+// Reference-inspired, procedural scenery: maritime coast, equatorial cumulus,
+// green urban fringe and distant Singapore skyline. Geometry is deliberately
+// lightweight and belongs to WSSS only; no network fetch, no gameplay physics.
+function jcSingaporeApproachScenery(addBox,putSphere,group,worldAt,factorX,factorZ){
+ const mobile=window.innerWidth<760||window.matchMedia?.('(pointer:coarse)').matches;
+ const night=typeof jcNightEnabled==='function'&&jcNightEnabled();
+ const maxClouds=mobile?10:24;
+ let seed=3311043;
+ const rnd=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296;};
+ const turf=new Xt({color:night?0x244336:0x486f48,roughness:1});
+ const park=new Xt({color:night?0x1d3f36:0x38835b,roughness:1});
+ const shore=new Xt({color:night?0x3a4d4c:0xb3b7a4,roughness:.96});
+ const road=new Xt({color:night?0x384348:0x606d71,roughness:.95});
+ const grass=new Xt({color:night?0x284f39:0x638853,roughness:1});
+ const sand=new Xt({color:night?0x495755:0xc6ba97,roughness:.99});
+ const tree=new Xt({color:night?0x1d4c36:0x23673d,roughness:1});
+ const crownLight=new Xt({color:night?0x366c46:0x4a8750,roughness:1});
+ const trunk=new Xt({color:0x4d5143,roughness:1});
+ const buildingMat=[0x8f9aa0,0xaab4b8,0x98a8a4,0xb7b4a9,0x809198].map(v=>
+  new Xt({color:night?0x4d5d6d:v,roughness:.76,metalness:.06}));
+ const roof=new Xt({color:night?0x465365:0x748590,roughness:.74});
+ const windowLit=new be({color:night?0xdeb977:0x6e8ea1});
+ const white=new be({color:night?0xb5cce4:0xf8f8f5,depthWrite:false});
+ const cyan=new be({color:night?0x5e9ea8:0x96d4cf,depthWrite:false});
+ const shipHull=new Xt({color:0x293d50,roughness:.72});
+ const containerMat=[0x915544,0x496683,0x9a9272,0x4e786b].map(c=>new Xt({color:c,roughness:.87}));
+ let boxes=0,cloudPuffs=0,trees=0,ships=0;
+ const box=(x,z,w,d,y,t,mat)=>{boxes++;return addBox(x,z,w,d,y,t,mat);};
+ // Deterministic low-cost wave texture. This is generated locally; it does not
+ // embed or request third-party maps or copyrighted aerial photographs.
+ const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
+ const ctx=canvas.getContext('2d');
+ let water=new Xt({color:night?0x153744:0x2b798c,roughness:.64,metalness:.03});
+ if(ctx){
+  const grad=ctx.createLinearGradient(0,0,256,256);
+  grad.addColorStop(0,night?'#123c52':'#246a82');
+  grad.addColorStop(.45,night?'#1c4a5e':'#328699');
+  grad.addColorStop(1,night?'#163846':'#23677b');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,256,256);
+  for(let i=0;i<580;i++){
+   const x=rnd()*256,y=rnd()*256,len=3+rnd()*24;
+   ctx.strokeStyle='rgba(206,243,248,'+(night?0.025:0.035+rnd()*.07)+')';
+   ctx.lineWidth=.5+rnd()*.7;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+len,y+1.5);ctx.stroke();
+  }
+  const map=new li(canvas);map.colorSpace=ke;map.needsUpdate=true;
+  water=new Xt({map,color:0xffffff,roughness:.69,metalness:.03});
+ }
+ // Changi's southern over-water final approach and the eastern coastal sea.
+ // Keep these sheets below pavements and taxiway meshes.
+ box(-50,3820,7300,7200,.015,.035,water);
+ box(2670,-1700,3800,5100,.012,.035,water);
+ box(-250,-6040,6800,3750,.012,.035,water);
+ // Airport coastal revetment and shallow-water edge, deliberately avoiding
+ // the 02C threshold and the other runways.
+ box(-170,215,1830,104,.082,.06,shore);
+ box(-170,250,1830,35,.105,.04,sand);
+ const waterFringe=new Xt({color:night?0x316574:0x68a8ac,roughness:.77});
+ box(-170,282,1830,44,.075,.045,waterFringe);
+ // Eastern reclaimed coastline: grass buffer, service track, seawall.
+ for(let i=0;i<(mobile?10:19);i++){
+  const N=mobile?10:19;
+  const z=-3850+i*(4650/N)+.5*(4650/N),x=725+28*Math.sin(i*.44);
+  const segment=4650/N+10;
+  box(x,z,200,segment,.106,.07,grass);
+  box(x+119,z,17,segment,.133,.07,shore);
+  box(x+93,z,11,segment,.164,.035,road);
+ }
+ // Land tongue along Singapore's East Coast, west of the airport island.
+ box(-2390,1770,1600,4400,.10,.14,turf);
+ box(-1530,1680,160,4320,.168,.07,park);
+ box(-1400,1720,27,4300,.201,.07,road);
+ box(-1372,1720,6,4200,.23,.03,shore);
+ // Green drainage reserve, parks and expressway on the airport's western edge.
+ box(-780,-1790,155,4900,.12,.16,park);
+ box(-900,-1860,32,4550,.22,.13,road);
+ for(let i=0;i<(mobile?10:27);i++){
+  const z=-3840+i*(mobile?430:164);
+  const x=-778+(i%5-2)*9;
+  box(x,z,17+rnd()*35,55+rnd()*120,.214,.07,i%4?grass:park);
+ }
+ // Tropical coastal park trees, outside runway, taxiway and apron corridors.
+ const treeCount=mobile?20:94;
+ const makeTree=(x,z,size)=>{
+  const a=worldAt(x,z);
+  const bark=new Tt(new an(.34*size,.58*size,4.8*size,5),trunk);
+  bark.position.set(a[0],2.6*size,a[1]);group.add(bark);
+  const foliage=new Tt(new Nn(1,7,5),rnd()>.5?tree:crownLight);
+  foliage.position.set(a[0],5.1*size,a[1]);
+  foliage.scale.set(3.1*size*factorX,3.4*size,3.2*size*factorZ);
+  group.add(foliage);trees++;
+ };
+ for(let i=0;i<treeCount;i++){
+  if(i%3===0)makeTree(-780+(rnd()-.5)*145,-3850+rnd()*4100,.75+rnd()*1.4);
+  else if(i%3===1)makeTree(-1400+(rnd()-.5)*110,-250+rnd()*3700,.75+rnd()*1.3);
+  else makeTree(650+rnd()*95,-3850+rnd()*4300,.55+rnd()*.95);
+ }
+ // Tiled high-density residential neighbourhoods and business parks on the
+ // far western horizon: massing intentionally kept well away from airside.
+ const towerCount=mobile?18:96;
+ for(let i=0;i<towerCount;i++){
+  const x=-1900-rnd()*1250,z=-3250+rnd()*6700;
+  const w=13+rnd()*31,d=14+rnd()*34,h=10+rnd()*((i%8===0)?105:46);
+  const b=box(x,z,w,d,h/2+.17,h,buildingMat[i%buildingMat.length]);
+  if(i%4===0)box(x,z,w+2,d+2,h+.9,1.8,roof);
+  if(night&&i%3===0){
+   const wx=x+w/2+1;
+   box(wx,z,1.5,d*.65,h*.63,1.6,windowLit);
+  }
+ }
+ // Marina Bay skyline is a distant artistic silhouette southwest of Changi;
+ // it is NOT a claim of exact surveyed building coordinates.
+ const landmarkScale=mobile?.67:1;
+ for(const t of [-1,0,1]){
+  const x=-2900+t*57,z=3140+t*12;
+  box(x,z,36*landmarkScale,46*landmarkScale,57*landmarkScale,114*landmarkScale,buildingMat[1]);
+ }
+ box(-2900,3150,195*landmarkScale,51*landmarkScale,115*landmarkScale,8*landmarkScale,roof);
+ // Singapore Flyer outline and slim support. Visible only from afar.
+ if(!mobile){
+  const x=-2540,z=3340;
+  box(x,z,3,5,43,80,roof);
+  const segments=16,r=43;
+  for(let i=0;i<segments;i++){
+   const theta=(i+.5)*2*Math.PI/segments;
+   const a0=i*2*Math.PI/segments,a1=(i+1)*2*Math.PI/segments;
+   const b=box(x+r*Math.cos(theta),z,2.8,2.2,73+r*Math.sin(theta),4.1,white);
+   // local +Y angular tangency approximation, no dependency on torus geometry.
+   b.rotation.z=(a0+a1)/2+Math.PI/2;
+  }
+ }
+ // Cargo ships offshore: recognizable Singapore Strait traffic, only a few
+ // draw calls on mobile. Keep ships outside the landing corridor.
+ const shipCount=mobile?4:19;
+ for(let i=0;i<shipCount;i++){
+  let x=(rnd()>.5?1:-1)*(910+rnd()*1850),z=500+rnd()*6600;
+  if(x<0&&z<1350)z+=1350;
+  const L=21+rnd()*42;
+  const hull=box(x,z,10,L,1.8,3.2,shipHull);
+  hull.rotation.y+=rnd()*Math.PI;
+  for(let k=0;k<3;k++)box(x,z-L*.24+k*L*.22,7,L*.15,4.6,3.3,containerMat[(i+k)%containerMat.length]);
+  box(x,z+L*.37,8,8,7.1,7.2,roof);ships++;
+ }
+ // Thin high clouds and large tropical cumulus banks, with a clear approach
+ // path so the ILS/runway remains visible. Meshes are built only once.
+ const cloudMats=[
+  new Xt({color:night?0x64738a:0xe7eef2,roughness:1,transparent:true,opacity:night?.44:.67,depthWrite:false}),
+  new Xt({color:night?0x8592aa:0xfafcfb,roughness:1,transparent:true,opacity:night?.36:.57,depthWrite:false}),
+  new Xt({color:night?0x3e526e:0xb0c8d0,roughness:1,transparent:true,opacity:night?.3:.31,depthWrite:false})
+ ];
+ const cloudGroups=[];
+ for(let i=0;i<maxClouds;i++){
+  const side=i%2===0?-1:1;
+  const x=side*(450+rnd()*2150),z=600+rnd()*5000;
+  const base=145+rnd()*240;
+  const width=95+rnd()*170;
+  const count=mobile?3:4;
+  const carrier=new me();carrier.name='SG_TROPICAL_CUMULUS_'+i;
+  for(let j=0;j<count;j++){
+   const dx=(j-(count-1)/2)*width*.35+(rnd()-.5)*27;
+   const dz=(rnd()-.5)*width*.42;
+   const y=base+(j%3)*width*.24;
+   const point=worldAt(x+dx,z+dz);
+   const puff=new Tt(new Nn(1,12,8),cloudMats[(i+j)%cloudMats.length]);
+   puff.position.set(point[0],y,point[1]);
+   const rad=width*(.36+.16*rnd());
+   puff.scale.set(rad*factorX,rad*(.65+.45*rnd()),rad*.76*factorZ);
+   carrier.add(puff);cloudPuffs++;
+  }
+  group.add(carrier);cloudGroups.push(carrier);
+ }
+ // Additional thin cloud deck at high altitude, leaving a clear hole directly
+ // ahead of the runway. Use no animations / network requests / texture fetches.
+ group.userData.jcSingaporeWaterTexture=water.map||null;
+ group.userData.jcSingaporeVisual={version:'v33',source:'PROCEDURAL SCENERY · VIDEO-INSPIRED',
+  mobile,cloudBanks:maxClouds,cloudPuffs,trees,shipCount:ships,urbanBuildings:towerCount,
+  boxes,coastline:true,night,landmarks:['Marina Bay-inspired skyline','Singapore Flyer-inspired outline']};
+}
+window.__jcSingaporeVisualStatus=()=>({...(jetTraffic.parallelGroup?.userData?.jcSingaporeVisual||{}),
+ built:!!jetTraffic.parallelGroup?.userData?.jcSingaporeVisual});
+
 function jetTrafficParallelMake(){
  if(!It?.scene||!_t||jetTrafficActiveAirport()!=='WSSS'||E.phase==='route')return;
  if(Date.now()<(jetTraffic.changiBuildRetryAt||0))return;
@@ -6014,6 +6198,7 @@ function jetTrafficParallelMake(){
  }
  jetChangiBuildTaxiNetwork(addBox,group);
  jetChangiBuildTerminals(addBox,putSphere,group);
+ jcSingaporeApproachScenery(addBox,putSphere,group,worldAt,factorX,factorZ);
  jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ);
  const host=document.getElementById('ui')||document.body;
  const oppositeEnd={"02L":"20R","02C":"20C","02R":"20L"};
@@ -6045,7 +6230,7 @@ function jetTrafficParallelMake(){
   jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
  }
 }
-window.__jcChangiStartupStatus=()=>({version:'v29',error:jetTraffic.changiLastBuildError||null,
+window.__jcChangiStartupStatus=()=>({version:'v33',error:jetTraffic.changiLastBuildError||null,
  retryInMs:Math.max(0,(jetTraffic.changiBuildRetryAt||0)-Date.now()),
  built:!!jetTraffic.parallelGroup,gateModels:jetTraffic.changiGateLayer?.children.length||0,
  bridges:jetTraffic.changiBridgeLayer?.userData.connectedCount||0});
@@ -13712,7 +13897,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v32';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v33';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
