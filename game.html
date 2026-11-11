@@ -5237,56 +5237,61 @@ const jcChangiGateRegistry=(()=>{
    gate:prefix+n,terminal,x,z:z0+(n-start)*dz,face
   });
  };
- // Terminal 3: A arm on the western side, B arm immediately to its east.
- add('T3','A',1,8,-387,-2640,-33,'W');
- add('T3','A',9,21,-387,-2904,-29,'W');
- add('T3','B',1,10,-174,-2592,-34,'E');
- // Terminal 1 lies to the EAST of T3. C is its northern pier; D is below C.
- add('T1','C',1,26,-129,-2230,-22,'E');
- add('T1','D',30,49,-129,-1740,-24,'E');
- // Terminal 2 spans the south apron with F on west and E on east.
- add('T2','E',1,28,-154,-870,-23,'E');
- add('T2','F',30,60,-385,-850,-22,'W');
- // Terminal 4 is across the central 02C/20C runway, toward the east.
- for(let n=1;n<=21;n++)list.push({gate:'G'+n,terminal:'T4',
-  x:n%2?425:330,z:-1210-Math.floor((n-1)/2)*35,face:n%2?'E':'W'});
+ // Changi terminal campus remapped to the user's reference terminal layout.
+ // ALL FOUR passenger terminals are kept between RWY 02L/20R and RWY 02C/20C.
+ // T3 occupies the western / north-west arm, T1 is north-east, T2 south,
+ // and T4 is a compact eastern pier inside the same central campus.
+ add('T3','A',1,8,-387,-2600,-32,'W');
+ add('T3','A',9,21,-387,-2856,-29,'W');
+ add('T3','B',1,10,-205,-2550,-31,'E');
+ add('T1','C',1,26,-122,-2255,-21,'E');
+ add('T1','D',30,49,-122,-1715,-24,'E');
+ add('T2','F',30,60,-375,-1185,-22,'W');
+ add('T2','E',1,28,-192,-1165,-23,'E');
+ add('T4','G',1,21,-58,-1138,-24,'E');
  return list;
 })();
 // Single terminal geometry registry reused by 3D buildings, collision footprints,
 // airport surface display and the passenger gate map.
 const jcChangiCampusV18={
  halls:[
-  {label:'TERMINAL 3',terminal:'T3',x:-263,z:-2740,w:112,d:230},
-  {label:'TERMINAL 1',terminal:'T1',x:-217,z:-2170,w:90,d:206},
-  {label:'TERMINAL 2',terminal:'T2',x:-263,z:-1280,w:102,d:225},
-  {label:'TERMINAL 4',terminal:'T4',x:378,z:-1390,w:68,d:370}
+  {label:'TERMINAL 3',terminal:'T3',x:-266,z:-2680,w:126,d:240},
+  {label:'TERMINAL 1',terminal:'T1',x:-196,z:-2128,w:92,d:216},
+  {label:'TERMINAL 2',terminal:'T2',x:-268,z:-1280,w:108,d:235},
+  {label:'TERMINAL 4',terminal:'T4',x:-115,z:-1380,w:72,d:330}
  ],
  piers:[
-  {label:'A · T3',terminal:'T3',x:-351,z:-2942,w:34,d:770},
-  {label:'B · T3',terminal:'T3',x:-202,z:-2760,w:33,d:410},
-  {label:'C · T1',terminal:'T1',x:-166,z:-2505,w:30,d:580},
-  {label:'D · T1',terminal:'T1',x:-166,z:-1975,w:30,d:515},
-  {label:'F · T2',terminal:'T2',x:-351,z:-1185,w:32,d:750},
-  {label:'E · T2',terminal:'T2',x:-190,z:-1185,w:32,d:750}
+  {label:'A · T3',terminal:'T3',x:-350,z:-2940,w:34,d:770},
+  {label:'B · T3',terminal:'T3',x:-232,z:-2700,w:34,d:430},
+  {label:'C · T1',terminal:'T1',x:-159,z:-2520,w:30,d:595},
+  {label:'D · T1',terminal:'T1',x:-159,z:-1985,w:30,d:510},
+  {label:'F · T2',terminal:'T2',x:-340,z:-1185,w:32,d:760},
+  {label:'E · T2',terminal:'T2',x:-227,z:-1185,w:32,d:690},
+  {label:'G · T4',terminal:'T4',x:-84,z:-1380,w:28,d:540}
  ],
  connectors:[
-  {label:'T3 A CONCOURSE',x:-327,z:-2740,w:42,d:35},
-  {label:'T2 F CONCOURSE',x:-324,z:-1280,w:46,d:36},
-  {label:'T3 TO JEWEL',x:-273,z:-2470,w:35,d:310},
-  {label:'JEWEL TO T2',x:-272,z:-1745,w:34,d:500}
+  {label:'T3 A CONCOURSE',x:-326,z:-2680,w:42,d:35},
+  {label:'T3 B CONCOURSE',x:-243,z:-2552,w:28,d:34},
+  {label:'T1 C/D CONCOURSE',x:-176,z:-2128,w:34,d:76},
+  {label:'T2 F CONCOURSE',x:-318,z:-1280,w:46,d:36},
+  {label:'T2 E CONCOURSE',x:-214,z:-1280,w:40,d:34},
+  {label:'T4 G CONCOURSE',x:-101,z:-1380,w:28,d:58},
+  {label:'T3 TO JEWEL',x:-246,z:-2415,w:34,d:250},
+  {label:'JEWEL TO T2',x:-246,z:-1738,w:34,d:506}
  ],
- jewel:{label:'JEWEL · T1',x:-299,z:-2155,r:29},
- // Short pedestrian connector beside T1, highlighted green in the user's map.
- greenLink:{label:'JEWEL–T1 LINK',x:-264,z:-2155,w:42,d:11},
+ jewel:{label:'JEWEL · T1',x:-214,z:-2128,r:28},
+ // Short green pedestrian connector beside T1 / Jewel in the user reference.
+ greenLink:{label:'JEWEL–T1 LINK',x:-187,z:-2128,w:44,d:11},
  aprons:[
-  {x:-268,z:-2120,w:345,d:2400},
-  {x:378,z:-1390,w:170,d:590}
+  {x:-226,z:-2050,w:438,d:2320},
+  {x:-95,z:-1380,w:108,d:720}
  ]
 };
 window.__jcChangiCampusV18=jcChangiCampusV18;
-window.__jcChangiLayoutStatus=()=>({build:'v18',gateCount:jcChangiGateRegistry.length,
+window.__jcChangiLayoutStatus=()=>({build:'v19',gateCount:jcChangiGateRegistry.length,
  terminals:Object.fromEntries(['T1','T2','T3','T4'].map(t=>[t,jcChangiGateRegistry.filter(g=>g.terminal===t).length])),
  jewel:jcChangiCampusV18.jewel,mainCampusBetweenRunways:true,
+ layout:'All four terminals between 02L and 02C; Jewel beside T1',
  caution:'Schematic game scenery, not operational airport geometry'});
 const jcChangiGateLookup=new Map(jcChangiGateRegistry.map(r=>[r.gate,r]));
 window.__jcChangiGateRegistry=jcChangiGateRegistry;
@@ -5494,10 +5499,10 @@ const jcGateV17Style={
  sign:'#14284b',stroke:'#f0d86f',text:'#ffffff'
 };
 function jcGatePierWall(stand){
- // Building faces are consistent with the v18 terminal finger registry.
+ // Building faces are consistent with the v19 terminal finger registry.
  const prefix=stand.gate[0];
- if(prefix==='G')return stand.face==='W'?344:412;
- return {A:-370,B:-184,C:-148,D:-148,E:-172,F:-368}[prefix]??
+ if(prefix==='G')return -98;
+ return {A:-370,B:-214,C:-148,D:-148,E:-209,F:-357}[prefix]??
   (stand.x+(stand.face==='W'?18:-18));
 }
 function jcGateTexture(gate){
@@ -5743,8 +5748,8 @@ function jetChangiBuildTerminals(addBox,putSphere,group){
  for(const hall of cfg.halls)for(const offset of [-1,1])
   addBox(hall.x+offset*(hall.w/2+12),hall.z,2,2,1.8,3.3,lamps);
  jcChangiBuildStandLayer(addBox,group);
- group.userData.jcChangiTerminals={version:18,components:['T1','T2','T3','T4','JEWEL'],
-  source:'Reference-matched Changi conceptual terminal and gate layout; NOT surveyed'};
+ group.userData.jcChangiTerminals={version:19,components:['T1','T2','T3','T4','JEWEL'],
+  source:'Reference-matched Changi conceptual terminal and gate layout; all 4 terminals between 02L and 02C; NOT surveyed'};
 }
 
 function jetTrafficParallelMake(){
@@ -13259,7 +13264,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI TERMINALS v18 · GATES + JEWEL';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI TERMINALS v19 · ALL GATES + JEWEL';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -13999,6 +14004,6 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI TERMINALS v18 · GATE ALIGN</div>
+<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI TERMINALS v19 · 4 TERMINALS BETWEEN 02L/02C</div>
 </body>
 </html>
