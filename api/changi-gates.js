@@ -1,5 +1,5 @@
 /**
- * Jetline Captain v11 — Aviationstack SIN flight → gate board with SQ targeted lookup.
+ * Jetline Captain v12 — Aviationstack SIN flight → gate board with SQ targeted lookup.
  * Vercel Node serverless API, no browser key; no HTML scraping.
  *
  * Set AVIATIONSTACK_API_KEY in Vercel Production, then redeploy.
@@ -58,6 +58,19 @@ function flightRows(data,direction,now,lookaheadHours){
   rows.push({
    gate,terminal,flight,direction,status,
    scheduled,estimated,actual,
+   // Both legs are included, with real ISO timestamps, for the ground terminal board.
+   // Departure / arrival times may refer to different airport time zones;
+   // Jetline always renders them converted to Singapore time (SGT).
+   departureScheduled:safeDate(f.departure?.scheduled),
+   departureEstimated:safeDate(f.departure?.estimated),
+   departureActual:safeDate(f.departure?.actual),
+   arrivalScheduled:safeDate(f.arrival?.scheduled),
+   arrivalEstimated:safeDate(f.arrival?.estimated),
+   arrivalActual:safeDate(f.arrival?.actual),
+   departureAirport:str(f.departure?.airport,85),
+   arrivalAirport:str(f.arrival?.airport,85),
+   departureIata:upper(f.departure?.iata,5),
+   arrivalIata:upper(f.arrival?.iata,5),
    destination:str(dest.airport||dest.iata||dest.icao,85),
    destinationIata:upper(dest.iata,5),
    airline:str(f.airline?.name,75),
