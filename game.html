@@ -5495,7 +5495,7 @@ function jcChangiSync3DGates(){
  while(layer.children.length)layer.remove(layer.children[0]);
  if(jetTrafficActiveAirport()!=='WSSS'||E.state!=='play')return;
  const all=jcChangiFleetCandidates();
- const cap=window.innerWidth<700?26:42;
+ const cap=window.innerWidth<700?16:30;
  const used=new Set(),placed=[];
  const outFace=gate=>/^[DFBG]/.test(gate)?0:1;
  // Keep the most visually accessible authorized gate assignments first.
@@ -5608,12 +5608,12 @@ function jcGatePierWall(stand){
  return pier.x+(stand.face==='W'?-pier.w/2:pier.w/2);
 }
 function jcGateTexture(gate){
- const canvas=document.createElement('canvas');canvas.width=192;canvas.height=88;
+ const canvas=document.createElement('canvas');canvas.width=128;canvas.height=64;
  const ctx=canvas.getContext('2d');if(!ctx)return null;
- ctx.fillStyle=jcGateV17Style.sign;ctx.fillRect(2,2,188,84);
- ctx.strokeStyle=jcGateV17Style.stroke;ctx.lineWidth=6;ctx.strokeRect(4,4,184,80);
- ctx.fillStyle=jcGateV17Style.text;ctx.font='bold 57px Arial,sans-serif';
- ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(gate),96,45,177);
+ ctx.fillStyle=jcGateV17Style.sign;ctx.fillRect(1,1,126,62);
+ ctx.strokeStyle=jcGateV17Style.stroke;ctx.lineWidth=4;ctx.strokeRect(3,3,122,58);
+ ctx.fillStyle=jcGateV17Style.text;ctx.font='bold 41px Arial,sans-serif';
+ ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(gate),64,33,117);
  const tex=new li(canvas);tex.colorSpace=ke;tex.needsUpdate=true;return tex;
 }
 function jcChangiBuildNumberSigns(group,worldAt){
@@ -5735,6 +5735,10 @@ function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
  jetTraffic.changiGateLayer=layer;
  const white=new Xt({color:0xebf0f6,roughness:.53,metalness:.08});
  const navy=new Xt({color:0x233f67,roughness:.63});
+ // V26 WSSS STARTUP FIX: v25 used airlinePalette without defining it.
+ // Shared materials avoid repeatedly allocating a new material per aircraft.
+ const airlinePalette=[0xe9a629,0x36aeb5,0xdf665e,0x5c7bc9,0x67ae77,0x9557aa]
+   .map(color=>new Xt({color,roughness:.60,metalness:.06}));
  const silver=new Xt({color:0xa9cbd0,roughness:.59,metalness:.14});
  const blue=new be({color:0x75dbf4,transparent:true,opacity:.84});
  // Geometry/materials are shared across aircraft so refresh is quick.
@@ -5866,9 +5870,11 @@ function jetChangiBuildTerminals(addBox,putSphere,group){
 
 function jetTrafficParallelMake(){
  if(!It?.scene||!_t||jetTrafficActiveAirport()!=='WSSS'||E.phase==='route')return;
+ if(Date.now()<(jetTraffic.changiBuildRetryAt||0))return;
  if(jetTraffic.parallelScene===It.scene&&jetTraffic.parallelGroup)return;
  jetTrafficParallelFree();jetTraffic.parallelScene=It.scene;
  const group=new me();group.name='JC_CHANGI_02L_02C_02R_RUNWAYS';
+ try{
  // On arrival use the destination runway's geographic reference, not the
  // departure airport's rotated local frame. This places terminals at Changi
  // for approach, rollout and taxi-in, including reciprocal RWY 20C arrivals.
@@ -5950,7 +5956,22 @@ function jetTrafficParallelMake(){
  It.scene.add(group);jetTraffic.parallelGroup=group;
  jetTraffic.changiClearedCount=arrival?0:jetChangiClearObstacles();
  jetTrafficThreeRunwayBoard();
+ jetTraffic.changiLastBuildError='';jetTraffic.changiBuildRetryAt=0;
+ }catch(err){
+  // A scenery error must NOT freeze the whole flight or re-create hundreds of
+  // WebGL meshes each animation frame. Retry only after a cooldown.
+  jetTraffic.changiLastBuildError=String(err&&err.message||err);
+  jetTraffic.changiBuildRetryAt=Date.now()+15000;
+  console.error('WSSS scenery build suspended for 15 seconds:',err);
+  try{group.traverse(obj=>{obj.material?.map?.dispose?.()});jetTrafficDispose(group)}catch(_e){}
+  jetTrafficParallelFree();
+  jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
+ }
 }
+window.__jcChangiStartupStatus=()=>({version:'v26',error:jetTraffic.changiLastBuildError||null,
+ retryInMs:Math.max(0,(jetTraffic.changiBuildRetryAt||0)-Date.now()),
+ built:!!jetTraffic.parallelGroup,gateModels:jetTraffic.changiGateLayer?.children.length||0,
+ bridges:jetTraffic.changiBridgeLayer?.userData.connectedCount||0});
 function jetTrafficThreeRunwayBoard(){
  let el=document.getElementById('jc-changi-3-rwy-board');
  if(el)return el;
@@ -13385,7 +13406,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • VISIBLE PARKED AIRCRAFT + AEROBRIDGES v25';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • WSSS FREEZE FIX v26 · STABLE GATE SCENERY';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -14176,7 +14197,7 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • PARKED GATES v25 · 3D APRON CLEARANCE</div>
+<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • WSSS FREEZE FIX v26</div>
 <style id="jc-clear-nd-gate-controls-v23">
 /* No floating buttons may cover the navigation display at WSSS. */
 #jc-gate-camera-panel{display:none!important;pointer-events:none!important}
