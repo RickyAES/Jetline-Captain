@@ -5538,7 +5538,11 @@ function jcChangiSync3DGates(){
  }
  // Always keep a small, physically separated visible scenery fleet, even
  // when the gate feed is partial or every returned flight is a codeshare.
- const decor=['C20','C24','D30','D35','D42','E20','E25','E4','B2','B7','A3','A10','A17','F30','F40','F50','F58','G4','G12'];
+ // Prioritize the D/E apron seen from the WSSS taxi viewpoint (D30/E27),
+ // then distribute remaining visible parked models across all terminals.
+ // Never invent a real flight number for these fallback scenic models.
+ const decor=['D30','E27','D35','E24','B2','C20','A3','F30','F50',
+  'D42','E12','C24','B7','G4','A10','F40','E4','G12','A17'];
  for(const gate of decor){
   if(layer.children.length>=cap||used.has(gate))continue;
   const stand=jcChangiGateLookup.get(gate);if(!stand)continue;
@@ -5577,7 +5581,7 @@ function jcChangiAnimateFleet(now=Date.now()){
   const b=layer.userData.worldAt(pose.next.x,pose.next.z);
   if(pose.stage!=='SIM AT GATE'&&Math.hypot(b[0]-a[0],b[1]-a[1])>1){
    const yaw=Math.atan2(b[0]-a[0],-(b[1]-a[1]));
-   plane.rotation.y=yaw-layer.userData.baseYaw;
+   plane.rotation.y=yaw-(Number(plane.userData.dockYaw)||0);
   }else plane.rotation.y=0;
   plane.userData.stage=pose.stage;
  }
@@ -5646,8 +5650,9 @@ function jcChangiBuildPassengerBridge(stand,worldAt,factorX){
   source:'SIMULATED_GATE_SCENERY_NOT_LIVE'};
  const side=stand.face==='W'?-1:1,wall=jcGatePierWall(stand);
  const start={x:wall+side*1.5,z:stand.z-7.5};
- // Parked aircraft's forward passenger door, ahead of the wing, not nose tip.
- const door={x:stand.x-side*2.7,z:stand.z-7.5};
+ // V28: passenger door on the terminal-facing front quarter of the
+ // crosswise, nose-in aircraft; jet bridge stops at the fuselage side.
+ const door={x:stand.x-side*10.8,z:stand.z-3.6};
  const a=worldAt(start.x,start.z),b=worldAt(door.x,door.z);
  const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
  if(!Number.isFinite(len)||len<6||len>125){group.userData.geometryError='INVALID_LENGTH_'+len;return group;}
@@ -5723,7 +5728,7 @@ window.__jcChangiGateSceneryStatus=()=>({
  totalAirframes:jetTraffic.changiGateLayer?.children.length||0,
  observedNearStands:jetTraffic.changiGateLayer?.userData?.observedParkedCount||0,
  examples:(jetTraffic.changiGateLayer?.children||[]).slice(0,8).map(p=>p.userData.gate),
- source:'CHANGI GATE SCENERY · LIVE OBSERVATIONS DIFFERENT FROM SIMULATED PARKING'
+ source:'CHANGI GATES v29 · ROUND FUSELAGE · SWEPT WINGS · DOCKED BRIDGES'
 });
 
 function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
@@ -5733,51 +5738,88 @@ function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
  group.add(bridgeLayer);jetTraffic.changiBridgeLayer=bridgeLayer;
  const layer=new me();layer.name='JC_GATE_ASSIGNMENTS_SIM_V16';group.add(layer);layer.userData.worldAt=worldAt;layer.userData.baseYaw=rot;layer.userData.factorX=factorX;
  jetTraffic.changiGateLayer=layer;
- const white=new Xt({color:0xebf0f6,roughness:.53,metalness:.08});
- const navy=new Xt({color:0x233f67,roughness:.63});
- // V26 WSSS STARTUP FIX: v25 used airlinePalette without defining it.
- // Shared materials avoid repeatedly allocating a new material per aircraft.
- const airlinePalette=[0xe9a629,0x36aeb5,0xdf665e,0x5c7bc9,0x67ae77,0x9557aa]
-   .map(color=>new Xt({color,roughness:.60,metalness:.06}));
- const silver=new Xt({color:0xa9cbd0,roughness:.59,metalness:.14});
- const blue=new be({color:0x75dbf4,transparent:true,opacity:.84});
- // Geometry/materials are shared across aircraft so refresh is quick.
- const shapes={body:new Ae(6.2*factorX,3.8,34*factorZ),
-  wing:new Ae(38*factorX,.74,6.3*factorZ),
-  tail:new Ae(1.8*factorX,8.2,5.8*factorZ),
-  markings:new Ae(17*factorX,.33,1.2*factorZ)};
- const make=(parent,at,dx,dz,geom,mat,y)=>{
-  const mesh=new Tt(geom,mat),p=worldAt(at.x+dx,at.z+dz);
-  mesh.position.set(p[0],y,p[1]);mesh.rotation.y=rot;parent.add(mesh);
+const white=new Xt({color:0xf7f8f9,roughness:.53,metalness:.13,emissive:0x354047,emissiveIntensity:.27});
+const navy=new Xt({color:0x21395b,roughness:.6,metalness:.06,emissive:0x09162c,emissiveIntensity:.25});
+const airlinePalette=[0xe9a629,0x36aeb5,0xdf665e,0x5c7bc9,0x67ae77,0x9557aa]
+  .map(color=>new Xt({color,roughness:.60,metalness:.06}));
+const silver=new Xt({color:0xb0c9d5,roughness:.52,metalness:.28});
+const windowMat=new be({color:0x11263c});
+// Shared low-poly geometries: avoid many allocations and preserve mobile FPS.
+// For gate aircraft, the fuselage runs ALONG X, nose toward the terminal wall,
+// and the wings run along Z (parallel to the terminal pier).
+const shapes={body:new Ae(6.2*factorX,3.8,34*factorZ),
+ wing:new Ae(38*factorX,.74,6.3*factorZ),
+ tail:new Ae(1.8*factorX,8.2,5.8*factorZ),
+ markings:new Ae(17*factorX,.33,1.2*factorZ)};
+ // Recognizable, efficient aircraft geometry: a round fuselage, smooth nose,
+ // swept/tapered wings, twin underwing engines and triangular vertical fin.
+ const parkedShape={
+  fuselage:new an(3.0,3.0,33*factorX,16,1),
+  tailCone:new an(1.15,2.95,8*factorX,12,1),
+  nose:new Nn(1,18,12),
+  wingInner:new Ae(11*factorX,.55,11*factorZ),
+  wingOuter:new Ae(5.6*factorX,.48,9*factorZ),
+  tailplane:new Ae(4.9*factorX,.48,14*factorZ),
+  fin:new an(0.05,4.4,8.8,3),
+  engine:new an(1.5,1.5,8*factorX,12),
+  inlet:new an(1.44,1.44,.28*factorX,12),
+  gear:new Ae(.9*factorX,3.0,.9*factorZ),
+  stripe:new Ae(23*factorX,.4,.16*factorZ),
+  cockpit:new Ae(3.8*factorX,1.2,5.3*factorZ),
+  door:new Ae(2.7*factorX,2.7,.25*factorZ)
  };
- jetTraffic.changiGateFactory=(parent,stand,flight)=>{
-  const item=new me();item.name='SIM_GATE_'+stand.gate+'_'+String(flight.flight||'');
-  const base=worldAt(stand.x,stand.z);
-  item.position.set(base[0],0,base[1]);
-  item.userData={gate:stand.gate,flight:flight.flight,terminal:stand.terminal,
-   confirmedParked:!!flight.confirmedParked,flightRecord:flight,
-   source:'SIMULATED_FROM_GATE_ASSIGNMENT',stage:'SIM AT GATE'};
-  const name=String(flight.airlineIata||flight.airline||flight.flight||'').toUpperCase();
-  // A muted, distinct airline tint for the small scenery models. Codeshare
-  // flight numbers are not treated as proof of the operating airline.
-  const tint=/^(SQ|SINGAPORE)/.test(name)?navy:airlinePalette[Array.from(name).reduce((s,c)=>s+c.charCodeAt(0),0)%airlinePalette.length];
-  const makeRel=(dx,dz,geom,mat,y)=>{
-   const mesh=new Tt(geom,mat),p=worldAt(stand.x+dx,stand.z+dz);
-   mesh.position.set(p[0]-base[0],y,p[1]-base[1]);mesh.rotation.y=rot;item.add(mesh);
-  };
-  makeRel(0,0,shapes.body,white,4.55);
-  makeRel(0,1,shapes.wing,white,5.1);
-  makeRel(0,12,shapes.tail,tint,8.05);
-  makeRel(0,-13,shapes.markings,tint,6.15);
-  // Two engine nacelles and high-contrast cockpit make the parking aircraft
-  // legible from a mobile-height apron camera, not just abstract rectangles.
-  for(const side of [-1,1]){
-   makeRel(side*7,-1,new Ae(2.6*factorX,2.8,6.8*factorZ),silver,3.7);
-   makeRel(side*13,0,new Ae(1.2*factorX,1.45,2.4*factorZ),tint,5.15);
+ parkedShape.fuselage.rotateZ(Math.PI/2);
+ parkedShape.tailCone.rotateZ(Math.PI/2);
+ parkedShape.engine.rotateZ(Math.PI/2);
+ parkedShape.inlet.rotateZ(Math.PI/2);
+const make=(parent,at,dx,dz,geom,mat,y)=>{
+ const mesh=new Tt(geom,mat),p=worldAt(at.x+dx,at.z+dz);
+ mesh.position.set(p[0],y,p[1]);mesh.rotation.y=rot;parent.add(mesh);
+};
+jetTraffic.changiGateFactory=(parent,stand,flight)=>{
+ const item=new me();item.name='PARKED_GATE_'+stand.gate+'_'+String(flight.flight||'');
+ const base=worldAt(stand.x,stand.z),side=stand.face==='W'?-1:1;
+ item.position.set(base[0],0,base[1]);
+ const nose=worldAt(stand.x-side*12,stand.z);
+ // Heading reference lets moving flights turn from nose-in parking to taxi-out.
+ const dockYaw=Math.atan2(nose[0]-base[0],-(nose[1]-base[1]));
+ item.userData={gate:stand.gate,flight:flight.flight,terminal:stand.terminal,
+  confirmedParked:!!flight.confirmedParked,flightRecord:flight,
+  source:'SIMULATED_FROM_GATE_ASSIGNMENT',stage:'SIM AT GATE',dockYaw};
+ const name=String(flight.airlineIata||flight.airline||flight.flight||'').toUpperCase();
+ const tint=/^(SQ|SINGAPORE|SIM)/.test(name)?navy:
+  airlinePalette[Array.from(name).reduce((sum,c)=>sum+c.charCodeAt(0),0)%airlinePalette.length];
+ const add=(dx,dz,geom,mat,y,tag)=>{
+  const mesh=new Tt(geom,mat),p=worldAt(stand.x+dx,stand.z+dz);
+  mesh.position.set(p[0]-base[0],y,p[1]-base[1]);
+  mesh.rotation.y=rot;
+  if(tag)mesh.name=tag+'_'+stand.gate;
+  mesh.frustumCulled=false;item.add(mesh);return mesh;
+ };
+  add(0,0,parkedShape.fuselage,white,5.65,'FUSELAGE');
+  // Spherical front cap and tapered tail keep the aircraft recognizable
+  // from both the taxiway cockpit and elevated spectator camera.
+  const noseMesh=add(-side*16.4,0,parkedShape.nose,white,5.65,'ROUND_NOSE');
+  noseMesh.scale.set(5.2*factorX,2.85,3.12*factorZ);
+  add(side*15.4,0,parkedShape.tailCone,white,5.65,'TAIL_CONE');
+  // Sweep the wings rearward as their span increases. The old full-width
+  // rectangular plate looked like a jetbridge, not a parked airliner.
+  for(const wingSide of [-1,1]){
+   add(side*1.0,wingSide*7.3,parkedShape.wingInner,white,5.36,'INNER_WING');
+   add(side*5.5,wingSide*16.0,parkedShape.wingOuter,white,5.33,'OUTER_WING');
+   add(side*3.4,wingSide*9.8,parkedShape.engine,silver,3.8,'NACELLE');
+   add(-side*.7,wingSide*9.8,parkedShape.inlet,windowMat,3.8,'ENGINE_INLET');
+   add(-side*1.0,wingSide*3.0,parkedShape.stripe,tint,6.35,'FUSELAGE_LIVERY');
   }
-  makeRel(0,-15.5,new Ae(3.5*factorX,.5,3.8*factorZ),navy,5.55);
-  parent.add(item);
- };
+  add(side*15.3,0,parkedShape.tailplane,white,8.55,'TAILPLANES');
+  add(side*15.0,0,parkedShape.fin,tint,11.1,'TRIANGULAR_FIN');
+  add(-side*15.0,0,parkedShape.cockpit,windowMat,6.95,'COCKPIT_WINDOWS');
+  add(-side*10.8,-3.15*factorZ,parkedShape.door,windowMat,6.4,'PASSENGER_DOOR');
+  add(-side*10.6,0,parkedShape.gear,silver,1.7,'NOSE_GEAR');
+  add(side*3.0,-4.5,parkedShape.gear,silver,1.7,'MAIN_GEAR');
+  add(side*3.0,4.5,parkedShape.gear,silver,1.7,'MAIN_GEAR');
+ parent.add(item);
+};
  jcChangiSync3DGates();
  // Independent observed ADS-B ground aircraft: geometric positions are never
  // snapped to a gate, because aircraft movement data cannot verify a stand.
@@ -5968,7 +6010,7 @@ function jetTrafficParallelMake(){
   jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
  }
 }
-window.__jcChangiStartupStatus=()=>({version:'v27',error:jetTraffic.changiLastBuildError||null,
+window.__jcChangiStartupStatus=()=>({version:'v29',error:jetTraffic.changiLastBuildError||null,
  retryInMs:Math.max(0,(jetTraffic.changiBuildRetryAt||0)-Date.now()),
  built:!!jetTraffic.parallelGroup,gateModels:jetTraffic.changiGateLayer?.children.length||0,
  bridges:jetTraffic.changiBridgeLayer?.userData.connectedCount||0});
@@ -6031,7 +6073,7 @@ function jcWSSSPrepareSelected(){
   jcWSSSAutoScene.error=jetTraffic.changiLastBuildError||'';
  }
 }
-window.__jcWSSSLoadStatus=()=>({version:'v27',selected:jcWSSSAutoScene.selected,
+window.__jcWSSSLoadStatus=()=>({version:'v29',selected:jcWSSSAutoScene.selected,
  prepared:jcWSSSAutoScene.prepared,dataRequested:jcWSSSAutoScene.requested,
  sceneReady:!!jetTraffic.parallelGroup,runwayCount:jetTraffic.parallelGroup?3:0,
  terminalCount:jcWSSSAutoScene.prepared?jcChangiCampusV18.halls.length:0,
@@ -9407,11 +9449,11 @@ function jcGateViewApply(camera){
  // Put camera outside the terminal wall on the face where gates sit.
  // East-facing gates D/F/B face 02C, west-facing gates A/C/E/G face 02L.
  const side=stand.face==='W'?-1:1;
- const vantage=worldAt(stand.x+side*92,stand.z+34);
+ const vantage=worldAt(stand.x+side*67,stand.z+64);
  const point=item.getWorldPosition(new K());
- camera.position.set(vantage[0],39,vantage[1]);
- camera.lookAt(point.x,7,point.z);
- if(camera.fov!==62){camera.fov=62;camera.updateProjectionMatrix();}
+ camera.position.set(vantage[0],31,vantage[1]);
+ camera.lookAt(point.x-side*9,7,point.z);
+ if(camera.fov!==56){camera.fov=56;camera.updateProjectionMatrix();}
 }
 window.__jcTerminalMapOpen=()=>jcTerminalMapOpen();
 window.__jcGateView={
@@ -13482,7 +13524,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • WSSS AUTO SCENERY v27 · STABLE GATE SCENERY';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • PARKED AIRLINERS v29 · STABLE GATE SCENERY';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -14273,7 +14315,7 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • WSSS AUTO SCENERY v27</div>
+<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • PARKED AIRLINERS v29</div>
 <style id="jc-clear-nd-gate-controls-v23">
 /* No floating buttons may cover the navigation display at WSSS. */
 #jc-gate-camera-panel{display:none!important;pointer-events:none!important}
