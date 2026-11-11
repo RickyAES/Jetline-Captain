@@ -9168,7 +9168,8 @@ function jcGateViewControls(){
 function jcGateViewUpdate(){
  const root=jcGateViewControls(),list=jcGateViewItems(),valid=jetTrafficActiveAirport()==='WSSS'&&
  E.state==='play'&&['taxi','takeoff','approach','rollout','taxiIn'].includes(E.phase);
- root.style.display=valid?'block':'none';
+ // v23: cockpit ND must remain completely unobstructed.
+ root.style.display='none'; // actions are now in the Gates panel
  if(!valid||!list.length){jcGateView.enabled=false;}
  const toggle=root.querySelector('#jc-gate-camera-toggle');
  toggle.textContent=valid?`✈ VIEW GATES · ${list.length}`:'✈ GATE VIEW';
@@ -9199,6 +9200,7 @@ function jcGateViewApply(camera){
  camera.lookAt(point.x,7,point.z);
  if(camera.fov>56){camera.fov=56;camera.updateProjectionMatrix();}
 }
+window.__jcTerminalMapOpen=()=>jcTerminalMapOpen();
 window.__jcGateView={
  show(gate){jcGateView.enabled=true;jcGateViewPick(gate);jcGateViewUpdate();},
  next(){jcGateView.index++;jcGateViewUpdate();},
@@ -13323,6 +13325,11 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
 #jc-gates-panel .jc-gate-head,#jc-gates-panel .jc-gate-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:space-between}
 #jc-gates-panel .jc-gate-actions{justify-content:flex-start;margin:10px 0}
 #jc-gates-panel .jc-gate-metadata{font-size:11px;color:#94cddd;margin:6px 0}
+#jc-gates-panel .jc-gate-views{display:flex;flex-wrap:wrap;align-items:center;gap:7px;
+ margin:8px 0 12px;padding:9px;border:1px solid #31536d;border-radius:10px;background:#0a2c42}
+#jc-gates-panel .jc-gate-views button{font-weight:800;border-color:#63b8d0;min-height:36px}
+#jc-gates-panel .jc-gate-views button[hidden]{display:none!important}
+#jc-gates-panel .jc-gate-views small{flex:1 1 100%;color:#9bcfdd;font-size:11px}
 #jc-gates-panel .jc-gate-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:6px;margin-top:10px}
 #jc-gates-panel .jc-gate-card{border:1px solid #365572;background:#0e2338;border-radius:7px;padding:7px;min-width:0;overflow-wrap:anywhere;min-height:48px}
 #jc-gates-panel .jc-gate-card strong{color:#f5f9fc;letter-spacing:.04em}
@@ -13364,6 +13371,13 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
  const panel=document.createElement('section');panel.id='jc-gates-panel';panel.setAttribute('data-ui','true');panel.setAttribute('role','dialog');panel.setAttribute('aria-label','Changi airport flight gates');
  panel.innerHTML=`<div class="jc-gate-head"><h2>WSSS · TERMINAL GATES</h2><button type="button" id="jc-gate-close">✕ CLOSE</button></div>
  <p class="jc-gate-help">Flight board from your authorized Aviationstack feed, grouped by gate. Multiple flights can use a gate at different times. These are assignments, not verified parked aircraft. SQ-numbered codeshares may be operated by another airline. 3D stand locations are schematic.</p>
+ <div class="jc-gate-views" aria-label="Airport gate map and camera controls">
+  <button type="button" id="jc-gate-open-map" aria-label="Open Changi airport terminal gate map">⌗ GATE MAP</button>
+  <button type="button" id="jc-gate-open-view" aria-label="Show parked aircraft in 3D">✈ VIEW GATES IN 3D</button>
+  <button type="button" id="jc-gate-next-view" hidden>› NEXT AIRCRAFT</button>
+  <button type="button" id="jc-gate-exit-view" hidden>✕ EXIT GATE VIEW</button>
+  <small id="jc-gate-view-state" aria-live="polite">The navigation display stays clear.</small>
+ </div>
  <div class="jc-gate-metadata" id="jc-gate-source" aria-live="polite">NO LIVE GATE FEED CONNECTED</div>
  <div class="jc-gate-actions"><select id="jc-gate-terminal" aria-label="Filter by terminal"><option value="ALL">ALL TERMINALS</option><option value="T1">T1 · C / D</option><option value="T2">T2 · E / F</option><option value="T3">T3 · A / B</option><option value="T4">T4 · G</option></select>
  <select id="jc-gate-airline" aria-label="Filter by airline"><option value="ALL">ALL AIRLINES</option><option value="SQ">✈ SINGAPORE AIRLINES (SQ)</option></select>
@@ -13535,7 +13549,37 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
  }
  $('#jc-gate-terminal').addEventListener('change',render);$('#jc-gate-airline').addEventListener('change',render);$('#jc-gate-direction').addEventListener('change',render);$('#jc-gate-search').addEventListener('input',render);
  const close=()=>panel.classList.remove('open');
- openBtn.addEventListener('click',()=>{panel.classList.toggle('open');if(panel.classList.contains('open'))render()});
+ // v23: Gate controls are inside the Gate Information panel opened by the
+ // existing AIRPORTS / GATES / RADAR / FUEL top navigation. Never over the ND.
+ const updateGateCameraButtons=()=>{
+  const view=window.__jcGateView?.status?.()||{};
+  const active=!!view.enabled;
+  const show=$('#jc-gate-open-view'),next=$('#jc-gate-next-view'),exit=$('#jc-gate-exit-view');
+  show.hidden=active;
+  next.hidden=!active;exit.hidden=!active;
+  show.disabled=!view.count;
+  $('#jc-gate-view-state').textContent=active
+   ?`3D gate view: ${view.current||'aircraft'} · ${view.count||0} visible models. Reopen GATES to change or exit.`
+   :view.count?`${view.count} simulated or reported 3D gate aircraft available. ND stays clear.`
+   :'No 3D parked aircraft loaded for this airport yet. Gate map remains available.';
+ };
+ $('#jc-gate-open-map').addEventListener('click',()=>{
+  if(typeof window.__jcTerminalMapOpen==='function'){
+   close();window.__jcTerminalMapOpen();
+  }else $('#jc-gate-view-state').textContent='Gate map is still loading.';
+ });
+ $('#jc-gate-open-view').addEventListener('click',()=>{
+  const view=window.__jcGateView?.status?.();
+  if(!view?.count){updateGateCameraButtons();return;}
+  window.__jcGateView.show();updateGateCameraButtons();close();
+ });
+ $('#jc-gate-next-view').addEventListener('click',()=>{
+  window.__jcGateView?.next?.();updateGateCameraButtons();close();
+ });
+ $('#jc-gate-exit-view').addEventListener('click',()=>{
+  window.__jcGateView?.close?.();updateGateCameraButtons();close();
+ });
+ openBtn.addEventListener('click',()=>{panel.classList.toggle('open');if(panel.classList.contains('open')){render();updateGateCameraButtons();}});
  $('#jc-gate-close').addEventListener('click',close);
  document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
  $('#jc-gate-paste').addEventListener('click',()=>$('#jc-gate-entry').classList.toggle('active'));
@@ -14015,7 +14059,11 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI GATES DOCK v20 · NO FCU OVERLAP</div>
+<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CLEAR ND v23 · GATE CONTROLS IN TOP-BAR PANEL</div>
+<style id="jc-clear-nd-gate-controls-v23">
+/* No floating buttons may cover the navigation display at WSSS. */
+#jc-gate-camera-panel{display:none!important;pointer-events:none!important}
+</style>
 <style id="jc-changi-host-nav-v22-css">
 /* Hosted version uses the website header. Do not repeat gate launchers
    in the cockpit menus or floating overlays; standalone stays unchanged. */
