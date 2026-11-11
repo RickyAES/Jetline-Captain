@@ -5232,13 +5232,13 @@ const jcChangiGateRegistry=(()=>{
  };
  // Exterior parking rows are compressed to fit the playable game airport.
  // Not a literal reproduction of each stand's longitude and latitude.
- add('T3','A',1,21,[-420,-382],-1315,34);
- add('T3','B',1,10,[-348,-312],-1350,34);
- add('T1','C',1,26,[-416,-376],-1760,34);
- add('T1','D',30,49,[-191,-150],-1800,34);
- add('T2','E',1,28,[-411,-371],-2230,34);
- add('T2','F',30,60,[-187,-146],-2240,34);
- add('T4','G',1,21,[-249,-208],-970,27);
+ add('T3','A',1,21,[-446,-438],-1315,34);
+ add('T3','B',1,10,[-355,-319],-1290,34);
+ add('T1','C',1,26,[-445,-438],-1800,34);
+ add('T1','D',30,49,[-135,-128],-1800,34);
+ add('T2','E',1,28,[-440,-433],-2220,34);
+ add('T2','F',30,60,[-135,-128],-2230,34);
+ add('T4','G',1,21,[-337,-325],-970,27);
  return records;
 })();
 const jcChangiGateLookup=new Map(jcChangiGateRegistry.map(r=>[r.gate,r]));
@@ -5368,9 +5368,27 @@ function jcChangiSync3DGates(){
  if(jetTrafficActiveAirport()!=='WSSS'||E.state!=='play')return;
  const all=jcChangiFleetCandidates();
  const cap=window.innerWidth<700?22:36;
+ const used=new Set();
  for(const {flight,pose} of all.slice(0,cap)){
   const st=jcChangiGateLookup.get(pose.gate);
-  factory(layer,st,flight);
+  factory(layer,st,flight);used.add(pose.gate);
+ }
+ // Scenery aircraft remain visibly parked even when the flight API returns
+ // no gate information. They NEVER enter live flight records or pretend to be
+ // reported parked aircraft; models are labelled SIM APRON SCENERY.
+ const decor=['A2','A9','A16','B1','C2','C12','C21','D31','D38','E3','E14','E25','F32','F44','G3','G14'];
+ for(const gate of decor){
+  if(layer.children.length>=Math.min(cap,25)||used.has(gate))continue;
+  const stand=jcChangiGateLookup.get(gate);if(!stand)continue;
+  const scenery={flight:'SIM SCENERY',gate,airline:'AIRPORT SCENERY',airlineIata:'SIM',
+   confirmedParked:false};
+  factory(layer,stand,scenery);
+  const model=layer.children[layer.children.length-1];
+  model.name='SIM_APRON_BACKGROUND_'+gate;
+  model.userData.flightRecord=null;
+  model.userData.flight='SIM SCENERY';
+  model.userData.source='SIMULATED_SCENERY_NOT_LIVE';
+  model.userData.stage='SIM PARKED · NO VERIFIED FLIGHT';
  }
  layer.userData.rendered=layer.children.length;
  layer.userData.simulated=true;
@@ -5578,6 +5596,10 @@ function jetTrafficParallelMake(){
  const rot=arrival?Math.atan2(-(fwd[0]-origin[0]),-(fwd[1]-origin[1])):-(_t.depRot||0);
  const factorX=arrival?Math.hypot(right[0]-origin[0],right[1]-origin[1])/100:1;
  const factorZ=arrival?Math.hypot(fwd[0]-origin[0],fwd[1]-origin[1])/100:1;
+ const a=(right[0]-origin[0])/100,c=(right[1]-origin[1])/100;
+ const b=-(fwd[0]-origin[0])/100,d=-(fwd[1]-origin[1])/100;
+ const det=a*d-b*c;
+ group.userData.jcGroundTransform={originX:origin[0],originZ:origin[1],a,b,c,d,det:Math.abs(det)>1e-8?det:1};
  const pavement=new Xt({color:0x313941,roughness:.96}),
   edge=new be({color:0xe1e9ee}),centre=new be({color:0xf7fbff}),
   shoulder=new Xt({color:0x3e4951,roughness:.91}),taxiMat=new Xt({color:0x394c57,roughness:.9});
@@ -5819,14 +5841,23 @@ function jetTrafficMakeObjects(){
  craft.rotation.y=-(_t.depRot||0);craft.scale.setScalar(.94);craft.userData.source='SIMULATED_FALLBACK';craft.userData.callsign=jetTraffic.scenarioId;
  It.scene.add(craft);jetTraffic.plane=craft;
  // Game-only ground light beside the departure holding position.
- const loc=qi(_t,-31,34),lamps=new me();lamps.position.set(loc[0],0,loc[1]);
+ const signalRoute=jetTaxiPathDeparture();
+ const holdIndex=Math.min(3,signalRoute.length-1);
+ const hold=signalRoute[holdIndex],prev=signalRoute[Math.max(0,holdIndex-1)];
+ const dx=hold.x-prev.x,dz=hold.z-prev.z,len=Math.hypot(dx,dz)||1;
+ // Offset a full 29 game metres perpendicular to the taxi centreline.
+ // The traffic light is not a physical barrier and never sits in the aircraft lane.
+ const sideX=-dz/len,sideZ=dx/len;
+ const signalPos={x:hold.x+sideX*29,z:hold.z+sideZ*29};
+ const lamps=new me();lamps.position.set(signalPos.x,0,signalPos.z);
+ lamps.userData={source:'SIMULATED_RUNWAY_ENTRY_LIGHT',offsetFromTaxiCentreline:29};
  const pole=new Tt(new Ae(1.2,10,1.2),new Xt({color:0xd9eaf0,roughness:.7}));pole.position.y=5;lamps.add(pole);
  const head=new Tt(new Ae(4.8,10,3),new Xt({color:0x121d2c,roughness:.65}));head.position.y=13;lamps.add(head);
  const redM=new be({color:0xff3f36}),greenM=new be({color:0x173b29});
  const red=new Tt(new Ae(2.6,2.8,.65),redM);red.position.set(0,15,1.9);lamps.add(red);
  const green=new Tt(new Ae(2.6,2.8,.65),greenM);green.position.set(0,11.1,1.9);lamps.add(green);
  jetTraffic.lightMaterials=[redM,greenM];jetTraffic.lights=lamps;
- lamps.rotation.y=-(_t.depRot||0)-Math.PI/2;It.scene.add(lamps);
+ lamps.rotation.y=Math.atan2(prev.x-signalPos.x,prev.z-signalPos.z);It.scene.add(lamps);
 }
 
 function jetTrafficCallsign(a){
@@ -8625,6 +8656,148 @@ window.__jcNight={setMode:jcNightSetMode,getMode:()=>jcNight.mode,
  getState:()=>({mode:jcNight.mode,night:jcNightEnabled(),lights:jcNight.group?.children?.length||0,
  runways:jcNight.papis.length}),guide:()=>{jcNightDom();document.getElementById('jc-night-guide-btn')?.click();}};
 
+
+// JETLINE GROUND PROXIMITY v14 - training simulation, not certified anti-collision equipment.
+const jcGroundProximity={lastAudioAt:0,lastSeverity:'',lastLabel:'',current:null};
+const jcTerminalCollisionFootprints=[
+ {label:'TERMINAL CENTRAL',x:-298,z:-1810,w:56,d:670},
+ {label:'TERMINAL 3',x:-377,z:-1630,w:66,d:328},
+ {label:'TERMINAL 1',x:-300,z:-2030,w:108,d:176},
+ {label:'TERMINAL 2',x:-198,z:-1650,w:75,d:350},
+ {label:'TERMINAL 2 SOUTH',x:-177,z:-1970,w:47,d:176},
+ {label:'JEWEL',x:-302,z:-2200,w:98,d:100},
+ {label:'TERMINAL 4',x:-236,z:-1135,w:122,d:155}
+];
+function jcGroundAlertElement(){
+ let el=document.getElementById('jc-ground-collision-alert');
+ if(el)return el;
+ el=document.createElement('div');el.id='jc-ground-collision-alert';
+ el.setAttribute('role','status');el.setAttribute('aria-live','polite');
+ el.style.cssText='position:fixed;left:50%;top:calc(env(safe-area-inset-top, 0px) + 170px);'+
+  'transform:translateX(-50%);z-index:75;box-sizing:border-box;max-width:min(86vw,420px);'+
+  'width:max-content;min-width:170px;padding:8px 12px;border-radius:9px;'+
+  'border:2px solid #ffc257;background:#341d10ef;color:#fff2bc;'+
+  'font:900 13px/1.3 system-ui;text-align:center;text-shadow:0 1px 1px #000;'+
+  'box-shadow:0 5px 22px #0009;pointer-events:none;display:none';
+ (document.body||document.documentElement).appendChild(el);return el;
+}
+function jcGroundClearAlert(){
+ jcGroundProximity.current=null;jcGroundProximity.lastSeverity='';
+ const el=document.getElementById('jc-ground-collision-alert');if(el)el.style.display='none';
+}
+function jcGroundPointToRect(x,z,box){
+ const dx=Math.max(0,Math.abs(x-box.x)-box.w/2);
+ const dz=Math.max(0,Math.abs(z-box.z)-box.d/2);
+ return Math.max(0,Math.hypot(dx,dz)-15); // wingspan clearance allowance
+}
+function jcGroundWorldToChangi(x,z){
+ const group=jetTraffic.parallelGroup;
+ const trans=group?.userData?.jcGroundTransform;
+ if(!trans)return jetWSSSWorldToCanonical(x,z);
+ const dx=x-trans.originX,dz=z-trans.originZ;
+ return {x:(dx*trans.d-trans.b*dz)/trans.det,
+  z:(trans.a*dz-trans.c*dx)/trans.det};
+}
+function jcGroundAircraftContacts(){
+ const found=[];
+ const offer=(id,x,z,radius)=>{
+  if(Number.isFinite(x)&&Number.isFinite(z))found.push({id,x,z,radius});
+ };
+ const sim=jetTraffic.changiGateLayer;
+ if(sim)for(const item of sim.children){
+  if(!item.visible)continue;
+  const p=item.getWorldPosition?.(new K())||item.position;
+  offer('AIRCRAFT '+(item.userData?.flight||item.userData?.gate||''),p.x,p.z,19);
+ }
+ const ground=jetTraffic.changiGroundLayer;
+ if(ground)for(const item of ground.children){
+  if(!item.visible)continue;
+  // ADS-B ground models are composed of meshes positioned in world space.
+  const p=item.children[0]?.getWorldPosition?.(new K());
+  if(p)offer('AIRCRAFT '+(item.userData?.callsign||'GROUND'),p.x,p.z,20);
+ }
+ for(const entry of jetTraffic.liveModels.values()){
+  if(entry?.group?.visible!==false)offer('AIRCRAFT '+(entry.group?.userData?.callsign||'TRAFFIC'),entry.x,entry.z,21);
+ }
+ return found;
+}
+function jcGroundOtherAirportBuildings(){
+ const cache=jcGroundProximity.structureCache;
+ if(cache&&cache.scene===It?.scene&&Date.now()-cache.at<4000)return cache.items;
+ // Respect existing landmark models at other airports without scanning
+ // the whole scene (which contains terrain, runways and the user's aircraft).
+ const out=[];
+ const structures=It?.landmarks;
+ if(!Array.isArray(structures))return out;
+ for(const model of structures){
+  if(!model?.visible||!model.traverse)continue;
+  let count=0;
+  model.traverse(mesh=>{
+   if(count>=30||!mesh.isMesh||!mesh.geometry||mesh.geometry.type!=='BoxGeometry')return;
+   const geom=mesh.geometry; if(!geom.boundingBox)geom.computeBoundingBox?.();
+   const bb=geom.boundingBox;if(!bb)return;
+   const scale=mesh.getWorldScale?.(new K(1,1,1));
+   const w=(bb.max.x-bb.min.x)*Math.abs(scale?.x||1),d=(bb.max.z-bb.min.z)*Math.abs(scale?.z||1);
+   const h=(bb.max.y-bb.min.y)*Math.abs(scale?.y||1);
+   if(h<5||h>180||w<4||d<4||w>240||d>240)return;
+   const pos=mesh.getWorldPosition?.(new K());if(!pos)return;
+   out.push({id:'AIRPORT BUILDING',x:pos.x,z:pos.z,w,d});count++;
+  });
+ }
+ jcGroundProximity.structureCache={scene:It?.scene,at:Date.now(),items:out};
+ return out;
+}
+function jcGroundProximityTick(){
+ if(E.state!=='play'||!E.plane||!_t||
+    !['taxi','taxiIn','rollout','takeoff'].includes(E.phase)||
+    (!E.plane.onGround&&E.plane.y>6)){jcGroundClearAlert();return;}
+ const p=E.plane;let nearest=null;
+ const offer=(label,distance,type)=>{
+  if(!Number.isFinite(distance)||distance>150)return;
+  if(!nearest||distance<nearest.distance)nearest={label,distance,type};
+ };
+ if(jetTrafficActiveAirport()==='WSSS'&&jetTraffic.parallelGroup){
+  const q=jcGroundWorldToChangi(p.x,p.z);
+  if(q&&Number.isFinite(q.x)&&Number.isFinite(q.z)){
+   for(const b of jcTerminalCollisionFootprints){
+    offer(b.label,jcGroundPointToRect(q.x,q.z,b),'building');
+   }
+  }
+ }else{
+  for(const b of jcGroundOtherAirportBuildings()){
+   offer(b.id,jcGroundPointToRect(p.x,p.z,b),'building');
+  }
+ }
+ for(const a of jcGroundAircraftContacts()){
+  offer(a.id,Math.max(0,Math.hypot(a.x-p.x,a.z-p.z)-a.radius-14),'aircraft');
+ }
+ const el=jcGroundAlertElement();
+ if(!nearest||nearest.distance>110){el.style.display='none';jcGroundProximity.current=null;return;}
+ const danger=nearest.distance<=32,warning=nearest.distance<=75;
+ // CAUTION zone is conservative. Warn on proximity, even with zero ground speed.
+ const severity=danger?'STOP':warning?'WARNING':'ADVISORY';
+ const label=(danger?'⛔ STOP · ':'⚠️ ')+
+  (nearest.type==='aircraft'?'TRAFFIC':'BUILDING')+' · '+
+  Math.max(0,Math.round(nearest.distance))+' m (SIM)';
+ if(el.textContent!==label)el.textContent=label;
+ el.title=nearest.label+' · simulated 3D game distance';
+ el.style.display='block';el.style.borderColor=danger?'#ff4b4b':warning?'#ffbd43':'#76d8fa';
+ el.style.background=danger?'#620d14f0':warning?'#42230be9':'#09283aea';
+ el.style.color=danger?'#fff1f0':'#fff4c8';
+ jcGroundProximity.current={...nearest,severity};
+ const now=Date.now(),newTarget=jcGroundProximity.lastLabel!==nearest.label,
+  stronger=jcGroundProximity.lastSeverity!==severity;
+ if((danger||warning)&&(stronger||newTarget||now-jcGroundProximity.lastAudioAt>5000)&&
+    now-jcGroundProximity.lastAudioAt>1400){
+  try{wt.play('caution',danger?1:.65)}catch{}
+  jcGroundProximity.lastAudioAt=now;
+ }
+ jcGroundProximity.lastLabel=nearest.label;jcGroundProximity.lastSeverity=severity;
+}
+window.__jcGroundProximity={check:jcGroundProximityTick,
+ get:()=>jcGroundProximity.current,
+ light:()=>jetTraffic.lights?.position?.toArray?.()||null};
+
 function jetTrafficSkyTick(dt){
  jcNightTick(dt);jcAirportUiTick();jcWxTick(dt);jcEmTick(dt);jcLiveMetarTick();
  // Hide floating runway text when MCDU takes focus or the pilot is landing.
@@ -8644,6 +8817,7 @@ function jetTrafficSkyTick(dt){
  if(['taxi','takeoff','approach','taxiIn'].includes(E.phase)){
   jetTrafficDrawLiveContacts(dt);
  }else if(jetTraffic.liveModels.size){window.__jcTrafficSoundContacts=[];jetTrafficClearModels();}
+ jcGroundProximityTick();
 }
 function jetTrafficTick(dt){
  if(!jetTraffic.airport)return;
@@ -12679,7 +12853,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • TAXI SIM v13 · ND WX v4 · ECAM v3';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • GROUND SAFETY v14 · ND WX v4 · ECAM v3';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
