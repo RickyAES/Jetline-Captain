@@ -5968,10 +5968,85 @@ function jetTrafficParallelMake(){
   jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
  }
 }
-window.__jcChangiStartupStatus=()=>({version:'v26',error:jetTraffic.changiLastBuildError||null,
+window.__jcChangiStartupStatus=()=>({version:'v27',error:jetTraffic.changiLastBuildError||null,
  retryInMs:Math.max(0,(jetTraffic.changiBuildRetryAt||0)-Date.now()),
  built:!!jetTraffic.parallelGroup,gateModels:jetTraffic.changiGateLayer?.children.length||0,
  bridges:jetTraffic.changiBridgeLayer?.userData.connectedCount||0});
+// JETLINE V27 — CHANGI AUTO SCENERY PREPARATION
+// Airport selection prepares gate/terminal metadata and requests one snapshot
+// from the already-configured sources. Mesh creation waits for the real flight
+// scene; this prevents the WSSS start-up freeze and avoids a fake menu scene.
+const jcWSSSAutoScene={selected:false,prepared:false,startedAt:0,
+ requested:false,requestedAt:0,ready:false,readyAt:0,error:''};
+function jcWSSSPrepareSelected(){
+ const from=String(pt?.from||'').toUpperCase(),dest=String(pt?.dest||'').toUpperCase();
+ const selected=from==='WSSS'||dest==='WSSS';
+ if(!selected){jcWSSSAutoScene.selected=false;return;}
+ if(!jcWSSSAutoScene.selected){
+  jcWSSSAutoScene.selected=true;
+  jcWSSSAutoScene.startedAt=Date.now();
+  jcWSSSAutoScene.ready=false;
+ }
+ if(!jcWSSSAutoScene.prepared){
+  const cfg=jcChangiCampusV18;
+  // Precompute the canonical topology once; live WebGL objects are created
+  // when the playable scene and flight coordinates become available.
+  window.__jcWSSSPreparedLayout={
+   airport:'WSSS',runways:['02L/20R','02C/20C','02R/20L'],
+   terminals:cfg.halls.map(h=>h.terminal),
+   gates:jcChangiGateRegistry.length,
+   terminalBlocks:cfg.halls.length+cfg.piers.length+cfg.connectors.length,
+   jewel:!!cfg.jewel,gateNumbers:jcChangiGateRegistry.map(g=>g.gate),
+   model:'Compressed game coordinates; not a published apron navigation chart'
+  };
+  jcWSSSAutoScene.prepared=true;
+ }
+ // One automatic data attempt per page load. Aviationstack free plans have
+ // limited requests, so no rapid or continuous flight-board polling here.
+ if(!jcWSSSAutoScene.requested){
+  const gates=document.getElementById('jc-gate-refresh');
+  const ground=document.getElementById('jc-ground-refresh');
+  if(gates&&ground){
+   jcWSSSAutoScene.requested=true;
+   jcWSSSAutoScene.requestedAt=Date.now();
+   try{if(!gates.disabled)gates.click();}catch(err){jcWSSSAutoScene.error=String(err);}
+   try{if(!ground.disabled)ground.click();}catch(err){jcWSSSAutoScene.error=String(err);}
+  }
+ }
+ const shouldRender=E.state==='play'&&jetTrafficActiveAirport()==='WSSS'&&
+  E.phase!=='route'&&!!It?.scene&&!!_t;
+ if(!shouldRender)return;
+ if(!jetTraffic.parallelGroup&&Date.now()>=(jetTraffic.changiBuildRetryAt||0))
+  jetTrafficParallelMake();
+ if(jetTraffic.parallelGroup){
+  if(!jcWSSSAutoScene.ready){
+   jcWSSSAutoScene.ready=true;
+   jcWSSSAutoScene.readyAt=Date.now();
+   // Ground data may have arrived while the user was still choosing WSSS.
+   // Repopulate both independent aircraft layers when the scene first exists.
+   jcChangiSync3DGates();
+   jcChangiSync3DGround();
+  }
+ }else{
+  jcWSSSAutoScene.error=jetTraffic.changiLastBuildError||'';
+ }
+}
+window.__jcWSSSLoadStatus=()=>({version:'v27',selected:jcWSSSAutoScene.selected,
+ prepared:jcWSSSAutoScene.prepared,dataRequested:jcWSSSAutoScene.requested,
+ sceneReady:!!jetTraffic.parallelGroup,runwayCount:jetTraffic.parallelGroup?3:0,
+ terminalCount:jcWSSSAutoScene.prepared?jcChangiCampusV18.halls.length:0,
+ gateCount:jetTraffic.changiGateSignLayer?.userData?.labelledGates||0,
+ parkedAircraft:jetTraffic.changiGateLayer?.children.length||0,
+ aerobridges:jetTraffic.changiBridgeLayer?.userData?.connectedCount||0,
+ error:jcWSSSAutoScene.error||jetTraffic.changiLastBuildError||null});
+// Selection may happen before the game loop starts. This cheap watcher
+// triggers preparation then yields; the actual 3D flight build remains cached.
+setInterval(()=>{
+ try{if(!document.hidden)jcWSSSPrepareSelected();}catch(err){
+  jcWSSSAutoScene.error=String(err?.message||err);
+ }
+},650);
+
 function jetTrafficThreeRunwayBoard(){
  let el=document.getElementById('jc-changi-3-rwy-board');
  if(el)return el;
@@ -9351,6 +9426,7 @@ window.__jcGateView={
 };
 
 function jetTrafficSkyTick(dt){
+ jcWSSSPrepareSelected();
  jcNightTick(dt);jcAirportUiTick();jcWxTick(dt);jcEmTick(dt);jcLiveMetarTick();
  // Hide floating runway text when MCDU takes focus or the pilot is landing.
  const clearLabels=!!je.open||E.phase==='approach'||E.phase==='taxiIn'||E.phase==='route';
@@ -13406,7 +13482,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • WSSS FREEZE FIX v26 · STABLE GATE SCENERY';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • WSSS AUTO SCENERY v27 · STABLE GATE SCENERY';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -14197,7 +14273,7 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • WSSS FREEZE FIX v26</div>
+<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • WSSS AUTO SCENERY v27</div>
 <style id="jc-clear-nd-gate-controls-v23">
 /* No floating buttons may cover the navigation display at WSSS. */
 #jc-gate-camera-panel{display:none!important;pointer-events:none!important}
