@@ -5242,6 +5242,7 @@ const jcChangiGateRegistry=(()=>{
  return records;
 })();
 const jcChangiGateLookup=new Map(jcChangiGateRegistry.map(r=>[r.gate,r]));
+window.__jcChangiGateRegistry=jcChangiGateRegistry;
 // The client may update this snapshot after requesting a separately authorized
 // gate feed. No data in the game itself is claimed to be live Changi App data.
 function jcChangiSync3DGates(){
@@ -12543,7 +12544,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • SQ GATES v11 · ND WX v4 · ECAM v3';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • GATE TIMES v12 · ND WX v4 · ECAM v3';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -12690,6 +12691,14 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
     registration:String(r.registration||'').slice(0,32),
     delayMinutes:Number.isFinite(Number(r.delayMinutes))&&r.delayMinutes!=null?Number(r.delayMinutes):null,
     codeshare:!!r.codeshare,operatingFlight:String(r.operatingFlight||'').slice(0,20),
+    departureScheduled:String(r.departureScheduled||'').slice(0,40),
+    departureEstimated:String(r.departureEstimated||'').slice(0,40),
+    departureActual:String(r.departureActual||'').slice(0,40),
+    arrivalScheduled:String(r.arrivalScheduled||'').slice(0,40),
+    arrivalEstimated:String(r.arrivalEstimated||'').slice(0,40),
+    arrivalActual:String(r.arrivalActual||'').slice(0,40),
+    departureIata:String(r.departureIata||'').slice(0,8),arrivalIata:String(r.arrivalIata||'').slice(0,8),
+    departureAirport:String(r.departureAirport||'').slice(0,85),arrivalAirport:String(r.arrivalAirport||'').slice(0,85),
     unmapped:!registry});
   }
   return parsed.sort((a,b)=>a.gate.localeCompare(b.gate,undefined,{numeric:true})||
@@ -12763,7 +12772,8 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
     return `<div class="jc-gate-flight"><div class="jc-gate-flight-top"><b>${esc(f.flight)}</b><span>${f.direction==='arrival'?'↘ ARRIVAL':'↗ DEPARTURE'}</span><em>${esc(f.status)}</em></div>
      ${f.airline?`<div>${esc(f.airline)}</div>`:''}
      <div>${route} <b>${esc(f.destination||f.destinationIata||'Unknown')}</b></div>
-     ${times.length?`<div class="jc-gate-times">${times.map(t=>esc(t)).join(' · ')}</div>`:''}
+     ${times.length?`<div class="jc-gate-times">CHANGI ${times.map(t=>esc(t)).join(' · ')}</div>`:''}
+     ${f.departureScheduled||f.arrivalScheduled?`<div class="jc-gate-times">DEP ${esc(sgtTime(f.departureEstimated||f.departureScheduled||f.departureActual)||'—')} · ARR ${esc(sgtTime(f.arrivalEstimated||f.arrivalScheduled||f.arrivalActual)||'—')} (SGT)</div>`:''}
      ${f.aircraft||f.registration?`<div>${f.aircraft?'AIRCRAFT '+esc(f.aircraft):''}${f.registration?' · REG '+esc(f.registration):''}</div>`:''}
      ${f.delayMinutes!=null&&f.delayMinutes>0?`<div>DELAY +${Math.round(f.delayMinutes)} MIN</div>`:''}
      ${f.codeshare?`<div>CODESHARE${f.operatingFlight?' · operated as '+esc(f.operatingFlight):''}</div>`:''}
@@ -13052,5 +13062,194 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
  render();
 })();
 </script>
-<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • SQ GATES v11</div></body>
+<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • GATE TIMES v12</div><style id="jc-changi-ground-times-v12-style">
+#jc-ground-map-wrap{position:relative;width:100%;aspect-ratio:530/380}
+#jc-ground-map-wrap #jc-ground-map{width:100%;height:100%}
+#jc-ground-gates-overlay{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:manipulation}
+#jc-ground-timeboard{margin:11px 0 10px;padding:9px;background:#0b2136;border:1px solid #477991;border-radius:10px;color:#e6f7ff;font:11px/1.45 system-ui}
+#jc-ground-timeboard .jc-times-title{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px;margin-bottom:5px}
+#jc-ground-timeboard .jc-times-title strong{font-size:14px;color:#9ceeff}
+#jc-ground-timeboard .jc-times-tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:7px 0}
+#jc-ground-timeboard button,#jc-ground-timeboard select{background:#163751;border:1px solid #568baa;color:#effcff;border-radius:6px;padding:7px;font:700 11px system-ui}
+#jc-ground-timeboard button{cursor:pointer}
+#jc-ground-timeboard button:focus-visible,#jc-ground-timeboard select:focus-visible{outline:2px solid #ffdb79}
+#jc-ground-timeboard .jc-times-list{max-height:260px;overflow:auto;display:grid;gap:5px}
+#jc-ground-timeboard .jc-timeflight{display:grid;grid-template-columns:minmax(76px,0.8fr) minmax(0,1.25fr);gap:5px 10px;text-align:left;width:100%;padding:9px;border:1px solid #345873;background:#102c45;border-radius:7px;color:#e8f8ff;font-weight:400}
+#jc-ground-timeboard .jc-timeflight.active{border-color:#ffdc80;background:#2b3d4e}
+#jc-ground-timeboard .jc-timeflight b{font-size:13px;color:#fff}
+#jc-ground-timeboard .jc-timeflight small{font-size:10px;color:#a9d8eb;display:block}
+#jc-ground-timeboard .jc-timeflight .jc-tm{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+#jc-ground-timeboard .jc-timeflight .jc-tm span{display:block;color:#baf0fc;font-size:10px}
+#jc-ground-timeboard .jc-timeflight .jc-tm label{display:block;color:#b9d7e7;font-size:10px}
+#jc-ground-timeboard #jc-ground-gate-detail{padding:7px;margin:6px 0;border:1px solid #41647e;border-radius:6px;background:#09233a}
+#jc-ground-timeboard .jc-times-status{color:#a6cfdb;font-size:10px}
+#jc-ground-timeboard .jc-ground-legend2{font-size:10px;color:#bed5e4;line-height:1.5;margin:7px 0}
+#jc-ground-timeboard .jc-map-dot{color:#ffdb7d}#jc-ground-timeboard .jc-map-match{color:#6be2f4}
+@media(max-width:600px){#jc-ground-timeboard .jc-timeflight{grid-template-columns:1fr}#jc-ground-timeboard .jc-timeflight .jc-tm{grid-template-columns:1fr 1fr}#jc-ground-timeboard .jc-times-tools select{flex:1;min-width:100px}}
+</style>
+<script id="jc-changi-ground-times-v12-script">
+(()=>{'use strict';
+// Overlay the existing geographical ADS-B plot without moving its aircraft.
+// Runways are measured. Gate/terminal positions are SCHEMATIC game artwork,
+// converted to geographic coordinates solely for display alignment.
+const map=document.getElementById('jc-ground-map'),section=document.getElementById('jc-ground-panel');
+if(!map||!section)return;
+const wrap=document.createElement('div');wrap.id='jc-ground-map-wrap';map.parentNode.insertBefore(wrap,map);wrap.appendChild(map);
+const overlay=document.createElement('canvas');overlay.id='jc-ground-gates-overlay';overlay.width=530;overlay.height=380;
+overlay.setAttribute('aria-label','Schematic gate assignments over Changi runway map; select a gate marker for flight times');overlay.tabIndex=0;wrap.append(overlay);
+const board=document.createElement('section');board.id='jc-ground-timeboard';board.setAttribute('aria-label','Changi flight schedules and assigned terminal gates');
+board.innerHTML=`<div class="jc-times-title"><strong>✈ CHANGI GATE FLIGHTS · DEP / ARR</strong><span id="jc-gt-updated">NOT LOADED</span></div>
+<div class="jc-times-tools"><select id="jc-gt-airline" aria-label="Flight airline filter"><option value="ALL">ALL AIRLINES</option><option value="SQ">SQ FLIGHTS</option></select><select id="jc-gt-direction" aria-label="Flight direction filter"><option value="ALL">ARRIVALS + DEPARTURES</option><option value="departure">DEPARTURES</option><option value="arrival">ARRIVALS</option></select><button id="jc-gt-load" type="button">↻ LOAD FLIGHT TIMES</button><button id="jc-gt-showall" type="button" aria-pressed="false">SHOW ALL GATES</button></div>
+<div id="jc-gt-status" class="jc-times-status" aria-live="polite">Gate assignments are loaded separately from ADS-B ground positions.</div>
+<div class="jc-ground-legend2"><span class="jc-map-dot">● AMBER</span> = scheduled gate assignment · <span class="jc-map-match">◆ CYAN</span> = flight-number matched to an observed ground transponder (not proof of gate occupancy) · all times Singapore time (SGT)</div>
+<div id="jc-ground-gate-detail">Tap a gate marker or flight below to inspect its details.</div>
+<div class="jc-times-list" id="jc-gt-flights"></div>`;
+const oldLegend=section.querySelector('.jc-ground-legend');oldLegend?.after(board);
+const $=id=>document.getElementById(id);
+let selectedGate='',showAll=false,scheduled=[],gatePositions=[],visibleMarkers=[],matched=new Map();
+const html=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const rawFlightTime=v=>{let d=Date.parse(v||'');return Number.isFinite(d)?d:0};
+const clock=v=>{const d=new Date(v);return v&&Number.isFinite(d.getTime())?d.toLocaleString('en-SG',{timeZone:'Asia/Singapore',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}):'—'};
+const nowLabel=v=>v&&rawFlightTime(v)?clock(v)+' SGT':'unknown';
+const firstTime=f=>f.direction==='arrival'?(f.arrivalEstimated||f.arrivalScheduled||f.arrivalActual||f.estimated||f.scheduled||f.actual):(f.departureEstimated||f.departureScheduled||f.departureActual||f.estimated||f.scheduled||f.actual);
+function timeInfo(f,which){
+ const prefix=which==='departure'?'departure':'arrival';
+ const current=f.direction===which;
+ // Older manual imports carry only their airport-local event fields.
+ const sc=f[prefix+'Scheduled']||(current?f.scheduled:'');
+ const es=f[prefix+'Estimated']||(current?f.estimated:'');
+ const ac=f[prefix+'Actual']||(current?f.actual:'');
+ return {scheduled:sc,estimated:es,actual:ac};
+}
+function timeCell(f,which){
+ const v=timeInfo(f,which);return `<div><label>${which==='departure'?'DEPARTURE':'ARRIVAL'} · SGT</label>
+ <span>S ${html(clock(v.scheduled))}</span><span>E ${html(clock(v.estimated))}</span><span>A ${html(clock(v.actual))}</span></div>`;
+}
+function makePositions(){
+ const regs=window.__jcChangiGateRegistry||[],a=1.32875278,b=103.98496111,h=23.01*Math.PI/180;
+ const cosLat=Math.cos(a*Math.PI/180);
+ gatePositions=regs.map(r=>{const along=-r.z/.60,cross=r.x/.30;
+  const north=along*Math.cos(h)-cross*Math.sin(h),east=along*Math.sin(h)+cross*Math.cos(h);
+  const lat=a+north/111195,lon=b+east/(111195*cosLat);
+  const px=23+(lon-103.960)/(104.029-103.960)*(530-46);
+  const py=19+(1.399-lat)/(1.399-1.310)*(380-40);
+  return {gate:r.gate,terminal:r.terminal,lat,lon,x:px,y:py};
+ });
+}
+// Use only exact operating/marketing flight IDs with the known SIA->SQ mapping.
+// Codeshare flight numbers alone cannot identify the observed aircraft.
+function comparableCall(c){const n=norm(c);const match=/^SIA(\d{1,5}[A-Z]?)$/.exec(n);return match?'SQ'+match[1]:n;}
+function buildMatches(){
+ const contacts=window.__jcGroundSnapshot?.aircraft||[];matched=new Map();
+ for(const contact of contacts){
+  const c=comparableCall(contact.callsign||'');if(!c)continue;
+  for(const f of scheduled){
+   if(!f.codeshare&&comparableCall(f.flight)===c || (f.operatingFlight&&comparableCall(f.operatingFlight)===c)){
+    const list=matched.get(f.gate)||[];if(!list.some(x=>x.hex===contact.hex))list.push(contact);matched.set(f.gate,list);
+   }
+  }
+ }
+}
+function filtered(){
+ const airline=$('jc-gt-airline').value,dir=$('jc-gt-direction').value;
+ return scheduled.filter(f=>(airline==='ALL'||/^SQ\d/.test(norm(f.flight))||f.airlineIata==='SQ')&&(dir==='ALL'||f.direction===dir));
+}
+function draw(){
+ const ctx=overlay.getContext('2d');if(!ctx)return;
+ ctx.clearRect(0,0,530,380);visibleMarkers=[];
+ const current=filtered();const byGate=new Map();
+ for(const f of current){if(!byGate.has(f.gate))byGate.set(f.gate,[]);byGate.get(f.gate).push(f);}
+ if(!gatePositions.length)makePositions();
+ const chosen=gatePositions.filter(p=>showAll||byGate.has(p.gate));
+ // Group schematic stands by terminal; runway lines underneath remain the
+ // geographic reference. Shaded terminal footprints are illustrative only.
+ const terminals=new Map();
+ for(const p of gatePositions){const arr=terminals.get(p.terminal)||[];arr.push(p);terminals.set(p.terminal,arr);}
+ for(const [id,points] of terminals){
+  const loX=Math.min(...points.map(p=>p.x)),hiX=Math.max(...points.map(p=>p.x));
+  const loY=Math.min(...points.map(p=>p.y)),hiY=Math.max(...points.map(p=>p.y));
+  ctx.fillStyle='rgba(46,134,178,.14)';ctx.strokeStyle='rgba(105,205,240,.46)';ctx.lineWidth=.8;
+  ctx.fillRect(loX-7,loY-9,Math.max(23,hiX-loX+14),Math.max(20,hiY-loY+18));
+  ctx.strokeRect(loX-7,loY-9,Math.max(23,hiX-loX+14),Math.max(20,hiY-loY+18));
+  ctx.font='bold 9px system-ui';ctx.fillStyle='#82d8f4';ctx.fillText(id,loX-4,loY-13);
+ }
+ // Draw empty gates as muted dots, never as occupied aircraft.
+ for(const p of chosen){const rows=byGate.get(p.gate)||[];const hit=matched.has(p.gate)&&rows.length;
+  if(!rows.length&&!showAll)continue;
+  ctx.fillStyle=hit?'#63ddf2':rows.length?'#f1c66b':'#39657c';
+  ctx.strokeStyle=p.gate===selectedGate?'#fff':'#082a38';ctx.lineWidth=p.gate===selectedGate?2.5:1;
+  ctx.beginPath();ctx.arc(p.x,p.y,p.gate===selectedGate?6.6:rows.length?4.4:2.5,0,2*Math.PI);ctx.fill();ctx.stroke();
+  visibleMarkers.push(p);
+ }
+ // Label selected and uncollided assigned positions; show everything in list.
+ const occup=[];const ordered=chosen.filter(p=>byGate.has(p.gate)).sort((a,b)=>(a.gate===selectedGate?-1:b.gate===selectedGate?1:0));
+ ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 10px system-ui';
+ for(const p of ordered){let tx=p.x+7,ty=p.y-8;
+  if(p.gate!==selectedGate&&occup.some(q=>Math.abs(q.x-tx)<46&&Math.abs(q.y-ty)<14))continue;
+  occup.push({x:tx,y:ty});
+  const first=byGate.get(p.gate)?.[0];const label=p.gate===selectedGate&&first?p.gate+' '+first.flight:p.gate;
+  ctx.lineWidth=3;ctx.strokeStyle='#051527';ctx.strokeText(label,tx,ty);ctx.fillStyle='#edfaff';ctx.fillText(label,tx,ty);
+ }
+}
+function details(current){
+ const list=current.filter(f=>f.gate===selectedGate);
+ if(!selectedGate){$('jc-ground-gate-detail').textContent='Tap a gate marker or flight to see both its departure and arrival times.';return;}
+ const observed=matched.get(selectedGate)||[];
+ if(!list.length){$('jc-ground-gate-detail').textContent=`${selectedGate} · schematic game gate. No matching flight assignment in the current filtered feed.`;return;}
+ $('jc-ground-gate-detail').innerHTML=`<b>GATE ${html(selectedGate)}</b> · ${list.length} flight record(s). ${observed.length?html(observed.map(a=>a.callsign||a.registration||a.hex).join(', '))+' observed on the ground (callsign match only).':'No flight-number match among currently observed ground contacts.'} <div style="font-size:10px;color:#b8d3df;margin-top:4px">An assigned gate is NOT confirmed physical parking. Game gate positions are schematic.</div>`;
+}
+function render(){
+ const snap=window.__jcGateSnapshot||{},g=window.__jcGroundSnapshot||{};
+ scheduled=Array.isArray(snap.flights)?snap.flights:[];buildMatches();
+ const current=filtered().sort((a,b)=>(rawFlightTime(firstTime(a))||Infinity)-(rawFlightTime(firstTime(b))||Infinity));
+ const asOf=snap.updatedAt?nowLabel(snap.updatedAt):'not loaded';
+ $('jc-gt-updated').textContent=(snap.mode==='live'?'GATE FEED':'NOT LIVE')+' · '+asOf;
+ $('jc-gt-status').textContent=`${current.length} flight assignments · ${new Set(current.map(f=>f.gate)).size} gates · ${g.aircraft?.length||0} reported ground aircraft · ${[...matched.values()].flat().length} callsign matches. ${snap.coverage?.complete===false?'Flight feed PARTIAL — provider page limit.':''} ${snap.mode==='manual'?'MANUAL INPUT, NOT LIVE.':''}`;
+ $('jc-gt-showall').textContent=showAll?'HIDE EMPTY GATES':'SHOW ALL GATES';
+ const list=$('jc-gt-flights');list.textContent='';
+ if(!current.length){const p=document.createElement('p');p.textContent='No flight times loaded. Press LOAD FLIGHT TIMES or load SQ flights in the GATES view. Aviationstack availability and API quota apply.';list.append(p);}
+ for(const f of current){const button=document.createElement('button');button.type='button';button.className='jc-timeflight'+(selectedGate===f.gate?' active':'');
+  const hasMatch=matched.has(f.gate);
+  button.innerHTML=`<div><b>${html(f.gate)} · ${html(f.flight)}</b><small>${html(f.terminal||'Terminal unknown')} · ${f.direction==='arrival'?'ARRIVAL':'DEPARTURE'} ${f.codeshare?'· CODESHARE':''}</small></div>
+  <div><b>${html(f.direction==='arrival'?'FROM':'TO')} ${html(f.destination||f.destinationIata||'—')}</b><small>${html(f.airline||'Airline unavailable')} · ${html(f.status||'Unknown')}${hasMatch?' · GROUND CALLSIGN MATCH':''}</small></div>
+  <div class="jc-tm">${timeCell(f,'departure')}${timeCell(f,'arrival')}</div>`;
+  button.addEventListener('click',()=>{selectedGate=f.gate;render();});list.append(button);
+ }
+ details(current);draw();
+}
+function setAirline(){
+ const x=$('jc-gt-airline').value,external=$('jc-gate-airline');if(external)external.value=x;
+}
+$('jc-gt-airline').addEventListener('change',render);$('jc-gt-direction').addEventListener('change',render);
+$('jc-gt-showall').addEventListener('click',()=>{showAll=!showAll;$('jc-gt-showall').setAttribute('aria-pressed',String(showAll));render();});
+$('jc-gt-load').addEventListener('click',()=>{setAirline();$('jc-gt-status').textContent='Requesting airport flights through the existing Vercel API…';window.__jcGateControl?.refresh?.();});
+function focusObserved(hex){
+ const linked=[...matched].find(([,a])=>a.some(c=>c.hex===hex));
+ if(linked){selectedGate=linked[0];render();return true;}
+ return false;
+}
+$('jc-ground-rows')?.addEventListener('click',ev=>{
+ const row=ev.target.closest('tr[data-hex]');if(row)focusObserved(row.dataset.hex);
+});
+overlay.addEventListener('click',ev=>{
+ const r=overlay.getBoundingClientRect();const x=(ev.clientX-r.left)*530/r.width,y=(ev.clientY-r.top)*380/r.height;
+ const nearest=visibleMarkers.map(p=>({p,d:Math.hypot(p.x-x,p.y-y)})).sort((a,b)=>a.d-b.d)[0];
+ const observed=(window.__jcGroundSnapshot?.aircraft||[]).map(a=>({a,
+  d:Math.hypot(23+(a.lon-103.960)/(104.029-103.960)*484-x,
+   19+(1.399-a.lat)/(1.399-1.310)*340-y)})).sort((a,b)=>a.d-b.d)[0];
+ if(observed&&observed.d<11&&(!nearest||observed.d<nearest.d)){
+  $('jc-ground-rows')?.querySelector(`[data-hex="${observed.a.hex}"]`)?.click();
+  focusObserved(observed.a.hex);return;
+ }
+ if(nearest&&nearest.d<16){selectedGate=nearest.p.gate;render();}
+});
+window.addEventListener('jc-changi-gates-updated',render);
+window.addEventListener('jc-changi-ground-updated',render);
+window.__jcGroundTimesV12={render,selectGate:g=>{selectedGate=norm(g);render()},version:'v12',visibleFlights:()=>filtered().length};
+render();
+})();
+</script>
+
+</body>
 </html>
