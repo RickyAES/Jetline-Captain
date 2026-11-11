@@ -4887,7 +4887,7 @@ function jetTaxiPathDeparture(){
   const frame=jetWSSSDepartureFrame();
   // Taxiway centreline is 51% of the distance to the neighbouring runway.
   // This matches jetChangiBuildTaxiNetwork and the surface chart exactly.
-  const west=jetChangiRunways['02L'].x*.22;
+  const west=-91;
   const east=jetChangiRunways['02R'].x*.51;
   // The selected runway can be L/C/R. Use the CLOSEST matching 3D taxiway
   // rather than crossing a whole parallel runway to reach a distant road.
@@ -5183,7 +5183,7 @@ function jetChangiBuildTaxiNetwork(addBox,group){
  const yellow=new be({color:0xffd560,depthWrite:false});
  const edge=new be({color:0x83bed7,depthWrite:false});
  const left=jetChangiRunways['02L'].x,right=jetChangiRunways['02R'].x;
- const west=left*.22,east=right*.51;
+ const west=-91,east=right*.51;
  const minZ=-3950,maxZ=175,zC=(minZ+maxZ)/2,zL=maxZ-minZ;
  for(const x of [west,east]){
   addBox(x,zC,45,zL,.34,.29,shoulder);
@@ -5193,7 +5193,7 @@ function jetChangiBuildTaxiNetwork(addBox,group){
  }
  // Genuine stagger: western 02L does not connect at its southern edge where
  // it has no pavement. Choose links on the shared physical runway sections.
- for(const z of [-1330,-2350]){
+ for(const z of [-1630]){
   addBox((left+right)/2,z,right-left+90,46,.31,.34,shoulder);
   addBox((left+right)/2,z,right-left+90,34,.58,.13,asphalt);
   for(let x=left+18;x<=right-10;x+=86)addBox(x,z,26,1.2,.79,.07,yellow);
@@ -5204,7 +5204,7 @@ function jetChangiBuildTaxiNetwork(addBox,group){
   }
  }
  // Provide runway-to-taxiway connectors near both ends of each shared strip.
- for(const z of [-1400,-2400]){
+ for(const z of [-1620]){
   for(const [from,to] of [[left,west],[west,0],[0,east],[east,right]]){
    const w=Math.abs(to-from)+8,cx=(from+to)/2;
    addBox(cx,z,w,39,.37,.28,shoulder);addBox(cx,z,w,31,.61,.13,asphalt);
@@ -5227,31 +5227,67 @@ function jetChangiBuildTaxiNetwork(addBox,group){
 // E/F=T2, G=T4). This is a GAME-SPACE topological approximation; no survey
 // latitude/longitude is implied. Gate IDs include extra labels to keep the
 // external feed usable when airport assignments differ from the map artwork.
+// V18 CHANGI TERMINAL CAMPUS: conceptual layout referenced to the user-provided
+// terminal diagram. A/B west/north (T3), C/D east (T1), E/F south (T2), G east (T4).
+// NOT a certified stand chart. Positions are compressed game-world geometry.
 const jcChangiGateRegistry=(()=>{
- const records=[];
- const add=(terminal,prefix,start,end,place,face)=>{
-  for(let n=start;n<=end;n++){
-   const [x,z]=place(n);
-   records.push({gate:prefix+n,terminal,x,z,face:typeof face==='function'?face(n):face});
-  }
+ const list=[];
+ const add=(terminal,prefix,start,end,x,z0,dz,face)=>{
+  for(let n=start;n<=end;n++)list.push({
+   gate:prefix+n,terminal,x,z:z0+(n-start)*dz,face
+  });
  };
- // Terminal 3: A westward/northern pier, B eastern/northern pier.
- add('T3','A',1,8,n=>[-358,-2740-(n-1)*34],'W');
- add('T3','A',9,21,n=>[-390,-2830-(n-9)*36],'W');
- add('T3','B',1,10,n=>[-170,-2740-(n-1)*38],'E');
- // Terminal 1: C western/northern arm, D eastern/southern arm.
- add('T1','C',1,10,n=>[-358,-2175-(n-1)*34],'W');
- add('T1','C',11,26,n=>[-389,-2130-(n-11)*34],'W');
- add('T1','D',30,49,n=>[-167,-2140-(n-30)*29],'E');
- // Terminal 2: F western arm and E eastern arm, based on the supplied map.
- add('T2','E',1,14,n=>[-167,-1500-(n-1)*32],'E');
- add('T2','E',15,28,n=>[-194,-1550-(n-15)*31],'E');
- add('T2','F',30,44,n=>[-385,-1500-(n-30)*31],'W');
- add('T2','F',45,60,n=>[-355,-1540-(n-45)*30],'W');
- // T4 is east of the playable 02C runway, beyond the T1-T3 terminal island.
- add('T4','G',1,21,n=>[n%2?425:330,-1200-Math.floor((n-1)/2)*35],n=>n%2?'E':'W');
- return records;
+ // Terminal 3: A arm on the western side, B arm immediately to its east.
+ add('T3','A',1,8,-387,-2640,-33,'W');
+ add('T3','A',9,21,-387,-2904,-29,'W');
+ add('T3','B',1,10,-174,-2592,-34,'E');
+ // Terminal 1 lies to the EAST of T3. C is its northern pier; D is below C.
+ add('T1','C',1,26,-129,-2230,-22,'E');
+ add('T1','D',30,49,-129,-1740,-24,'E');
+ // Terminal 2 spans the south apron with F on west and E on east.
+ add('T2','E',1,28,-154,-870,-23,'E');
+ add('T2','F',30,60,-385,-850,-22,'W');
+ // Terminal 4 is across the central 02C/20C runway, toward the east.
+ for(let n=1;n<=21;n++)list.push({gate:'G'+n,terminal:'T4',
+  x:n%2?425:330,z:-1210-Math.floor((n-1)/2)*35,face:n%2?'E':'W'});
+ return list;
 })();
+// Single terminal geometry registry reused by 3D buildings, collision footprints,
+// airport surface display and the passenger gate map.
+const jcChangiCampusV18={
+ halls:[
+  {label:'TERMINAL 3',terminal:'T3',x:-263,z:-2740,w:112,d:230},
+  {label:'TERMINAL 1',terminal:'T1',x:-217,z:-2170,w:90,d:206},
+  {label:'TERMINAL 2',terminal:'T2',x:-263,z:-1280,w:102,d:225},
+  {label:'TERMINAL 4',terminal:'T4',x:378,z:-1390,w:68,d:370}
+ ],
+ piers:[
+  {label:'A · T3',terminal:'T3',x:-351,z:-2942,w:34,d:770},
+  {label:'B · T3',terminal:'T3',x:-202,z:-2760,w:33,d:410},
+  {label:'C · T1',terminal:'T1',x:-166,z:-2505,w:30,d:580},
+  {label:'D · T1',terminal:'T1',x:-166,z:-1975,w:30,d:515},
+  {label:'F · T2',terminal:'T2',x:-351,z:-1185,w:32,d:750},
+  {label:'E · T2',terminal:'T2',x:-190,z:-1185,w:32,d:750}
+ ],
+ connectors:[
+  {label:'T3 A CONCOURSE',x:-327,z:-2740,w:42,d:35},
+  {label:'T2 F CONCOURSE',x:-324,z:-1280,w:46,d:36},
+  {label:'T3 TO JEWEL',x:-273,z:-2470,w:35,d:310},
+  {label:'JEWEL TO T2',x:-272,z:-1745,w:34,d:500}
+ ],
+ jewel:{label:'JEWEL · T1',x:-299,z:-2155,r:29},
+ // Short pedestrian connector beside T1, highlighted green in the user's map.
+ greenLink:{label:'JEWEL–T1 LINK',x:-264,z:-2155,w:42,d:11},
+ aprons:[
+  {x:-268,z:-2120,w:345,d:2400},
+  {x:378,z:-1390,w:170,d:590}
+ ]
+};
+window.__jcChangiCampusV18=jcChangiCampusV18;
+window.__jcChangiLayoutStatus=()=>({build:'v18',gateCount:jcChangiGateRegistry.length,
+ terminals:Object.fromEntries(['T1','T2','T3','T4'].map(t=>[t,jcChangiGateRegistry.filter(g=>g.terminal===t).length])),
+ jewel:jcChangiCampusV18.jewel,mainCampusBetweenRunways:true,
+ caution:'Schematic game scenery, not operational airport geometry'});
 const jcChangiGateLookup=new Map(jcChangiGateRegistry.map(r=>[r.gate,r]));
 window.__jcChangiGateRegistry=jcChangiGateRegistry;
 // The client may update this snapshot after requesting a separately authorized
@@ -5279,8 +5315,8 @@ function jcChangiObserved(f){
 function jcChangiRoute(stand){
  // Schematic taxiway in the same game-local coordinates as the pavement.
  // Not the real CAAS taxi clearance or a chart-verified route.
- const west=jetChangiRunways['02L'].x*.22;
- const crossZ=Math.abs(stand.z+1400)<=Math.abs(stand.z+2400)?-1400:-2400;
+ const west=-91;
+ const crossZ=-1630; // single schematic connecting corridor clear of terminal aprons
  const runway=String(pt?.depRwy||'02C').toUpperCase();
  const south=/^20/.test(runway);
  const corridorZ=stand.z+(stand.z>crossZ?-28:28);
@@ -5458,10 +5494,11 @@ const jcGateV17Style={
  sign:'#14284b',stroke:'#f0d86f',text:'#ffffff'
 };
 function jcGatePierWall(stand){
- // Edge of the relevant concourse, not the centre of the apron.
+ // Building faces are consistent with the v18 terminal finger registry.
  const prefix=stand.gate[0];
  if(prefix==='G')return stand.face==='W'?344:412;
- return {A:-338,B:-192,C:-338,D:-189,E:-191,F:-339}[prefix]??(stand.x+(stand.face==='W'?20:-20));
+ return {A:-370,B:-184,C:-148,D:-148,E:-172,F:-368}[prefix]??
+  (stand.x+(stand.face==='W'?18:-18));
 }
 function jcGateTexture(gate){
  const canvas=document.createElement('canvas');canvas.width=192;canvas.height=88;
@@ -5664,72 +5701,50 @@ function jcChangiSync3DGround(){
 window.addEventListener('jc-changi-ground-updated',jcChangiSync3DGround);
 
 function jetChangiBuildTerminals(addBox,putSphere,group){
- const apron=new Xt({color:0x737d81,roughness:.97});
- const concrete=new Xt({color:0x909ba3,roughness:.92});
+ const cfg=jcChangiCampusV18;
+ const apron=new Xt({color:0x697e83,roughness:.96});
+ const concrete=new Xt({color:0x909ba3,roughness:.91});
  const terminal=new Xt({color:0xc3ced4,roughness:.69,metalness:.12});
- const white=new Xt({color:0xe4e8e5,roughness:.62});
+ const white=new Xt({color:0xe5ebe8,roughness:.62});
  const roof=new Xt({color:0x768b98,roughness:.75,metalness:.16});
  const glass=new Xt({color:0x2b839d,metalness:.58,roughness:.19,transparent:true,opacity:.81});
  const darkGlass=new Xt({color:0x244958,metalness:.63,roughness:.22});
  const frames=new be({color:0xa8d7dc});
  const lamps=new be({color:0xffefb2});
- const path=new be({color:0xc9c1a7});
- const planeMat=new Xt({color:0xf7f8f5,roughness:.48});
- const planeBlue=new Xt({color:0x152d53,roughness:.52});
- const planeGold=new be({color:0xe4ad58});
-
- // Single canonical WSSS frame is shared by runways, parked aircraft,
- // transit map, taxiway navigation and the 3D gate spectator camera.
- // The older model placed T2 next to T3 and buried some A/C/E aircraft within
- // walls. These three connected terminal fingers now follow the supplied map.
- addBox(-278,-2230,270,2050,.05,.12,concrete);
- // T4 stands separately on the eastern airport island, beyond 02C/20C.
- addBox(375,-1390,178,595,.04,.12,concrete);
- // Central road and terminal connector, avoiding gate parking aisles.
- addBox(-276,-2360,57,1070,1.1,1.7,roof);
- addBox(-276,-2360,51,1070,5.3,9.4,terminal);
- addBox(-276,-2360,56,1070,11.0,.95,white);
- // T3 is northernmost, T1 central, T2 to the south in the compressed game.
- const terminalHalls=[
-  {tag:'T3',x:-278,z:-2895,w:68,d:405},
-  {tag:'T1',x:-278,z:-2390,w:70,d:405},
-  {tag:'T2',x:-278,z:-1705,w:70,d:365},
-  {tag:'T4',x:378,z:-1390,w:68,d:375},
- ];
- const fingers=[
-  {tag:'A · T3',x:-319,z:-2950,w:35,d:520},
-  {tag:'B · T3',x:-210,z:-2910,w:35,d:425},
-  {tag:'C · T1',x:-319,z:-2375,w:35,d:435},
-  {tag:'D · T1',x:-207,z:-2390,w:35,d:535},
-  {tag:'F · T2',x:-321,z:-1730,w:35,d:560},
-  {tag:'E · T2',x:-210,z:-1710,w:35,d:520},
- ];
- for(const f of [...terminalHalls,...fingers]){
-  addBox(f.x,f.z,f.w+9,f.d+10,.25,.28,apron);
-  addBox(f.x,f.z,f.w,f.d,6.8,12.3,terminal);
-  addBox(f.x,f.z,f.w+3,f.d+3,13.1,1.25,roof);
-  for(const e of [-1,1])addBox(f.x+e*(f.w/2+.5),f.z,1.5,f.d-8,8.5,7,glass);
-  for(let v=f.z-f.d/2+20;v<f.z+f.d/2-12;v+=43)
-   addBox(f.x,v,f.w-5,1,13.8,.11,frames);
+ const path=new be({color:0xd7cfa5});
+ const link=new Xt({color:0x40a66c,roughness:.84});
+ // Western and central runways flank T1/T2/T3: no building crosses pavement.
+ for(const p of cfg.aprons)addBox(p.x,p.z,p.w,p.d,.06,.12,concrete);
+ const parts=[...cfg.halls,...cfg.piers,...cfg.connectors];
+ for(const f of parts){
+  addBox(f.x,f.z,f.w+7,f.d+7,.28,.31,apron);
+  addBox(f.x,f.z,f.w,f.d,6.8,12.2,terminal);
+  addBox(f.x,f.z,f.w+3,f.d+3,13.1,1.24,roof);
+  for(const edge of [-1,1])addBox(f.x+edge*(f.w/2+.5),f.z,1.2,f.d-6,8.3,6.8,glass);
+  for(let v=f.z-f.d/2+20;v<f.z+f.d/2-10;v+=48)
+   addBox(f.x,v,Math.max(2,f.w-5),1,13.8,.11,frames);
  }
- // Jewel is the middle complex between the T1 and T2 clusters, not the runway.
- addBox(-278,-2060,92,84,3,5,terminal);
- addBox(-278,-2060,82,77,5.6,.65,darkGlass);
- putSphere(-278,-2060,39,23,6.1,new Xt({color:0x4ca3b3,metalness:.72,
-   roughness:.14,transparent:true,opacity:.69}),true);
- putSphere(-278,-2060,39.5,23.7,6.1,new be({color:0xb3eff4,
-   transparent:true,opacity:.49,wireframe:true,depthWrite:false}),true);
- // Apron centreline markings and stand guidance outside terminal footprints.
- for(const x of [-404,-143])for(const z of [-1600,-1800,-2250,-2480,-2980])
-  addBox(x,z,2.7,23,.44,.055,path);
- for(const x of [-411,-137,315,437])for(const z of [-1650,-2070,-2450,-2930])
-  if(x<0||z>-1700)addBox(x,z,2,2,1.8,3.3,lamps);
-  // All terminal gates are represented by stand markers. The old eight
-  // invented permanently parked airliners are removed. Actual flights are
-  // drawn only from the explicitly sourced gate snapshot.
-  jcChangiBuildStandLayer(addBox,group);
- group.userData.jcChangiTerminals={version:16,components:['T1','T2','T3','T4','JEWEL'],
-   source:'Changi-inspired simulation; stand positions are schematic, not surveyed'};
+ const j=cfg.jewel;
+ addBox(j.x,j.z,j.r*2.3,j.r*2.3,2.7,4.8,terminal);
+ addBox(j.x,j.z,j.r*2.12,j.r*2.12,5.4,.55,darkGlass);
+ putSphere(j.x,j.z,j.r,21,5.95,new Xt({color:0x4ca3b3,metalness:.72,
+  roughness:.14,transparent:true,opacity:.69}),true);
+ putSphere(j.x,j.z,j.r+.5,21.6,5.95,new be({color:0xb3eff4,
+  transparent:true,opacity:.49,wireframe:true,depthWrite:false}),true);
+ // Green covered pedestrian link FROM JEWEL TO TERMINAL 1.
+ const g=cfg.greenLink;
+ addBox(g.x,g.z,g.w,g.d,2.2,1.2,link);
+ addBox(g.x,g.z,g.w,g.d,7.8,1.0,glass);
+ // Stand/apron markings follow the SAME coordinates as the 3D parked fleet.
+ for(const stand of jcChangiGateRegistry){
+  if(Number(stand.gate.slice(1))%3===0)
+   addBox(stand.x,stand.z-13,1.8,24,.43,.05,path);
+ }
+ for(const hall of cfg.halls)for(const offset of [-1,1])
+  addBox(hall.x+offset*(hall.w/2+12),hall.z,2,2,1.8,3.3,lamps);
+ jcChangiBuildStandLayer(addBox,group);
+ group.userData.jcChangiTerminals={version:18,components:['T1','T2','T3','T4','JEWEL'],
+  source:'Reference-matched Changi conceptual terminal and gate layout; NOT surveyed'};
 }
 
 function jetTrafficParallelMake(){
@@ -7926,35 +7941,36 @@ function jcSurfaceDraw(force=false){
  // phantom intersections THROUGH the newly added terminal and Jewel.
  if(isWSSS&&coords.length===3){
   const L=jetChangiRunways['02L'],R=jetChangiRunways['02R'];
-  const west=L.x*.22,east=R.x*.51;
+  const west=-91,east=R.x*.51;
   const p=(x,z)=>atPoint([x,z]);
   const line=(a,b)=>{ctx.beginPath();ctx.moveTo(...p(...a));ctx.lineTo(...p(...b));ctx.stroke();};
   ctx.strokeStyle='#738795';ctx.lineWidth=Math.max(2.2,24*scale);
   ctx.setLineDash([]);
   for(const x of [west,east])line([x,175],[x,-3950]);
-  for(const z of [-1330,-2350,-1400,-2400])line([L.x,z],[R.x,z]);
+  for(const z of [-1630])line([L.x,z],[R.x,z]); // open schematic crossing
   // Terminal footprints - schematic shapes in the SAME canonical projection.
-  const buildings=[
-   [-276,-2360,57,1070,'LINK'],
-   [-278,-2895,68,405,'T3'],[-319,-2950,35,520,'A'],[-210,-2910,35,425,'B'],
-   [-278,-2390,70,405,'T1'],[-319,-2375,35,435,'C'],[-207,-2390,35,535,'D'],
-   [-278,-1705,70,365,'T2'],[-321,-1730,35,560,'F'],[-210,-1710,35,520,'E'],
-   [378,-1390,68,375,'T4']];
-  for(const [x,z,w,d] of buildings){
-   const a=p(x-w/2,z-d/2),b=p(x+w/2,z+d/2);
-   ctx.fillStyle='#527587';ctx.strokeStyle='#c1e8ee';ctx.lineWidth=1;
+  const cfg=jcChangiCampusV18;
+  for(const hall of [...cfg.halls,...cfg.piers,...cfg.connectors]){
+   const a=p(hall.x-hall.w/2,hall.z-hall.d/2),b=p(hall.x+hall.w/2,hall.z+hall.d/2);
+   const fill=hall.terminal==='T3'?'#9c4358':hall.terminal==='T1'?'#5d5597':
+    hall.terminal==='T2'?'#c9aa47':'#5f8f86';
+   ctx.fillStyle=fill;ctx.strokeStyle='#dbfaff';ctx.lineWidth=1;
    ctx.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
    ctx.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);
   }
-  const dome=p(-278,-2060),radius=Math.max(5,43*scale);
+  const dome=p(cfg.jewel.x,cfg.jewel.z),radius=Math.max(5,cfg.jewel.r*scale);
   ctx.beginPath();ctx.arc(dome[0],dome[1],radius,0,Math.PI*2);
   ctx.fillStyle='#2c9eac';ctx.fill();ctx.strokeStyle='#dbfaff';ctx.lineWidth=1.3;ctx.stroke();
+  const greenA=p(cfg.greenLink.x-cfg.greenLink.w/2,cfg.greenLink.z);
+  const greenB=p(cfg.greenLink.x+cfg.greenLink.w/2,cfg.greenLink.z);
+  ctx.beginPath();ctx.moveTo(...greenA);ctx.lineTo(...greenB);
+  ctx.strokeStyle='#5afa9b';ctx.lineWidth=3;ctx.stroke();
   ctx.fillStyle='#ddfbff';ctx.font='bold 9px system-ui';ctx.textAlign='center';
-   ctx.fillText('JEWEL',dome[0],dome[1]-radius-5);
-   for(const [x,z,label] of [[-278,-2895,'T3 · A/B'],[-278,-2390,'T1 · C/D'],[-278,-1705,'T2 · E/F'],[378,-1390,'T4 · G']]){
-    const q=p(x,z);ctx.font='bold 10px system-ui';ctx.fillStyle='#ffffff';ctx.textAlign='center';
-    ctx.fillText(label,q[0],q[1]-10);
-   }
+  ctx.fillText('JEWEL · T1',dome[0],dome[1]-radius-5);
+  for(const h of cfg.halls){
+   const q=p(h.x,h.z);ctx.font='bold 10px system-ui';ctx.fillStyle='#ffffff';
+   ctx.textAlign='center';ctx.fillText(h.label,q[0],q[1]-14);
+  }
    // Stand locations are a compressed game approximation. Show real flight
    // identifiers only if the assigned flight arrived via the live/manual feed.
    const gateSnapshot=window.__jcGateSnapshot||{flights:[]};
@@ -8826,13 +8842,11 @@ window.__jcNight={setMode:jcNightSetMode,getMode:()=>jcNight.mode,
 // JETLINE GROUND PROXIMITY v14 - training simulation, not certified anti-collision equipment.
 const jcGroundProximity={lastAudioAt:0,lastSeverity:'',lastLabel:'',current:null};
 const jcTerminalCollisionFootprints=[
- {label:'TERMINAL CENTRAL',x:-298,z:-1810,w:56,d:670},
- {label:'TERMINAL 3',x:-377,z:-1630,w:66,d:328},
- {label:'TERMINAL 1',x:-300,z:-2030,w:108,d:176},
- {label:'TERMINAL 2',x:-198,z:-1650,w:75,d:350},
- {label:'TERMINAL 2 SOUTH',x:-177,z:-1970,w:47,d:176},
- {label:'JEWEL',x:-302,z:-2200,w:98,d:100},
- {label:'TERMINAL 4',x:-236,z:-1135,w:122,d:155}
+ ...jcChangiCampusV18.halls,
+ ...jcChangiCampusV18.piers,
+ ...jcChangiCampusV18.connectors,
+ {label:'JEWEL',x:jcChangiCampusV18.jewel.x,z:jcChangiCampusV18.jewel.z,
+  w:jcChangiCampusV18.jewel.r*2,d:jcChangiCampusV18.jewel.r*2}
 ];
 function jcGroundAlertElement(){
  let el=document.getElementById('jc-ground-collision-alert');
@@ -9029,7 +9043,9 @@ function jcTerminalMapDraw(){
  const root=document.getElementById('jc-terminal-map-overlay');if(!root||root.hidden)return;
  const canvas=root.querySelector('#jc-tm-canvas'),ctx=canvas.getContext('2d');if(!ctx)return;
  const terminal=jcTerminalMapState.terminal,gates=jcChangiGateRegistry.filter(s=>s.terminal===terminal);
- const xValues=gates.map(s=>s.x),zValues=gates.map(s=>s.z);
+ const extra=terminal==='T1'?[jcChangiCampusV18.jewel]:[];
+ const allPoints=[...gates,...extra];
+ const xValues=allPoints.map(s=>s.x),zValues=allPoints.map(s=>s.z);
  const minX=Math.min(...xValues)-65,maxX=Math.max(...xValues)+65;
  const minZ=Math.min(...zValues)-75,maxZ=Math.max(...zValues)+75;
  const W=canvas.width,H=canvas.height,pad=70;
@@ -9037,13 +9053,21 @@ function jcTerminalMapDraw(){
  const at=(x,z)=>[W/2+(x-(minX+maxX)/2)*scale,H/2+(z-(minZ+maxZ)/2)*scale];
  ctx.clearRect(0,0,W,H);ctx.fillStyle='#0b2639';ctx.fillRect(0,0,W,H);
  for(let i=0;i<25;i++){ctx.strokeStyle='#1b3c4d';ctx.lineWidth=1;const q=i*40;ctx.beginPath();ctx.moveTo(q,0);ctx.lineTo(q,H);ctx.stroke();ctx.beginPath();ctx.moveTo(0,q);ctx.lineTo(W,q);ctx.stroke();}
- const hubs={T3:[-278,-2895],T1:[-278,-2390],T2:[-278,-1705],T4:[378,-1390]};
+ const hubs=Object.fromEntries(jcChangiCampusV18.halls.map(h=>[h.terminal,[h.x,h.z]]));
  const hub=hubs[terminal],start=at(...hub);
  ctx.lineWidth=38;ctx.strokeStyle='#4f778c';ctx.lineCap='round';ctx.lineJoin='round';
  for(const pfx of [...new Set(gates.map(g=>g.gate[0]))]){
   const group=gates.filter(g=>g.gate.startsWith(pfx));
   const mid=at(group[0].x,group[0].z),end=at(group[group.length-1].x,group[group.length-1].z);
   ctx.beginPath();ctx.moveTo(...start);ctx.lineTo(...mid);ctx.lineTo(...end);ctx.stroke();
+ }
+ if(terminal==='T1'){
+  const j=jcChangiCampusV18.jewel;
+  const [jx,jy]=at(j.x,j.z),[hx,hy]=at(...hub);
+  ctx.strokeStyle='#54ed94';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(jx,jy);ctx.lineTo(hx,hy);ctx.stroke();
+  ctx.beginPath();ctx.arc(jx,jy,Math.max(10,j.r*scale*.5),0,2*Math.PI);
+  ctx.fillStyle='#287b8a';ctx.fill();ctx.strokeStyle='#c5fff0';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#dcfff4';ctx.font='bold 15px system-ui';ctx.textAlign='center';ctx.fillText('JEWEL',jx,jy-25);
  }
  ctx.fillStyle='#bee2ea';ctx.font='bold 24px system-ui';ctx.textAlign='center';ctx.fillText('TERMINAL '+terminal.slice(-1),W/2,38);
  const snap=window.__jcGateSnapshot||{},flights=Array.isArray(snap.flights)?snap.flights:[];
@@ -13235,7 +13259,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • GATE SIGNS / AEROBRIDGES v17 · GATE VIEW v15';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI TERMINALS v18 · GATES + JEWEL';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -13975,6 +13999,6 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • GATE SIGNS + AEROBRIDGES v17</div>
+<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI TERMINALS v18 · GATE ALIGN</div>
 </body>
 </html>
