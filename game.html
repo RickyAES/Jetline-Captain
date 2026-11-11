@@ -14016,5 +14016,23 @@ render();
 </script>
 
 <div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI GATES DOCK v20 · NO FCU OVERLAP</div>
+<style id="jc-changi-host-nav-v22-css">
+/* Hosted version uses the website header. Do not repeat gate launchers
+   in the cockpit menus or floating overlays; standalone stays unchanged. */
+html.jc-hosted-game #jc-gate-camera-data-toggle,
+html.jc-hosted-game [data-jc-ground-act="gates"]{display:none!important}
+</style>
+<script id="jc-changi-host-nav-v22-script">
+(()=>{
+  'use strict';
+  window.__jcOpenChangiGates=()=>{
+    const panel=document.getElementById('jc-gates-panel');
+    const original=document.getElementById('jc-gates-open');
+    if(!panel||!original)return false;
+    if(!panel.classList.contains('open'))original.click();
+    return panel.classList.contains('open');
+  };
+})();
+</script>
 </body>
 </html>

@@ -35,6 +35,17 @@
       #bar .toolbutton .tooltext{display:none}
       #bar .right > .pill{min-height:32px}
     }
+
+    /* v22: Changi gate access is in the actual host top navigation bar.
+       It never floats over the FCU, EFIS or runway scenery. */
+    #bar #changiGatesOpen {flex:0 0 auto;min-width:0;border-color:#3dbad3;color:#e0fbff;white-space:nowrap}
+    #bar #changiGatesOpen:hover,#bar #changiGatesOpen:focus-visible{background:#18456b;border-color:#91edff;outline-offset:1px}
+    #bar #changiGatesOpen .jc-gate-name-small{display:none}
+    @media(max-width:650px){
+      #bar #changiGatesOpen{font-size:11px;padding:0 8px;min-height:32px}
+      #bar #changiGatesOpen .jc-gate-name-full{display:none}
+      #bar #changiGatesOpen .jc-gate-name-small{display:inline}
+    }
     .pill{min-height:33px;border:1px solid var(--stroke);border-radius:9px;background:#122951;color:var(--ink);font-size:12px;font-weight:800;padding:0 10px;white-space:nowrap}
     .pill.primary{border-color:#1dbbe0;color:#bcf5ff}
     .pilots{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:800;max-width:210px;overflow:hidden;text-overflow:ellipsis}
@@ -207,6 +218,9 @@
       <span class="pilots"><span class="dot" id="liveDot"></span><span id="liveLabel">OFFLINE MODE</span></span>
       <button class="pill" id="rankingOpen" type="button">🏆 RANKING</button>
       <button class="pill" id="routeOpen" type="button">✈ AIRPORTS</button>
+      <button class="pill" id="changiGatesOpen" type="button" aria-label="Open Changi terminal gates and live flight assignments" title="Changi terminal gates">
+        ✈ <span class="jc-gate-name-full">CHANGI GATES</span><span class="jc-gate-name-small">GATES</span>
+      </button>
       <button class="pill" id="radarOpen" type="button">📡 RADAR</button>
       <button class="pill" id="fuelOpen" type="button" aria-label="Show simulated aircraft fuel">⛽ FUEL</button>
       <button class="pill toolbutton" id="settingsOpen" type="button" aria-label="General Settings" title="General Settings"><span class="toolicon">⚙</span><span class="tooltext">SETTINGS</span></button>
@@ -395,6 +409,36 @@
 (()=>{
   const $=id=>document.getElementById(id);
   const frame=$('gameFrame');
+  // v22: bridge top-navigation GATES to the gate dialog in game.html.
+  // The page and the iframe are served from the same origin on Vercel.
+  // Existing game UI and Aviationstack feed functions are not duplicated.
+  const gateHeaderButton=$('changiGatesOpen');
+  gateHeaderButton?.addEventListener('click',()=>{
+    let opened=false;
+    try {
+      const gameWindow=frame.contentWindow;
+      const gameDocument=frame.contentDocument;
+      if(typeof gameWindow?.__jcOpenChangiGates==='function'){
+        opened=gameWindow.__jcOpenChangiGates()===true;
+      } else {
+        const gatePanel=gameDocument?.getElementById('jc-gates-panel');
+        const gateTrigger=gameDocument?.getElementById('jc-gates-open');
+        if(gateTrigger && gatePanel){
+          if(!gatePanel.classList.contains('open'))gateTrigger.click();
+          opened=gatePanel.classList.contains('open');
+        }
+      }
+      if(opened)frame.focus();
+    }catch(err){console.warn('Changi gate navigation',err)}
+    if(!opened){
+      gateHeaderButton.title='Changi gates are loading; try again when the simulator is ready';
+      gateHeaderButton.setAttribute('aria-label','Changi gates are loading; try again');
+      setTimeout(()=>{
+        gateHeaderButton.title='Changi terminal gates';
+        gateHeaderButton.setAttribute('aria-label','Open Changi terminal gates and live flight assignments');
+      },1400);
+    }
+  });
   const config=window.JETLINE_CONFIG||{};
   const configured=/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(config.supabaseUrl||'') &&
     /^(sb_publishable_|eyJ)[A-Za-z0-9_.-]+$/.test(config.supabasePublishableKey||'') && !!window.supabase?.createClient;
