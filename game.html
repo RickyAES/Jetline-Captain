@@ -6506,24 +6506,34 @@ function jetTrafficStartLocalLanding(a,match,now){
  if(!track||track.localLanding||a.localLanding||a.onGround||!match)return null;
  const age=Math.max(0,(now-jetTraffic.liveAt)/1000+Math.max(0,Number(a.seenPos)||0));
  const heading=jetTrafficObservedCourse(a);
- const error=Math.abs(((heading-(match.course??(match.dir==='02'?jetWSSSCourseDeg:(jetWSSSCourseDeg+180)%360))+540)%360)-180);
- const before=Math.max(0,Number(match.distanceToThreshold));
+ const expected=match.course??(match.dir==='02'?jetWSSSCourseDeg:(jetWSSSCourseDeg+180)%360);
+ const error=Math.abs(((heading-expected+540)%360)-180);
+ const before=Number(match.distanceToThreshold);
  const vertical=Number(a.verticalRate)||0;
- // Require a genuine established final, and reject transiting/crossing traffic.
- if(before<130||before>1000||Math.abs(match.cross)>115||error>17||
-    a.speedKt<75||a.speedKt>220||!(a.phase==='DESCENDING'||vertical< -180)||age>12)return null;
+ // Capture only a genuine descending, aligned and RECENT runway approach.
+ // Other radar dots remain measured radar traffic and never auto-land.
+ if(!Number.isFinite(before)||before<180||before>3500||
+    Math.abs(match.cross)>180||error>19||
+    a.speedKt<70||a.speedKt>240||
+    !(a.phase==='DESCENDING'||vertical< -150)||age>16){
+   track.finalObservedAt=0;return null;
+ }
  if(!track.finalObservedAt){track.finalObservedAt=now;return null;}
- if(now-track.finalObservedAt<1200)return null;
+ if(now-track.finalObservedAt<1100)return null;
  const thresholdEnd=(jetTrafficActiveAirport()==='WSSS'&&match.designation==='20R'&&
    match.runway?.opposite)?[
     match.runway.opposite[0]+(match.runway.threshold[0]-match.runway.opposite[0])*.185,
     match.runway.opposite[1]+(match.runway.threshold[1]-match.runway.opposite[1])*.185]:null;
+ const previous=jetTraffic.liveModels.get(a.id);
+ const initialPose=previous?{x:previous.x,y:previous.y,z:previous.z,yaw:previous.yaw}:null;
  const record={startedAt:now,aircraftId:a.id,callsign:jetTrafficCallsign(a),airport:jetTrafficActiveAirport(),
   runway:match.designation,runwayBase:match.id,dir:match.dir,
   threshold:(thresholdEnd||match.threshold||((match.dir==='02')?match.runway.threshold:match.runway.opposite)).slice(),
   opposite:(match.opposite||((match.dir==='02')?match.runway.opposite:match.runway.threshold)).slice(),
-  before,lengthMeters:match.lengthMeters||4000,speedMps:Math.min(85,Math.max(52,a.speedKt*.514444)),
-  radarId:a.id,source:'LOCAL_SIM_1KM'};
+  before,lengthMeters:match.lengthMeters||4000,
+  speedMps:Math.min(88,Math.max(51,a.speedKt*.514444)),
+  initialPose,originalCross:Number(match.cross)||0,
+  radarId:a.id,source:'GAME_SIM_FROM_OBSERVED_FINAL'};
  track.localLanding=record;track.lastRadarAircraft={...a};track.callsign=record.callsign;
  return record;
 }
@@ -6550,35 +6560,66 @@ function jetTrafficSimulatedLandingPosition(a,now){
  const track=jetTraffic.stableTracks.get(a.id),l=track?.localLanding;
  if(!l||l.airport!==jetTrafficActiveAirport())return null;
  const seconds=Math.max(0,(now-l.startedAt)/1000);
- const approachDistance=l.before+190;
- const approachSeconds=approachDistance/l.speedMps;
- let along,stage,alt;
- if(seconds<approachSeconds){
+ const flightToThreshold=l.before/l.speedMps;
+ const flareDistance=84;
+ const flareSeconds=flareDistance/l.speedMps;
+ const touchdownSeconds=flightToThreshold+flareSeconds;
+ let along,stage,alt,speedMps;
+ const scale=jetTrafficWorldMapPoint(l.threshold[0],l.threshold[1])?.scale||.6;
+ if(seconds<flightToThreshold){
   along=-l.before+l.speedMps*seconds;
   const remaining=Math.max(0,-along);
-  const scale=jetTrafficWorldMapPoint(l.threshold[0],l.threshold[1])?.scale||.6;
-  alt=3.5+remaining*scale*Math.tan(3*Math.PI/180);
-  stage='LOCAL FINAL 1KM';
+  alt=3.3+remaining*scale*Math.tan(3*Math.PI/180);
+  speedMps=l.speedMps;
+  stage='SIMULATED FINAL';
+ }else if(seconds<touchdownSeconds){
+  along=l.speedMps*(seconds-flightToThreshold);
+  const t=Math.min(1,Math.max(0,along/flareDistance));
+  const smooth=t*t*(3-2*t);
+  alt=.09+3.21*(1-smooth);
+  speedMps=l.speedMps;
+  stage='SIMULATED FLARE';
  }else{
-  const rollout=seconds-approachSeconds;
-  along=Math.min(l.lengthMeters-90,190+850*(1-Math.exp(-rollout/13)));
-  alt=.09;stage='LOCAL ROLLOUT';
+  const elapsed=seconds-touchdownSeconds;
+  const rolloutDistance=980*(1-Math.exp(-elapsed/14));
+  along=Math.min(l.lengthMeters-100,flareDistance+rolloutDistance);
+  alt=.09;
+  speedMps=(980/14)*Math.exp(-elapsed/14);
+  stage='SIMULATED ROLLOUT';
  }
  const current=jetTrafficLocalLandingPoint(l,along);
  if(!current)return null;
- // Sample a point AHEAD on the same runway, in the same world/scenery
- // coordinates as the aircraft. This is a forward direction, not a
- // transponder heading and not the player's selected runway heading.
  const ahead=jetTrafficLocalLandingPoint(l,along+30);
  const dx=(ahead?.x??current.x)-current.x;
  const dz=(ahead?.z??current.z)-current.z;
  const horizontal=Math.hypot(dx,dz);
  const course=jetTrafficGeoBearing(l.threshold,l.opposite);
- const yaw=horizontal>1e-6?Math.atan2(-dx,-dz):jetTrafficWorldYaw(course);
- return {x:current.x,z:current.z,y:alt,yaw,stage,estimated:true,runway:l.runway,
-  runwayBase:l.runwayBase,localLanding:true,localLandingDone:seconds>approachSeconds+45,
-  simulatedCourse:course};
+ let yaw=horizontal>1e-6?Math.atan2(-dx,-dz):jetTrafficWorldYaw(course);
+ let x=current.x,z=current.z,y=alt;
+ // At radar-to-game handover interpolate from the ACTUAL displayed model,
+ // preserving continuity even when the ADS-B fix was a few seconds delayed.
+ if(l.initialPose&&seconds<3){
+  if(!l.captureCenter){l.captureCenter=jetTrafficLocalLandingPoint(l,-l.before);}
+  const center=l.captureCenter||current;
+  const t=Math.min(1,seconds/3),blend=1-t*t*(3-2*t);
+  x+=(l.initialPose.x-center.x)*blend;
+  z+=(l.initialPose.z-center.z)*blend;
+  const glideStart=3.3+l.before*scale*Math.tan(3*Math.PI/180);
+  y+=(l.initialPose.y-glideStart)*blend;
+  const d=((l.initialPose.yaw-yaw+3*Math.PI)%(2*Math.PI))-Math.PI;
+  yaw+=d*blend;
+ }
+ return {x,z,y:Math.max(.09,y),yaw,stage,estimated:true,runway:l.runway,
+  runwayBase:l.runwayBase,localLanding:true,localLandingDone:seconds>touchdownSeconds+46,
+  simulatedCourse:course,speedKt:speedMps*1.943844};
 }
+window.__jcSmoothLandingV31=()=>({
+ active:[...jetTraffic.stableTracks.values()].filter(t=>t.localLanding&&
+  !jetTrafficSimulatedLandingPosition({id:t.id},Date.now())?.localLandingDone)
+  .map(t=>({flight:t.callsign,runway:t.localLanding.runway,
+   stage:jetTrafficSimulatedLandingPosition({id:t.id},Date.now())?.stage,
+   source:'LOCALLY SIMULATED · FROM OBSERVED FINAL'})),
+ version:'31',mode:'Radar capture then independent 3D final and rollout'});
 function jetTrafficMaybeLocalLanding(a,match,now){
  const existing=jetTrafficSimulatedLandingPosition(a,now);
  if(existing)return existing;
@@ -6663,7 +6704,8 @@ function jetTrafficAccept(data){
  const nowMs=Date.now();
  for(const [id,track] of jetTraffic.stableTracks){
   const local=track.localLanding;
-  if(!local||nowMs-local.startedAt>72000)continue;
+  if(!local||nowMs-local.startedAt>200000||
+   jetTrafficSimulatedLandingPosition({id},nowMs)?.localLandingDone)continue;
   const current=jetTraffic.live.find(a=>a.id===id);
   if(current){current.name=local.callsign;current.localLanding=true;}
   else if(track.lastRadarAircraft){jetTraffic.live.push({...track.lastRadarAircraft,name:local.callsign,localLanding:true});}
@@ -6679,7 +6721,8 @@ function jetTrafficAccept(data){
   track.speedKt=plane.speedKt;track.altFt=plane.altFt;track.phase=plane.phase;
   if(r && (plane.speedKt>40 || !track.runway))track.runway=r.id;
  }
- for(const [id,track] of jetTraffic.stableTracks){if(Date.now()-(track.lastSeen||0)>90000)jetTraffic.stableTracks.delete(id);}
+ for(const [id,track] of jetTraffic.stableTracks){if(Date.now()-(track.lastSeen||0)>(track.localLanding?210000:90000))
+  jetTraffic.stableTracks.delete(id);}
  jetTraffic.nextHud=0;jetTraffic.nextLiveDraw=0;
  if(jetTraffic.worldRunways.length)jetTrafficWorldPavementMake();
  return true;
@@ -7298,7 +7341,7 @@ function jetTrafficPosition(a,now){
   const raw=jetTrafficRunwayMatch(a),pose=jetTrafficWorldPosition(a,now);
   if(pose){
    const candidate=raw&&!a.onGround&&a.speedKt>75&&
-    Math.abs(raw.cross)<150&&raw.distanceToThreshold>=130&&raw.distanceToThreshold<=1000;
+    Math.abs(raw.cross)<150&&raw.distanceToThreshold>=130&&raw.distanceToThreshold<=3500;
    if(candidate){const local=jetTrafficMaybeLocalLanding(a,raw,now);if(local)return local;}
    return pose;
   }
@@ -7336,7 +7379,7 @@ function jetTrafficPosition(a,now){
  const along=east*Math.sin(bearing)+north*Math.cos(bearing);
  const side=east*Math.cos(bearing)-north*Math.sin(bearing);
  let runway=wsss?jetTrafficParallelTrack(a,lat,lon):null;
- if(wsss&&rawRunway&&rawRunway.distanceToThreshold>=130&&rawRunway.distanceToThreshold<=1000&&
+ if(wsss&&rawRunway&&rawRunway.distanceToThreshold>=130&&rawRunway.distanceToThreshold<=3500&&
    Math.abs(rawRunway.cross)<150&&!a.onGround){
   const runwayCourse=rawRunway.dir==='02'?jetWSSSCourseDeg:(jetWSSSCourseDeg+180)%360;
   const match={...rawRunway,course:runwayCourse,lengthMeters:4000,
@@ -7528,11 +7571,17 @@ function jetTrafficSmoothMotion(entry,target,a,dt,now){
 }
 
 function jetTrafficDrawLiveContacts(dt){
- const phase=E.phase,active=['taxi','takeoff','approach','taxiIn'].includes(phase);
- if(!active||!jetTrafficLiveFresh()||!It?.scene||!_t){window.__jcTrafficSoundContacts=[];jetTrafficClearModels();return;}
+ const phase=E.phase,active=['taxi','takeoff','approach','rollout','taxiIn'].includes(phase);
+ const now=Date.now();
+ const local=[...jetTraffic.stableTracks.values()].filter(t=>t.localLanding&&
+  t.localLanding.airport===jetTrafficActiveAirport()&&
+  !jetTrafficSimulatedLandingPosition({id:t.id},now)?.localLandingDone);
+ const feedFresh=jetTrafficLiveFresh();
+ if(!active||(!feedFresh&&!local.length)||!It?.scene||!_t){
+  window.__jcTrafficSoundContacts=[];jetTrafficClearModels();return;
+ }
  if(jetTraffic.scene&&jetTraffic.scene!==It.scene)jetTrafficClearModels();
  if(!jetTraffic.scene)jetTraffic.scene=It.scene;
- const now=Date.now();
  // All 3D models originate from this *same* ADS-B cache as the radar dots.
  // Prioritize *observed* runway arrivals, takeoff rolls and initial climbs
  // BEFORE parked traffic. Previously many ground contacts filled every 3D slot,
@@ -7560,10 +7609,18 @@ function jetTrafficDrawLiveContacts(dt){
  // Prioritize the nearest and runway-relevant planes before spending GPU time.
  // Detailed A350 models have many meshes; drawing 24 at once caused low FPS.
  const capacity=window.innerWidth<700?9:14;
- const prioritized=jetTraffic.live.filter(a=>a.id&&Number.isFinite(a.lat)&&Number.isFinite(a.lon))
+ const feedCandidates=feedFresh?jetTraffic.live.slice():[];
+ const known=new Set(feedCandidates.map(a=>a.id));
+ for(const track of local){
+  if(!known.has(track.id)&&track.lastRadarAircraft){
+   feedCandidates.push({...track.lastRadarAircraft,id:track.id,localLanding:true});
+  }
+ }
+ const prioritized=feedCandidates.filter(a=>a.id&&Number.isFinite(a.lat)&&Number.isFinite(a.lon))
   .filter(a=>!jetTraffic.stableTracks.get(a.id)?.localLanding||
     !jetTrafficSimulatedLandingPosition(a,now)?.localLandingDone)
-  .filter(a=>a.km<=30&&(a.onGround||(a.altFt!=null&&a.altFt<9000)))
+  .filter(a=>jetTraffic.stableTracks.get(a.id)?.localLanding||
+   (feedFresh&&a.km<=30&&(a.onGround||(a.altFt!=null&&a.altFt<9000))))
   .sort((a,b)=>rank(a)-rank(b)||a.km-b.km).slice(0,capacity);
  const visible=new Set();
  const trafficAudio=[]; // only matched contacts become audio emitters
@@ -7576,6 +7633,16 @@ function jetTrafficDrawLiveContacts(dt){
   // 3D camera's far range rather than arbitrarily removing runway traffic.
   if(!Number.isFinite(target.x)||!Number.isFinite(target.y)||!Number.isFinite(target.z))continue;
   const camDist=Math.hypot(target.x-ui.position.x,target.y-ui.position.y,target.z-ui.position.z);
+  // Audio is spatial and independent of camera visibility and radar polling.
+  // A visible approach continues to roar even while the map/ND is open.
+  const listener=E.plane||ui.position;
+  const range=Math.hypot(target.x-listener.x,target.y-(listener.y||0),target.z-listener.z);
+  if(range<4400&&(!a.onGround||target.localLanding||a.speedKt>=5)){
+   trafficAudio.push({id:a.id,distance:range,
+    speedKt:target.speedKt??a.speedKt,onGround:target.stage==='SIMULATED ROLLOUT'||a.onGround,
+    localLanding:!!target.localLanding,stage:target.stage,phase:a.phase,
+    pan:Math.max(-1,Math.min(1,(target.x-ui.position.x)/Math.max(100,range*.72)))});
+  }
   if(camDist>Math.min(ui.far||14000,18000)-90)continue;
   // A model outside the actual camera frustum cannot be seen. Skip all its
   // wing, window and engine draw calls instead of slowing approach frames.
@@ -7595,26 +7662,13 @@ function jetTrafficDrawLiveContacts(dt){
    entry={group,x:target.x,y:target.y,z:target.z,yaw:target.yaw,vx:0,vz:0};jetTraffic.liveModels.set(a.id,entry);
   }
   if(target.localLanding){
-   // Local runway motion is deterministic for every frame. Avoid a second
-   // dead-reckoning + easing integrator that could drift past the threshold.
-   const k=1-Math.exp(-Math.min(.06,Math.max(.001,dt||.016))*7);
-   entry.x+=(target.x-entry.x)*k;entry.z+=(target.z-entry.z)*k;
-   entry.y+=(target.y-entry.y)*k;
-   // Heading is locked to forward runway motion at handover. An old
-   // reciprocal ADS-B heading must never leave the nose facing backwards.
-   entry.yaw=target.yaw;
-   entry.vx=0;entry.vz=0;
+   // Every frame uses a deterministic local runway trajectory, not a new
+   // position from radar or a delayed interpolation that lags touchdown.
+   entry.x=target.x;entry.z=target.z;entry.y=target.y;
+   entry.yaw=target.yaw;entry.vx=0;entry.vz=0;
   }else jetTrafficSmoothMotion(entry,target,a,dt,now);
   entry.group.position.set(entry.x,entry.y,entry.z);entry.group.rotation.y=entry.yaw;
   entry.group.userData.callsign=jetTrafficCallsign(a);
-  // Nearby observed aircraft are audible in the existing Sound mixer. Audio
-  // is attached to the same ICAO24 IDs and same smoothed 3D positions as radar.
-  const listener=E.plane||ui.position;
-  const range=Math.hypot(entry.x-listener.x,entry.y-(listener.y||0),entry.z-listener.z);
-  if(range<2200&&(!a.onGround||a.speedKt>=5)){
-   trafficAudio.push({id:a.id,distance:range,speedKt:a.speedKt,onGround:a.onGround,
-    phase:a.phase,pan:Math.max(-1,Math.min(1,(entry.x-ui.position.x)/Math.max(90,range*.72)))});
-  }
   entry.group.userData.onGround=a.onGround;
   entry.group.userData.reportedSpeedKt=a.speedKt;
   entry.group.userData.visualRunway=target.runway;
@@ -7637,7 +7691,7 @@ function jetTrafficDrawLiveContacts(dt){
   if(badge)badge.style.display='none';
   if(tag){
    tag.textContent=jetTrafficCallsign(a);
-   const landingNow=!a.onGround&&(a.phase==='DESCENDING'||a.verticalRate<-150||
+   const landingNow=!!target.localLanding||!a.onGround&&(a.phase==='DESCENDING'||a.verticalRate<-150||
     /APPROACH|FINAL|ROLLOUT/.test(String(target.stage||''))||a.id===jetTraffic.arrivalId);
    const desktopLanding=landingNow&&window.innerWidth>=700;
    tag.style.opacity=desktopLanding?'1':isTracked?'.85':'.70';
@@ -7672,6 +7726,7 @@ function jetTrafficDrawLiveContacts(dt){
  // Immediately replace audio targets, never replaying stale/unmatched flights.
  window.__jcTrafficSoundContacts=trafficAudio.sort((a,b)=>a.distance-b.distance).slice(0,3);
 }
+
 
 // Jetline Captain mobile full scenery / airport surface map.
 // The chart and 3D tracked aircraft share positions from jetTrafficPosition.
@@ -9534,7 +9589,7 @@ function jetTrafficSkyTick(dt){
  jcChangiSync3DGates();jcChangiAnimateFleet(Date.now());
  jcGateViewUpdate();
  // Aircraft are matched to THIS airport and this phase; no invented random fly-bys.
- if(['taxi','takeoff','approach','taxiIn'].includes(E.phase)){
+ if(['taxi','takeoff','approach','rollout','taxiIn'].includes(E.phase)){
   jetTrafficDrawLiveContacts(dt);
  }else if(jetTraffic.liveModels.size){window.__jcTrafficSoundContacts=[];jetTrafficClearModels();}
  jcGroundProximityTick();
@@ -11452,14 +11507,18 @@ window.__holdHud={update};
     const v=trafficVoice(c,contact.id);
     v.last=Date.now();
     const range=Math.max(0,Number(contact.distance)||0);
-    // 3-D attenuation: loud beside a runway, gentle on a distant final.
-    const falloff=1/(1+Math.pow(range/180,1.65));
-    const thrust=contact.onGround?Math.min(1,Math.max(.22,(contact.speedKt||0)/85)):
-     contact.phase==='CLIMBING'?.94:contact.phase==='DESCENDING'?.62:.72;
-    v.amp.gain.setTargetAtTime(Math.min(.34,.36*falloff*thrust),now,.24);
-    v.tone.frequency.setTargetAtTime(95+135*thrust,now,.20);
-    v.low.frequency.setTargetAtTime(510+950*thrust,now,.24);
-    v.wash.frequency.setTargetAtTime(660+1400*thrust,now,.25);
+    // Approaching aircraft roar audibly before passing the runway camera.
+    // Sound fades naturally with listener distance; the gain is bounded.
+    const falloff=1/(1+Math.pow(range/460,1.55));
+    const landing=!!contact.localLanding;
+    const rolling=landing&&contact.stage==='SIMULATED ROLLOUT';
+    const thrust=rolling?.67:landing?.98:
+     contact.onGround?Math.min(1,Math.max(.24,(contact.speedKt||0)/95)):
+     contact.phase==='CLIMBING'?.95:contact.phase==='DESCENDING'?.86:.78;
+    v.amp.gain.setTargetAtTime(Math.min(.52,.62*falloff*thrust),now,.26);
+    v.tone.frequency.setTargetAtTime(105+164*thrust,now,.24);
+    v.low.frequency.setTargetAtTime(580+1050*thrust,now,.27);
+    v.wash.frequency.setTargetAtTime(710+1550*thrust,now,.27);
     if(v.pan)v.pan.pan.setTargetAtTime(clamp(Number(contact.pan)||0,-1,1)*.7,now,.25);
    }
    for(const [id,v] of api.trafficVoices){
@@ -11513,7 +11572,7 @@ window.__holdHud={update};
    const powered=active&&enginesOn;
    const n1=clamp((Number(info.n1)||22)/100,0,1);
    const engineLevel=prefs.engine&&powered?(.027+.115*n1)*prefs.engineVolume/100:0;
-   api.trafficBus.gain.setTargetAtTime(prefs.engine&&active?(.78*prefs.engineVolume/100):0,now,.25);
+   api.trafficBus.gain.setTargetAtTime(prefs.engine&&active?(.90*prefs.engineVolume/100):0,now,.25);
    trafficSounds(c,now,prefs.engine&&active&&!mute&&!hidden);
    api.engineBus.gain.setTargetAtTime(engineLevel,now,.24);
    api.engineFilter.frequency.setTargetAtTime(420+1900*n1,now,.18);
@@ -11522,7 +11581,7 @@ window.__holdHud={update};
    $('jc-audio-mode').textContent=api.currentMode;
    const hint=panel.querySelector('#jc-audio-info');
    if(mute)hint.textContent='Game is muted. Unmute it to hear the soundtrack and engine.';
-   else hint.textContent='Powered cockpit engines and nearby radar-tracked aircraft are audible. Jet sound gets louder as aircraft approach, then fades as they depart. Tap to unlock sound if your browser is silent.';
+   else hint.textContent='Nearby landing jets use smooth local 3D movement after final-approach capture. Their engine roar grows as they approach and fades on rollout. Tap to unlock sound if your browser is silent.';
  }
  setInterval(update,350);
  document.addEventListener('visibilitychange',()=>{if(!api.ctx)return;if(document.hidden)api.ctx.suspend().catch(()=>{});else if(api.unlocked)api.ctx.resume().catch(()=>{})});
@@ -13573,7 +13632,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CURRENT DEPARTURES v30 · STABLE GATE SCENERY';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • SMOOTH LANDING v31 · STABLE GATE SCENERY';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -14366,7 +14425,7 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CURRENT DEPARTURES v30</div>
+<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • SMOOTH LANDING v31</div>
 <style id="jc-clear-nd-gate-controls-v23">
 /* No floating buttons may cover the navigation display at WSSS. */
 #jc-gate-camera-panel{display:none!important;pointer-events:none!important}
@@ -14389,5 +14448,7 @@ html.jc-hosted-game [data-jc-ground-act="gates"]{display:none!important}
   };
 })();
 </script>
+<div id="jc-smooth-landing-v31" style="position:fixed;left:8px;bottom:34px;z-index:12;
+ pointer-events:none;font:700 9px system-ui;color:#a6f2ff;opacity:.8">JETLINE • SMOOTH LANDING v31</div>
 </body>
 </html>
