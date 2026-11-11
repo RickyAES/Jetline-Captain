@@ -13696,7 +13696,7 @@ body.jc-ground-clear #ui #btnSave,
 })();
 </script>
 <style id="jc-rollout-v2-confirmation">
-#jc-build-version{position:fixed;right:8px;bottom:5px;z-index:43;
+#jc-build-version{position:fixed;right:8px;bottom:calc(5px + env(safe-area-inset-bottom, 0px));z-index:43;
  font:700 9px/1.2 system-ui,sans-serif;color:#b7f5e8;background:rgba(1,19,31,.65);
  border:1px solid #3c8893aa;border-radius:5px;padding:3px 5px;
  pointer-events:none;letter-spacing:.05em;max-width:48vw;text-align:right}
@@ -13712,7 +13712,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • NIGHT LIGHTS + THRUST AUDIO v32 · STABLE GATE SCENERY';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v32';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -14283,7 +14283,7 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
  render();
 })();
 </script>
-<div id="jc-gate-build-id" style="position:fixed;bottom:3px;left:6px;color:#aee9fa;font:700 9px system-ui;z-index:12;pointer-events:none">JETLINE • TAXI SIM v13</div><style id="jc-changi-ground-times-v12-style">
+<style id="jc-changi-ground-times-v12-style">
 #jc-ground-map-wrap{position:relative;width:100%;aspect-ratio:530/380}
 #jc-ground-map-wrap #jc-ground-map{width:100%;height:100%}
 #jc-ground-gates-overlay{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair;touch-action:manipulation}
@@ -14505,7 +14505,7 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v24" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • NIGHT LIGHTS + THRUST AUDIO v32</div>
+
 <style id="jc-clear-nd-gate-controls-v23">
 /* No floating buttons may cover the navigation display at WSSS. */
 #jc-gate-camera-panel{display:none!important;pointer-events:none!important}
@@ -14528,7 +14528,6 @@ html.jc-hosted-game [data-jc-ground-act="gates"]{display:none!important}
   };
 })();
 </script>
-<div id="jc-smooth-landing-v31" style="position:fixed;left:8px;bottom:34px;z-index:12;
- pointer-events:none;font:700 9px system-ui;color:#a6f2ff;opacity:.8">JETLINE • NIGHT LIGHTS + THRUST AUDIO v32</div>
+
 </body>
 </html>
