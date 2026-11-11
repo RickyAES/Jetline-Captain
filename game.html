@@ -5232,67 +5232,64 @@ function jetChangiBuildTaxiNetwork(addBox,group){
 // NOT a certified stand chart. Positions are compressed game-world geometry.
 const jcChangiGateRegistry=(()=>{
  const list=[];
- const add=(terminal,prefix,start,end,x,z0,dz,face)=>{
-  for(let n=start;n<=end;n++)list.push({
-   gate:prefix+n,terminal,x,z:z0+(n-start)*dz,face
-  });
+ const add=(terminal,prefix,first,last,x,zStart,spacing,face)=>{
+  for(let n=first;n<=last;n++)list.push({gate:prefix+n,terminal,x,
+   z:zStart+(n-first)*spacing,face});
  };
- // Changi terminal campus remapped to the user's reference terminal layout.
- // ALL FOUR passenger terminals are kept between RWY 02L/20R and RWY 02C/20C.
- // T3 occupies the western / north-west arm, T1 is north-east, T2 south,
- // and T4 is a compact eastern pier inside the same central campus.
- add('T3','A',1,8,-387,-2600,-32,'W');
- add('T3','A',9,21,-387,-2856,-29,'W');
- add('T3','B',1,10,-205,-2550,-31,'E');
- add('T1','C',1,26,-122,-2255,-21,'E');
- add('T1','D',30,49,-122,-1715,-24,'E');
- add('T2','F',30,60,-375,-1185,-22,'W');
- add('T2','E',1,28,-192,-1165,-23,'E');
- add('T4','G',1,21,-58,-1138,-24,'E');
+ // V21 reference: AirportGuide SIN T1/T2/T3 gate/concourse shapes.
+ // WEST (RWY 02L)                                     EAST (RWY 02C)
+ // T3: A southwest and B west-central, T1: C north and D northeast,
+ // T2: F southwest and E southeast. Separate T4 retains its own G pier.
+ add('T3','A',1,21,-397,-2460,-31,'W');
+ add('T3','B',1,10,-202,-2380,-31,'E');
+ add('T1','C',1,26,-111,-2700,-22,'E');
+ add('T1','D',30,49,-76,-2090,-27,'E');
+ add('T2','E',1,28,-107,-1460,-23,'E');
+ add('T2','F',30,60,-393,-1450,-23,'W');
+ add('T4','G',1,21,-66,-620,-23,'E');
  return list;
 })();
-// Single terminal geometry registry reused by 3D buildings, collision footprints,
-// airport surface display and the passenger gate map.
+// The SAME coordinate source feeds 3D buildings, jet bridges, labelled gate
+// stands, collision footprints, the airport surface map and GATE MAP.
 const jcChangiCampusV18={
  halls:[
-  {label:'TERMINAL 3',terminal:'T3',x:-266,z:-2680,w:126,d:240},
-  {label:'TERMINAL 1',terminal:'T1',x:-196,z:-2128,w:92,d:216},
-  {label:'TERMINAL 2',terminal:'T2',x:-268,z:-1280,w:108,d:235},
-  {label:'TERMINAL 4',terminal:'T4',x:-115,z:-1380,w:72,d:330}
+  {label:'TERMINAL 3',terminal:'T3',x:-272,z:-2490,w:112,d:230},
+  {label:'TERMINAL 1',terminal:'T1',x:-204,z:-2360,w:102,d:265},
+  {label:'TERMINAL 2',terminal:'T2',x:-266,z:-1660,w:120,d:245},
+  {label:'TERMINAL 4',terminal:'T4',x:-148,z:-860,w:75,d:235}
  ],
  piers:[
-  {label:'A · T3',terminal:'T3',x:-350,z:-2940,w:34,d:770},
-  {label:'B · T3',terminal:'T3',x:-232,z:-2700,w:34,d:430},
-  {label:'C · T1',terminal:'T1',x:-159,z:-2520,w:30,d:595},
-  {label:'D · T1',terminal:'T1',x:-159,z:-1985,w:30,d:510},
-  {label:'F · T2',terminal:'T2',x:-340,z:-1185,w:32,d:760},
-  {label:'E · T2',terminal:'T2',x:-227,z:-1185,w:32,d:690},
-  {label:'G · T4',terminal:'T4',x:-84,z:-1380,w:28,d:540}
+  {label:'A · T3',terminal:'T3',x:-357,z:-2770,w:34,d:680},
+  {label:'B · T3',terminal:'T3',x:-227,z:-2520,w:34,d:355},
+  {label:'C · T1',terminal:'T1',x:-149,z:-2970,w:34,d:650},
+  {label:'D · T1',terminal:'T1',x:-113,z:-2360,w:34,d:580},
+  {label:'E · T2',terminal:'T2',x:-157,z:-1770,w:34,d:680},
+  {label:'F · T2',terminal:'T2',x:-357,z:-1795,w:34,d:755},
+  {label:'G · T4',terminal:'T4',x:-100,z:-850,w:32,d:530}
  ],
  connectors:[
-  {label:'T3 A CONCOURSE',x:-326,z:-2680,w:42,d:35},
-  {label:'T3 B CONCOURSE',x:-243,z:-2552,w:28,d:34},
-  {label:'T1 C/D CONCOURSE',x:-176,z:-2128,w:34,d:76},
-  {label:'T2 F CONCOURSE',x:-318,z:-1280,w:46,d:36},
-  {label:'T2 E CONCOURSE',x:-214,z:-1280,w:40,d:34},
-  {label:'T4 G CONCOURSE',x:-101,z:-1380,w:28,d:58},
-  {label:'T3 TO JEWEL',x:-246,z:-2415,w:34,d:250},
-  {label:'JEWEL TO T2',x:-246,z:-1738,w:34,d:506}
+  {label:'T3 A LINK',terminal:'T3',x:-319,z:-2525,w:90,d:39},
+  {label:'T3 B LINK',terminal:'T3',x:-248,z:-2445,w:35,d:47},
+  {label:'T3–T1',terminal:'T1',x:-249,z:-2395,w:35,d:150},
+  {label:'T1 C LINK',terminal:'T1',x:-182,z:-2592,w:37,d:265},
+  {label:'T1 D LINK',terminal:'T1',x:-159,z:-2300,w:73,d:40},
+  {label:'T1–T2 CENTRAL SPINE',terminal:'T1',x:-244,z:-2010,w:32,d:540},
+  {label:'T2 F/E LINK',terminal:'T2',x:-257,z:-1690,w:235,d:40},
+  {label:'T4 G LINK',terminal:'T4',x:-116,z:-865,w:45,d:40}
  ],
- jewel:{label:'JEWEL · T1',x:-214,z:-2128,r:28},
- // Short green pedestrian connector beside T1 / Jewel in the user reference.
- greenLink:{label:'JEWEL–T1 LINK',x:-187,z:-2128,w:44,d:11},
- aprons:[
-  {x:-226,z:-2050,w:438,d:2320},
-  {x:-95,z:-1380,w:108,d:720}
- ]
+ jewel:{label:'JEWEL · T1',x:-265,z:-2286,r:28},
+ greenLink:{label:'JEWEL–T1 LINK',x:-235,z:-2286,w:45,d:13},
+ aprons:[{x:-250,z:-2230,w:435,d:2220},
+  {x:-114,z:-855,w:175,d:660}]
 };
 window.__jcChangiCampusV18=jcChangiCampusV18;
-window.__jcChangiLayoutStatus=()=>({build:'v19',gateCount:jcChangiGateRegistry.length,
- terminals:Object.fromEntries(['T1','T2','T3','T4'].map(t=>[t,jcChangiGateRegistry.filter(g=>g.terminal===t).length])),
- jewel:jcChangiCampusV18.jewel,mainCampusBetweenRunways:true,
- layout:'All four terminals between 02L and 02C; Jewel beside T1',
- caution:'Schematic game scenery, not operational airport geometry'});
+window.__jcChangiLayoutStatus=()=>({build:'v21',gateCount:jcChangiGateRegistry.length,
+ terminals:Object.fromEntries(['T1','T2','T3','T4'].map(t=>
+  [t,jcChangiGateRegistry.filter(g=>g.terminal===t).length])),
+ jewel:jcChangiCampusV18.jewel,
+ reference:'AirportGuide T1–T3 concourse overview supplied by user',
+ layout:'A/B Terminal 3 west · C/D Terminal 1 northeast · E/F Terminal 2 south · G Terminal 4 separate',
+ source:'Conceptual game stands, NOT published aircraft stand coordinates'});
 const jcChangiGateLookup=new Map(jcChangiGateRegistry.map(r=>[r.gate,r]));
 window.__jcChangiGateRegistry=jcChangiGateRegistry;
 // The client may update this snapshot after requesting a separately authorized
@@ -5499,11 +5496,9 @@ const jcGateV17Style={
  sign:'#14284b',stroke:'#f0d86f',text:'#ffffff'
 };
 function jcGatePierWall(stand){
- // Building faces are consistent with the v19 terminal finger registry.
- const prefix=stand.gate[0];
- if(prefix==='G')return -98;
- return {A:-370,B:-214,C:-148,D:-148,E:-209,F:-357}[prefix]??
-  (stand.x+(stand.face==='W'?18:-18));
+ const pier=jcChangiCampusV18.piers.find(p=>p.label.charAt(0)===stand.gate.charAt(0));
+ if(!pier)return stand.x+(stand.face==='W'?16:-16);
+ return pier.x+(stand.face==='W'?-pier.w/2:pier.w/2);
 }
 function jcGateTexture(gate){
  const canvas=document.createElement('canvas');canvas.width=192;canvas.height=88;
@@ -5748,7 +5743,7 @@ function jetChangiBuildTerminals(addBox,putSphere,group){
  for(const hall of cfg.halls)for(const offset of [-1,1])
   addBox(hall.x+offset*(hall.w/2+12),hall.z,2,2,1.8,3.3,lamps);
  jcChangiBuildStandLayer(addBox,group);
- group.userData.jcChangiTerminals={version:19,components:['T1','T2','T3','T4','JEWEL'],
+ group.userData.jcChangiTerminals={version:21,components:['T1','T2','T3','T4','JEWEL'],
   source:'Reference-matched Changi conceptual terminal and gate layout; all 4 terminals between 02L and 02C; NOT surveyed'};
 }
 
@@ -8403,6 +8398,7 @@ function jcGroundHUDEnsure(){
  <button type="button" data-jc-ground-act="lights">LIGHTS</button>
  <button type="button" data-jc-ground-act="weather">WX / ATC</button>
  <button type="button" data-jc-ground-act="emergency">EMERGENCY</button>
+ <button type="button" data-jc-ground-act="gates" aria-label="Show Changi flight and gate data">✈ CHANGI GATES</button>
  </div>
  <div class="jc-rollout-controls" id="jc-rollout-controls" hidden>
   <div class="jc-rollout-indicator" id="jc-rollout-indicator">SPOILERS · DEPLOYED</div>
@@ -8433,6 +8429,7 @@ function jcGroundHUDEnsure(){
   else if(action==='lights')document.getElementById('jc-night-guide-btn')?.click();
   else if(action==='weather')document.querySelector('#jc-weather-atc .jcwx-mini')?.click();
   else if(action==='emergency')document.querySelector('#jc-emergency .jce-emergency')?.click();
+  else if(action==='gates')document.getElementById('jc-gates-open')?.click();
   tools.hidden=true;toolsButton.setAttribute('aria-expanded','false');
  });
  dock.querySelector('#jc-rollout-reverse').addEventListener('click',e=>{
@@ -9060,11 +9057,14 @@ function jcTerminalMapDraw(){
  for(let i=0;i<25;i++){ctx.strokeStyle='#1b3c4d';ctx.lineWidth=1;const q=i*40;ctx.beginPath();ctx.moveTo(q,0);ctx.lineTo(q,H);ctx.stroke();ctx.beginPath();ctx.moveTo(0,q);ctx.lineTo(W,q);ctx.stroke();}
  const hubs=Object.fromEntries(jcChangiCampusV18.halls.map(h=>[h.terminal,[h.x,h.z]]));
  const hub=hubs[terminal],start=at(...hub);
- ctx.lineWidth=38;ctx.strokeStyle='#4f778c';ctx.lineCap='round';ctx.lineJoin='round';
+ ctx.lineWidth=32;ctx.strokeStyle='#567b8a';ctx.lineCap='round';ctx.lineJoin='round';
  for(const pfx of [...new Set(gates.map(g=>g.gate[0]))]){
   const group=gates.filter(g=>g.gate.startsWith(pfx));
   const mid=at(group[0].x,group[0].z),end=at(group[group.length-1].x,group[group.length-1].z);
   ctx.beginPath();ctx.moveTo(...start);ctx.lineTo(...mid);ctx.lineTo(...end);ctx.stroke();
+  // A subtle concourse reference code, matching the supplied layout map.
+  ctx.fillStyle='#d6edfb';ctx.font='bold 15px system-ui';ctx.textAlign='center';
+  ctx.fillText('PIER '+pfx,mid[0],mid[1]-16);
  }
  if(terminal==='T1'){
   const j=jcChangiCampusV18.jewel;
@@ -9124,6 +9124,7 @@ function jcGateViewControls(){
  root.setAttribute('data-ui','true');root.innerHTML=`
   <button type="button" id="jc-gate-camera-toggle" data-ui="true" aria-label="View parked aircraft at Changi airport terminal gates">✈ GATE VIEW</button>
   <button type="button" id="jc-gate-map-open" data-ui="true" aria-label="View Changi terminal gate map">⌗ GATE MAP</button>
+  <button type="button" id="jc-gate-camera-data-toggle" data-ui="true" aria-label="Open Changi gate flight information">✈ GATES</button>
   <div id="jc-gate-camera-toolbar" data-ui="true" hidden>
    <span id="jc-gate-camera-label">SIMULATED AIRCRAFT</span>
    <div><button type="button" id="jc-gate-camera-next" data-ui="true">NEXT GATE ›</button>
@@ -9147,6 +9148,7 @@ function jcGateViewControls(){
  root.addEventListener('pointerdown',e=>e.stopPropagation());
  root.addEventListener('click',e=>e.stopPropagation());
  root.querySelector('#jc-gate-map-open').addEventListener('click',()=>jcTerminalMapOpen());
+ root.querySelector('#jc-gate-camera-data-toggle').addEventListener('click',()=>document.getElementById('jc-gates-open')?.click());
  root.querySelector('#jc-gate-camera-toggle').addEventListener('click',()=>{
   const list=jcGateViewItems();
   if(!list.length){jcGateView.enabled=false;return;}
@@ -13264,7 +13266,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI TERMINALS v19 · ALL GATES + JEWEL';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE • CHANGI GATE LAYOUT v21 · CLEAR FCU';
   b.title='ND weather storms and lightning • seat belt ECAM • 10 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -13300,6 +13302,15 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-close{
 </style>
 <script id="jc-nd-wxr-v4-build">window.__JC_ND_WXR_VERSION='4.0 - Storm WX + lightning / clear flight plan';</script>
 
+<style id="jc-gate-controls-clear-v20">
+/* No floating airport button over Airbus FCU / EFIS controls, at any width.
+   The original #jc-gates-open stays in the DOM for existing handlers.
+   Use existing TOOLS (ground) and GATE VIEW (other visible Changi phases). */
+#jc-gates-open{display:none!important;pointer-events:none!important}
+#jc-gate-camera-data-toggle{max-width:100%;white-space:nowrap}
+body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
+@media(max-width:600px){#jc-gate-camera-data-toggle{font-size:10px!important;padding:6px!important}}
+</style>
 <style id="jc-changi-gates-v6-css">
 #jc-gates-open{position:fixed;top:10px;right:12px;z-index:64;padding:9px 13px;border:2px solid #55dcf5;border-radius:12px;background:#092542;color:#ddfaff;font:800 13px system-ui,sans-serif;box-shadow:0 2px 12px #0008;cursor:pointer}
 #jc-gates-panel{display:none;position:fixed;z-index:125;top:clamp(55px,11vh,90px);right:12px;width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 105px);overflow:auto;padding:15px;box-sizing:border-box;border:1px solid #69dff3;border-radius:14px;background:#071827f5;color:#e9faff;box-shadow:0 6px 32px #000b;font:13px/1.4 system-ui,sans-serif}
@@ -14004,6 +14015,6 @@ render();
 })();
 </script>
 
-<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI TERMINALS v19 · 4 TERMINALS BETWEEN 02L/02C</div>
+<div id="jc-gate-build-v17" style="position:fixed;left:6px;bottom:16px;z-index:12;pointer-events:none;font:700 9px system-ui;color:#a9e5fb;opacity:.85">JETLINE • CHANGI GATES DOCK v20 · NO FCU OVERLAP</div>
 </body>
 </html>
