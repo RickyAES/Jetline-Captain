@@ -5830,6 +5830,27 @@ const jcLiverySpecs={
  DEFAULT:{body:0xf7f8f9,tail:0x365b8f,stripe:0x365b8f,stripe2:0xe3a74e,engine:0xbfd0d8,logo:'AIR',logoColor:0xffffff}
 };
 const jcLiveryCache={materials:new Map(),textures:new Map()};
+const jcAirlineTitles={SQ:'SINGAPORE AIRLINES',TR:'Scoot',CX:'CATHAY PACIFIC',AK:'airasia',MH:'MALAYSIA AIRLINES',EK:'Emirates',QR:'QATAR',EY:'ETIHAD',TG:'THAI',JL:'JAPAN AIRLINES',NH:'ANA',BR:'EVA AIR',CI:'CHINA AIRLINES',MU:'CHINA EASTERN',CZ:'CHINA SOUTHERN',CA:'AIR CHINA',GA:'GARUDA INDONESIA',PR:'PHILIPPINE AIRLINES',VN:'VIETNAM AIRLINES',BI:'ROYAL BRUNEI',AI:'AIR INDIA',TK:'TURKISH AIRLINES',BA:'BRITISH AIRWAYS',AF:'AIR FRANCE',LH:'LUFTHANSA',KL:'KLM',LX:'SWISS',UA:'UNITED',DL:'DELTA',AA:'AMERICAN',"3K":'JETSTAR',"6E":'IndiGo',DEFAULT:'AIRLINE'};
+function jcRoundedRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function jcCabinWindowsTexture(){
+ const key='cabwindows';if(jcLiveryCache.textures.has(key))return jcLiveryCache.textures.get(key);
+ const c=document.createElement('canvas');c.width=1024;c.height=96;const ctx=c.getContext('2d');if(!ctx)return null;
+ ctx.clearRect(0,0,c.width,c.height);
+ for(let i=0;i<17;i++){
+  const x=44+i*54;jcRoundedRect(ctx,x,24,28,18,5);ctx.fillStyle='rgba(13,28,46,.92)';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='rgba(170,187,198,.55)';ctx.stroke();
+ }
+ const texture=new li(c);texture.colorSpace='srgb';texture.anisotropy=2;jcLiveryCache.textures.set(key,texture);return texture;
+}
+function jcTitleTexture(code,spec){
+ const key='title|'+code;if(jcLiveryCache.textures.has(key))return jcLiveryCache.textures.get(key);
+ const c=document.createElement('canvas');c.width=1024;c.height=160;const ctx=c.getContext('2d');if(!ctx)return null;
+ ctx.clearRect(0,0,c.width,c.height);
+ const title=jcAirlineTitles[code]||jcAirlineTitles.DEFAULT;
+ ctx.fillStyle='#'+(spec.stripe||0x2b4d7f).toString(16).padStart(6,'0');
+ ctx.font=(title.length>16?'700 66px Arial':'700 78px Arial')+',sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ ctx.fillText(title,512,80,960);
+ const texture=new li(c);texture.colorSpace='srgb';texture.anisotropy=2;jcLiveryCache.textures.set(key,texture);return texture;
+}
 function jcCarrierCode(record){
  const read=v=>String(v||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim();
  const byIata=read(record?.airlineIata||'');if(byIata&&jcLiverySpecs[byIata])return byIata;
@@ -5875,7 +5896,12 @@ function jcLivery(record){
   stripe:mk(spec.stripe||0x365b8f),
   stripe2:mk(spec.stripe2||spec.stripe||0xe3a74e),
   engine:mk(spec.engine||0xbfd0d8,{metalness:.24,roughness:.48}),
+  belly:mk(spec.body||0xf0f2f4,{emissive:0x171c22,emissiveIntensity:.04}),
+  gear:mk(0xa7afb6,{metalness:.35,roughness:.52}),
+  wheel:mk(0x14181d,{metalness:.06,roughness:.88}),
   window:new be({color:0x12263d}),
+  cabinWindows:new be({map:jcCabinWindowsTexture(),transparent:true,side:2,depthWrite:false,toneMapped:false}),
+  titles:new be({map:jcTitleTexture(code,spec),transparent:true,side:2,depthWrite:false,toneMapped:false}),
   logo:new be({map:jcTailLogoTexture(code,spec),transparent:true,side:2,depthWrite:false,toneMapped:false})
  };
  jcLiveryCache.materials.set(code,out);return out;
@@ -5891,23 +5917,71 @@ const shapes={body:new Ae(6.2*factorX,3.8,34*factorZ),
  // swept/tapered wings, twin underwing engines and triangular vertical fin.
  const parkedShape={
   fuselage:new an(3.0,3.0,33*factorX,16,1),
+  belly:new an(2.62,2.34,27*factorX,16,1),
   tailCone:new an(1.15,2.95,8*factorX,12,1),
   nose:new Nn(1,18,12),
   wingInner:new Ae(11*factorX,.55,11*factorZ),
   wingOuter:new Ae(5.6*factorX,.48,9*factorZ),
+  winglet:new Ae(.52*factorX,3.2,1.3*factorZ),
+  pylon:new Ae(.75*factorX,1.1,1.55*factorZ),
   tailplane:new Ae(4.9*factorX,.48,14*factorZ),
   fin:new an(0.05,4.4,8.8,3),
   engine:new an(1.5,1.5,8*factorX,12),
   inlet:new an(1.44,1.44,.28*factorX,12),
+  exhaust:new an(1.18,1.18,.28*factorX,12),
   gear:new Ae(.9*factorX,3.0,.9*factorZ),
+  wheel:new an(.42,.42,.55,12),
   stripe:new Ae(23*factorX,.4,.16*factorZ),
   cockpit:new Ae(3.8*factorX,1.2,5.3*factorZ),
-  door:new Ae(2.7*factorX,2.7,.25*factorZ)
+  door:new Ae(2.7*factorX,2.7,.25*factorZ),
+  beacon:new Nn(.22,8,8)
  };
  parkedShape.fuselage.rotateZ(Math.PI/2);
+ parkedShape.belly.rotateZ(Math.PI/2);
  parkedShape.tailCone.rotateZ(Math.PI/2);
  parkedShape.engine.rotateZ(Math.PI/2);
  parkedShape.inlet.rotateZ(Math.PI/2);
+ parkedShape.exhaust.rotateZ(Math.PI/2);
+ parkedShape.wheel.rotateX(Math.PI/2);
+ function jcAssembleAirliner(add,livery,side,labelBase=''){
+  add(0,0,parkedShape.fuselage,livery.body,5.65,'FUSELAGE');
+  add(.55*side,0,parkedShape.belly,livery.belly,4.72,'BELLY');
+  const noseMesh=add(-side*16.4,0,parkedShape.nose,livery.body,5.65,'ROUND_NOSE');
+  noseMesh.scale.set(5.2*factorX,2.85,3.12*factorZ);
+  add(side*15.4,0,parkedShape.tailCone,livery.body,5.65,'TAIL_CONE');
+  for(const wingSide of [-1,1]){
+   add(side*1.0,wingSide*7.3,parkedShape.wingInner,livery.body,5.36,'INNER_WING');
+   add(side*5.5,wingSide*16.0,parkedShape.wingOuter,livery.body,5.33,'OUTER_WING');
+   add(side*7.8,wingSide*20.3,parkedShape.winglet,livery.tail,6.8,'WINGLET');
+   add(side*4.2,wingSide*8.7,parkedShape.pylon,livery.gear,4.65,'ENGINE_PYLON');
+   add(side*3.4,wingSide*9.8,parkedShape.engine,livery.engine,3.8,'NACELLE');
+   add(-side*.7,wingSide*9.8,parkedShape.inlet,livery.window,3.8,'ENGINE_INLET');
+   add(side*7.15,wingSide*9.8,parkedShape.exhaust,livery.window,3.8,'ENGINE_EXHAUST');
+   add(-side*1.05,wingSide*3.0,parkedShape.stripe,livery.stripe,6.06,'FUSELAGE_CHEATLINE');
+   const accent=add(-side*1.12,wingSide*2.48,parkedShape.stripe,livery.stripe2,6.62,'FUSELAGE_ACCENT');
+   accent.scale.set(1,.56,1);
+  }
+  add(side*15.3,0,parkedShape.tailplane,livery.body,8.55,'TAILPLANES');
+  add(side*15.0,0,parkedShape.fin,livery.tail,11.1,'TRIANGULAR_FIN');
+  const tailLogo=add(side*15.16,0,new Ge(6.3,5.8),livery.logo,10.95,'TAIL_LOGO');
+  tailLogo.rotation.y=rot+(side<0?Math.PI:0);tailLogo.position.x+=side*.34;
+  add(-side*15.0,0,parkedShape.cockpit,livery.window,6.95,'COCKPIT_WINDOWS');
+  for(const wingSide of [-1,1]){
+   const win=add(-side*1.2,wingSide*3.12,new Ge(24.5*factorX,.82),livery.cabinWindows,6.34,'CABIN_WINDOWS');
+   win.rotation.y=rot+(wingSide<0?Math.PI:0);win.position.z+=wingSide*.06;
+   const titles=add(-side*1.1,wingSide*2.22,new Ge(20.2*factorX,1.3),livery.titles,5.72,'FUSELAGE_TITLE');
+   titles.rotation.y=rot+(wingSide<0?Math.PI:0);titles.position.z+=wingSide*.07;
+   add(-side*10.8,wingSide*3.1,parkedShape.door,livery.window,6.4,'PASSENGER_DOOR_FRONT');
+   add(side*11.8,wingSide*3.1,parkedShape.door,livery.window,6.3,'PASSENGER_DOOR_REAR');
+  }
+  add(-side*10.6,0,parkedShape.gear,livery.gear,1.95,'NOSE_GEAR_STRUT');
+  add(side*3.0,-4.5,parkedShape.gear,livery.gear,1.95,'MAIN_GEAR_L_STRUT');
+  add(side*3.0,4.5,parkedShape.gear,livery.gear,1.95,'MAIN_GEAR_R_STRUT');
+  add(-side*10.6,-.72,parkedShape.wheel,livery.wheel,.48,'NOSE_WHEEL_L');
+  add(-side*10.6,.72,parkedShape.wheel,livery.wheel,.48,'NOSE_WHEEL_R');
+  for(const dz of [-5.0,-3.9,3.9,5.0])add(side*3.0,dz,parkedShape.wheel,livery.wheel,.54,'MAIN_WHEEL');
+  add(-side*3.5,0,parkedShape.beacon,new Xt({color:0xc12b2f,emissive:0xff3322,emissiveIntensity:.55}),8.92,'TOP_BEACON');
+ }
 const make=(parent,at,dx,dz,geom,mat,y)=>{
  const mesh=new Tt(geom,mat),p=worldAt(at.x+dx,at.z+dz);
  mesh.position.set(p[0],y,p[1]);mesh.rotation.y=rot;parent.add(mesh);
@@ -5930,32 +6004,7 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
   if(tag)mesh.name=tag+'_'+stand.gate;
   mesh.frustumCulled=false;item.add(mesh);return mesh;
  };
-  add(0,0,parkedShape.fuselage,livery.body,5.65,'FUSELAGE');
-  // Spherical front cap and tapered tail keep the aircraft recognizable
-  // from both the taxiway cockpit and elevated spectator camera.
-  const noseMesh=add(-side*16.4,0,parkedShape.nose,livery.body,5.65,'ROUND_NOSE');
-  noseMesh.scale.set(5.2*factorX,2.85,3.12*factorZ);
-  add(side*15.4,0,parkedShape.tailCone,livery.body,5.65,'TAIL_CONE');
-  // Sweep the wings rearward as their span increases. The old full-width
-  // rectangular plate looked like a jetbridge, not a parked airliner.
-  for(const wingSide of [-1,1]){
-   add(side*1.0,wingSide*7.3,parkedShape.wingInner,livery.body,5.36,'INNER_WING');
-   add(side*5.5,wingSide*16.0,parkedShape.wingOuter,livery.body,5.33,'OUTER_WING');
-   add(side*3.4,wingSide*9.8,parkedShape.engine,livery.engine,3.8,'NACELLE');
-   add(-side*.7,wingSide*9.8,parkedShape.inlet,livery.window,3.8,'ENGINE_INLET');
-   add(-side*1.0,wingSide*3.0,parkedShape.stripe,livery.stripe,6.35,'FUSELAGE_LIVERY');
-   const thin=add(-side*1.1,wingSide*2.38,parkedShape.stripe,livery.stripe2,6.72,'FUSELAGE_LIVERY_2');
-   thin.scale.set(1,.56,1);
-  }
-  add(side*15.3,0,parkedShape.tailplane,livery.body,8.55,'TAILPLANES');
-  add(side*15.0,0,parkedShape.fin,livery.tail,11.1,'TRIANGULAR_FIN');
-  const tailLogo=add(side*15.16,0,new Ge(6.3,5.8),livery.logo,10.95,'TAIL_LOGO');
-  tailLogo.rotation.y=rot+(side<0?Math.PI:0);tailLogo.position.x+=side*.34;
-  add(-side*15.0,0,parkedShape.cockpit,livery.window,6.95,'COCKPIT_WINDOWS');
-  add(-side*10.8,-3.15*factorZ,parkedShape.door,livery.window,6.4,'PASSENGER_DOOR');
-  add(-side*10.6,0,parkedShape.gear,silver,1.7,'NOSE_GEAR');
-  add(side*3.0,-4.5,parkedShape.gear,silver,1.7,'MAIN_GEAR');
-  add(side*3.0,4.5,parkedShape.gear,silver,1.7,'MAIN_GEAR');
+ jcAssembleAirliner(add,livery,side,stand.gate);
  parent.add(item);
 };
  jcChangiSync3DGates();
@@ -5966,13 +6015,18 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
  jetTraffic.changiGroundFactory=(parent,loc,contact)=>{
   const item=new me();item.name='GROUND_'+contact.hex;
   item.userData={hex:contact.hex,callsign:contact.callsign||'',lat:contact.lat,lon:contact.lon,source:'observed ADS-B ground position',gate:null};
+  const base=worldAt(loc.x,loc.z);item.position.set(base[0],0,base[1]);
   const livery=jcLivery(contact);
-  make(item,loc,0,0,shapes.body,livery.body,4.3);
-  make(item,loc,0,1,shapes.wing,livery.engine,4.7);
-  make(item,loc,0,10,shapes.tail,livery.tail,6.4);
-  make(item,loc,0,2.8,shapes.markings,livery.stripe,5.18);
-  const logo=new Tt(new Ge(5.2,5.2),livery.logo),p=worldAt(loc.x,loc.z+10);
-  logo.position.set(p[0],6.4,p[1]);logo.rotation.y=rot;logo.frustumCulled=false;item.add(logo);
+  const side=/[NEWS]/.test(String(contact.headingCardinal||''))?-1:1;
+  const add=(dx,dz,geom,mat,y,tag)=>{
+   const mesh=new Tt(geom,mat),p=worldAt(loc.x+dx,loc.z+dz);
+   mesh.position.set(p[0]-base[0],y,p[1]-base[1]);
+   mesh.rotation.y=rot;
+   if(tag)mesh.name=tag+'_'+contact.hex;
+   mesh.frustumCulled=false;item.add(mesh);return mesh;
+  };
+  jcAssembleAirliner(add,livery,side,contact.hex);
+  item.scale.set(.74,.74,.74);
   parent.add(item);
  };
  jcChangiSync3DGround();
