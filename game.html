@@ -5792,6 +5792,94 @@ const airlinePalette=[0xe9a629,0x36aeb5,0xdf665e,0x5c7bc9,0x67ae77,0x9557aa]
   .map(color=>new Xt({color,roughness:.60,metalness:.06}));
 const silver=new Xt({color:0xb0c9d5,roughness:.52,metalness:.28});
 const windowMat=new be({color:0x11263c});
+const jcCarrierIcaoToIata={SIA:'SQ',TGW:'TR',CPA:'CX',AXM:'AK',MAS:'MH',QFA:'QF',UAE:'EK',QTR:'QR',ETD:'EY',THA:'TG',JAL:'JL',ANA:'NH',EVA:'BR',CAL:'CI',CES:'MU',CSN:'CZ',CCA:'CA',GIA:'GA',PAL:'PR',HVN:'VN',RBA:'BI',AIC:'AI',IGO:'6E',BAW:'BA',DLH:'LH',AFR:'AF',KLM:'KL',SWR:'LX',UAL:'UA',DAL:'DL',AAL:'AA',SWA:'WN',JBU:'B6',KAC:'KU',SVA:'SV',OAL:'WY',AMU:'NX',FDX:'FX',UPS:'5X',TOK:'TR'};
+const jcLiveryNameMap={'SINGAPORE AIRLINES':'SQ',SINGAPORE:'SQ',SCOOT:'TR','CATHAY PACIFIC':'CX',CATHAY:'CX','AIRASIA':'AK','MALAYSIA AIRLINES':'MH',MALAYSIA:'MH',EMIRATES:'EK',QATAR:'QR','QATAR AIRWAYS':'QR',ETIHAD:'EY','THAI AIRWAYS':'TG',THAI:'TG','JAPAN AIRLINES':'JL',JAL:'JL','ALL NIPPON':'NH',ANA:'NH','CHINA AIRLINES':'CI','EVA AIR':'BR','EVA':'BR','CHINA SOUTHERN':'CZ','CHINA EASTERN':'MU','AIR CHINA':'CA','GARUDA INDONESIA':'GA',GARUDA:'GA','PHILIPPINE AIRLINES':'PR','VIETNAM AIRLINES':'VN','ROYAL BRUNEI':'BI','AIR INDIA':'AI','TURKISH AIRLINES':'TK',TURKISH:'TK','BRITISH AIRWAYS':'BA',BRITISH:'BA','AIR FRANCE':'AF',LUFTHANSA:'LH','KLM ROYAL DUTCH':'KL',KLM:'KL','SWISS':'LX','UNITED AIRLINES':'UA',UNITED:'UA','DELTA AIR LINES':'DL',DELTA:'DL','AMERICAN AIRLINES':'AA',AMERICAN:'AA','JETSTAR ASIA':'3K',JETSTAR:'3K','INDIGO':'6E'};
+const jcLiverySpecs={
+ SQ:{body:0xf7f7f5,tail:0x20395f,stripe:0x20395f,stripe2:0xe1b24d,engine:0xc8d4dc,logo:'sqBird'},
+ TR:{body:0xf7f3df,tail:0xf4c631,stripe:0x1f2328,stripe2:0xf4c631,engine:0xe4c246,logo:'SCOOT',logoColor:0x1f2328},
+ CX:{body:0xf8f8f6,tail:0x0f8a7a,stripe:0x0f8a7a,stripe2:0x0f8a7a,engine:0xb8d9d1,logo:'brush',logoColor:0xffffff},
+ AK:{body:0xffffff,tail:0xc41d22,stripe:0xc41d22,stripe2:0xffffff,engine:0xd0d9df,logo:'airasia',logoColor:0xffffff},
+ MH:{body:0xfafafa,tail:0x1f4f99,stripe:0xc3262e,stripe2:0x1f4f99,engine:0xc8d4dc,logo:'MH',logoColor:0xffffff},
+ EK:{body:0xfafaf7,tail:0xd02c33,stripe:0xd02c33,stripe2:0x137548,engine:0xd1d5d8,logo:'EK',logoColor:0xffffff},
+ QR:{body:0xfaf9f7,tail:0x6d0f2f,stripe:0x6d0f2f,stripe2:0xa38a8f,engine:0xd3d6da,logo:'QR',logoColor:0xffffff},
+ EY:{body:0xf7f2e8,tail:0x9a7c49,stripe:0x9a7c49,stripe2:0xb09a70,engine:0xc8c0ad,logo:'EY',logoColor:0xffffff},
+ TG:{body:0xf8f8f8,tail:0x55206b,stripe:0x55206b,stripe2:0xbf6a19,engine:0xcfd6dd,logo:'TG',logoColor:0xffffff},
+ JL:{body:0xf9f9f9,tail:0xffffff,stripe:0x111111,stripe2:0xbf1720,engine:0xd0d8de,logo:'JAL',logoColor:0xbf1720,logoBg:0xffffff},
+ NH:{body:0xf9f9f9,tail:0x204c9a,stripe:0x204c9a,stripe2:0x204c9a,engine:0xd0d8de,logo:'ANA',logoColor:0xffffff},
+ BR:{body:0xf7faf6,tail:0x1b8c63,stripe:0xe46f19,stripe2:0x1b8c63,engine:0xcfd8cf,logo:'BR',logoColor:0xffffff},
+ CI:{body:0xf8f7f7,tail:0x8a3359,stripe:0x8a3359,stripe2:0xbe8ca2,engine:0xd7d7db,logo:'CI',logoColor:0xffffff},
+ MU:{body:0xf8f8f8,tail:0xecf2fa,stripe:0xd62828,stripe2:0x1f61ad,engine:0xd1dbe3,logo:'MU',logoColor:0x1f61ad},
+ CZ:{body:0xf8f8f8,tail:0x1f62c9,stripe:0x1f62c9,stripe2:0xcf202c,engine:0xd1dbe3,logo:'CZ',logoColor:0xffffff},
+ CA:{body:0xf9f9f7,tail:0xffffff,stripe:0xc8262f,stripe2:0xc8262f,engine:0xd0d7dd,logo:'CA',logoColor:0xc8262f},
+ GA:{body:0xf7fafb,tail:0x2e91a5,stripe:0x2e91a5,stripe2:0x4fc1d3,engine:0xcdd8dd,logo:'GA',logoColor:0xffffff},
+ PR:{body:0xf8f8f8,tail:0x164a96,stripe:0x164a96,stripe2:0xbf2229,engine:0xd1d9df,logo:'PR',logoColor:0xffd84f},
+ VN:{body:0xf8f9f8,tail:0x0a8a6a,stripe:0x0a8a6a,stripe2:0xe2b944,engine:0xcfdad4,logo:'VN',logoColor:0xeed36d},
+ BI:{body:0xf9f5df,tail:0xe2c25d,stripe:0xb01f2e,stripe2:0x111111,engine:0xcfc6a0,logo:'BI',logoColor:0x111111},
+ AI:{body:0xf8f7f6,tail:0xb01f2e,stripe:0xb01f2e,stripe2:0xd8a85e,engine:0xd3d2d0,logo:'AI',logoColor:0xffffff},
+ TK:{body:0xf8f8f8,tail:0xc2242f,stripe:0xc2242f,stripe2:0xc2242f,engine:0xd0d8de,logo:'TK',logoColor:0xffffff},
+ BA:{body:0xf8f8f8,tail:0x1d437c,stripe:0x1d437c,stripe2:0xbd2f3c,engine:0xd1d8de,logo:'BA',logoColor:0xffffff},
+ AF:{body:0xf9f9f9,tail:0xffffff,stripe:0x0f2e67,stripe2:0xc92432,engine:0xd4d9df,logo:'AF',logoColor:0x0f2e67},
+ LH:{body:0xf8f8f6,tail:0x183560,stripe:0x183560,stripe2:0xf3be22,engine:0xcfd7dc,logo:'LH',logoColor:0xf3be22},
+ KL:{body:0xf8fbfd,tail:0x59a7d8,stripe:0x59a7d8,stripe2:0x59a7d8,engine:0xcfdbe2,logo:'KLM',logoColor:0xffffff},
+ LX:{body:0xf8f8f8,tail:0xc6242f,stripe:0xc6242f,stripe2:0xffffff,engine:0xd0d8de,logo:'LX',logoColor:0xffffff},
+ UA:{body:0xf8f8f8,tail:0x2458a5,stripe:0x2458a5,stripe2:0x83b9da,engine:0xd1d9df,logo:'UA',logoColor:0xffffff},
+ DL:{body:0xf7f7f8,tail:0x18345f,stripe:0x18345f,stripe2:0xc02735,engine:0xd0d8de,logo:'DL',logoColor:0xffffff},
+ AA:{body:0xf8f8f8,tail:0xc3c8cf,stripe:0xcf2434,stripe2:0x1a58a8,engine:0xd0d8de,logo:'AA',logoColor:0x1a58a8},
+ "3K":{body:0xf8f8f8,tail:0xf16d1f,stripe:0x222222,stripe2:0xf16d1f,engine:0xd2d8de,logo:'3K',logoColor:0xffffff},
+ "6E":{body:0xf8f8f8,tail:0x163b76,stripe:0x163b76,stripe2:0x163b76,engine:0xd0d8de,logo:'6E',logoColor:0xffffff},
+ DEFAULT:{body:0xf7f8f9,tail:0x365b8f,stripe:0x365b8f,stripe2:0xe3a74e,engine:0xbfd0d8,logo:'AIR',logoColor:0xffffff}
+};
+const jcLiveryCache={materials:new Map(),textures:new Map()};
+function jcCarrierCode(record){
+ const read=v=>String(v||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').trim();
+ const byIata=read(record?.airlineIata||'');if(byIata&&jcLiverySpecs[byIata])return byIata;
+ const flight=read(record?.flight||record?.callsign||'').replace(/\s+/g,'');
+ if(/^[A-Z]{2}\d/.test(flight)&&jcLiverySpecs[flight.slice(0,2)])return flight.slice(0,2);
+ if(/^[A-Z]{3}\d/.test(flight)){
+  const code=jcCarrierIcaoToIata[flight.slice(0,3)];if(code)return code;
+ }
+ const airline=read(record?.airline||'');
+ for(const [name,code] of Object.entries(jcLiveryNameMap))if(airline.includes(name))return code;
+ const guess=flight.slice(0,2);if(jcLiverySpecs[guess])return guess;
+ return 'DEFAULT';
+}
+function jcTailLogoTexture(code,spec){
+ const key=code+'|'+JSON.stringify([spec.tail,spec.logo,spec.logoColor,spec.logoBg]);
+ if(jcLiveryCache.textures.has(key))return jcLiveryCache.textures.get(key);
+ const c=document.createElement('canvas');c.width=256;c.height=256;
+ const ctx=c.getContext('2d');if(!ctx)return null;
+ ctx.fillStyle='#'+(spec.tail||0).toString(16).padStart(6,'0');ctx.fillRect(0,0,256,256);
+ if(spec.logoBg){ctx.fillStyle='#'+spec.logoBg.toString(16).padStart(6,'0');ctx.fillRect(28,28,200,200);}
+ const fg='#'+(spec.logoColor||0xffffff).toString(16).padStart(6,'0');
+ if(spec.logo==='sqBird'){
+  ctx.strokeStyle=fg;ctx.lineWidth=16;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(82,166);ctx.quadraticCurveTo(126,116,178,92);ctx.stroke();
+  ctx.lineWidth=10;ctx.beginPath();ctx.moveTo(96,182);ctx.quadraticCurveTo(132,146,182,126);ctx.stroke();
+  ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(96,144);ctx.lineTo(152,108);ctx.stroke();
+ }else if(spec.logo==='brush'){
+  ctx.strokeStyle=fg;ctx.lineWidth=18;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(62,154);ctx.quadraticCurveTo(132,74,198,110);ctx.stroke();
+  ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(96,162);ctx.quadraticCurveTo(138,130,176,122);ctx.stroke();
+ }else if(spec.logo==='airasia'){
+  ctx.fillStyle=fg;ctx.font='italic 700 40px Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('airasia',128,136,205);
+ }else{
+  ctx.fillStyle=fg;ctx.font=(String(spec.logo||code).length>3?'700 56px':'700 72px')+' Arial,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(spec.logo||code),128,132,220);
+ }
+ const texture=new li(c);texture.colorSpace='srgb';texture.anisotropy=2;jcLiveryCache.textures.set(key,texture);return texture;
+}
+function jcLivery(record){
+ const code=jcCarrierCode(record),spec=jcLiverySpecs[code]||jcLiverySpecs.DEFAULT;
+ if(jcLiveryCache.materials.has(code))return jcLiveryCache.materials.get(code);
+ const mk=(color,extra={})=>new Xt(Object.assign({color,roughness:.56,metalness:.10,emissive:0x101419,emissiveIntensity:.05},extra));
+ const out={code,spec,
+  body:mk(spec.body||0xf7f8f9,{emissive:0x2c343a,emissiveIntensity:.12}),
+  tail:mk(spec.tail||0x365b8f,{emissive:0x081018,emissiveIntensity:.18}),
+  stripe:mk(spec.stripe||0x365b8f),
+  stripe2:mk(spec.stripe2||spec.stripe||0xe3a74e),
+  engine:mk(spec.engine||0xbfd0d8,{metalness:.24,roughness:.48}),
+  window:new be({color:0x12263d}),
+  logo:new be({map:jcTailLogoTexture(code,spec),transparent:true,side:2,depthWrite:false,toneMapped:false})
+ };
+ jcLiveryCache.materials.set(code,out);return out;
+}
 // Shared low-poly geometries: avoid many allocations and preserve mobile FPS.
 // For gate aircraft, the fuselage runs ALONG X, nose toward the terminal wall,
 // and the wings run along Z (parallel to the terminal pier).
@@ -5834,9 +5922,7 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
  item.userData={gate:stand.gate,flight:flight.flight,terminal:stand.terminal,
   confirmedParked:!!flight.confirmedParked,flightRecord:flight,
   source:'SIMULATED_FROM_GATE_ASSIGNMENT',stage:'SIM AT GATE',dockYaw};
- const name=String(flight.airlineIata||flight.airline||flight.flight||'').toUpperCase();
- const tint=/^(SQ|SINGAPORE|SIM)/.test(name)?navy:
-  airlinePalette[Array.from(name).reduce((sum,c)=>sum+c.charCodeAt(0),0)%airlinePalette.length];
+ const livery=jcLivery(flight);
  const add=(dx,dz,geom,mat,y,tag)=>{
   const mesh=new Tt(geom,mat),p=worldAt(stand.x+dx,stand.z+dz);
   mesh.position.set(p[0]-base[0],y,p[1]-base[1]);
@@ -5844,25 +5930,29 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
   if(tag)mesh.name=tag+'_'+stand.gate;
   mesh.frustumCulled=false;item.add(mesh);return mesh;
  };
-  add(0,0,parkedShape.fuselage,white,5.65,'FUSELAGE');
+  add(0,0,parkedShape.fuselage,livery.body,5.65,'FUSELAGE');
   // Spherical front cap and tapered tail keep the aircraft recognizable
   // from both the taxiway cockpit and elevated spectator camera.
-  const noseMesh=add(-side*16.4,0,parkedShape.nose,white,5.65,'ROUND_NOSE');
+  const noseMesh=add(-side*16.4,0,parkedShape.nose,livery.body,5.65,'ROUND_NOSE');
   noseMesh.scale.set(5.2*factorX,2.85,3.12*factorZ);
-  add(side*15.4,0,parkedShape.tailCone,white,5.65,'TAIL_CONE');
+  add(side*15.4,0,parkedShape.tailCone,livery.body,5.65,'TAIL_CONE');
   // Sweep the wings rearward as their span increases. The old full-width
   // rectangular plate looked like a jetbridge, not a parked airliner.
   for(const wingSide of [-1,1]){
-   add(side*1.0,wingSide*7.3,parkedShape.wingInner,white,5.36,'INNER_WING');
-   add(side*5.5,wingSide*16.0,parkedShape.wingOuter,white,5.33,'OUTER_WING');
-   add(side*3.4,wingSide*9.8,parkedShape.engine,silver,3.8,'NACELLE');
-   add(-side*.7,wingSide*9.8,parkedShape.inlet,windowMat,3.8,'ENGINE_INLET');
-   add(-side*1.0,wingSide*3.0,parkedShape.stripe,tint,6.35,'FUSELAGE_LIVERY');
+   add(side*1.0,wingSide*7.3,parkedShape.wingInner,livery.body,5.36,'INNER_WING');
+   add(side*5.5,wingSide*16.0,parkedShape.wingOuter,livery.body,5.33,'OUTER_WING');
+   add(side*3.4,wingSide*9.8,parkedShape.engine,livery.engine,3.8,'NACELLE');
+   add(-side*.7,wingSide*9.8,parkedShape.inlet,livery.window,3.8,'ENGINE_INLET');
+   add(-side*1.0,wingSide*3.0,parkedShape.stripe,livery.stripe,6.35,'FUSELAGE_LIVERY');
+   const thin=add(-side*1.1,wingSide*2.38,parkedShape.stripe,livery.stripe2,6.72,'FUSELAGE_LIVERY_2');
+   thin.scale.set(1,.56,1);
   }
-  add(side*15.3,0,parkedShape.tailplane,white,8.55,'TAILPLANES');
-  add(side*15.0,0,parkedShape.fin,tint,11.1,'TRIANGULAR_FIN');
-  add(-side*15.0,0,parkedShape.cockpit,windowMat,6.95,'COCKPIT_WINDOWS');
-  add(-side*10.8,-3.15*factorZ,parkedShape.door,windowMat,6.4,'PASSENGER_DOOR');
+  add(side*15.3,0,parkedShape.tailplane,livery.body,8.55,'TAILPLANES');
+  add(side*15.0,0,parkedShape.fin,livery.tail,11.1,'TRIANGULAR_FIN');
+  const tailLogo=add(side*15.16,0,new Ge(6.3,5.8),livery.logo,10.95,'TAIL_LOGO');
+  tailLogo.rotation.y=rot+(side<0?Math.PI:0);tailLogo.position.x+=side*.34;
+  add(-side*15.0,0,parkedShape.cockpit,livery.window,6.95,'COCKPIT_WINDOWS');
+  add(-side*10.8,-3.15*factorZ,parkedShape.door,livery.window,6.4,'PASSENGER_DOOR');
   add(-side*10.6,0,parkedShape.gear,silver,1.7,'NOSE_GEAR');
   add(side*3.0,-4.5,parkedShape.gear,silver,1.7,'MAIN_GEAR');
   add(side*3.0,4.5,parkedShape.gear,silver,1.7,'MAIN_GEAR');
@@ -5876,9 +5966,13 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
  jetTraffic.changiGroundFactory=(parent,loc,contact)=>{
   const item=new me();item.name='GROUND_'+contact.hex;
   item.userData={hex:contact.hex,callsign:contact.callsign||'',lat:contact.lat,lon:contact.lon,source:'observed ADS-B ground position',gate:null};
-  make(item,loc,0,0,shapes.body,white,4.3);
-  make(item,loc,0,1,shapes.wing,silver,4.7);
-  make(item,loc,0,10,shapes.tail,navy,6.4);
+  const livery=jcLivery(contact);
+  make(item,loc,0,0,shapes.body,livery.body,4.3);
+  make(item,loc,0,1,shapes.wing,livery.engine,4.7);
+  make(item,loc,0,10,shapes.tail,livery.tail,6.4);
+  make(item,loc,0,2.8,shapes.markings,livery.stripe,5.18);
+  const logo=new Tt(new Ge(5.2,5.2),livery.logo),p=worldAt(loc.x,loc.z+10);
+  logo.position.set(p[0],6.4,p[1]);logo.rotation.y=rot;logo.frustumCulled=false;item.add(logo);
   parent.add(item);
  };
  jcChangiSync3DGround();
