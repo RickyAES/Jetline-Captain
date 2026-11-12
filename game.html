@@ -5866,7 +5866,7 @@ function jcUser3DSSQTailMat(){
  const ctx=c.getContext('2d');
  if(!ctx)return null;
  const texture=new li(c);texture.colorSpace='srgb';texture.anisotropy=4;
- const material=new be({map:texture,transparent:true,depthTest:true,depthWrite:false,side:2,toneMapped:false});
+ const material=new be({map:texture,transparent:true,alphaTest:.04,depthTest:false,depthWrite:false,side:2,toneMapped:false});
  material.userData.jcSharedImportedModel=true;
  const img=new Image();img.decoding='async';
  img.onload=()=>{ctx.clearRect(0,0,512,512);ctx.drawImage(img,78,6,356,500);texture.needsUpdate=true;};
@@ -5900,9 +5900,9 @@ function jcUser3DSAddGear(root,lightweight){
 function jcUser3DSAttach(parent,record,brand,side=1,rotation=0,isMobile=false,withDecals=true){
  const geo=jcUser3DSGeometry(record,brand,isMobile?'low':'high');if(!geo)return null;
  const code=brand?.code||jcUser3DSFlightCode(record);
- const root=new me();root.name='JC_REASSEMBLED_IMPORTED_3DS_AIRLINER_V39';
+ const root=new me();root.name='JC_REASSEMBLED_IMPORTED_3DS_AIRLINER_V41';
  root.rotation.y=rotation;root.scale.x=side;
- root.userData={source:'USER_UPLOADED_3DS_REASSEMBLED',code,triangles:geo.getIndex().count/3,lod:isMobile?'mobile':'desktop',assembly:'FUSELAGE+WINGS+ENGINES+RUDDER+STABILIZERS'};
+ root.userData={source:'USER_UPLOADED_3DS_REASSEMBLED_ACTIVE',code,triangles:geo.getIndex().count/3,lod:isMobile?'mobile':'desktop',assembly:'FUSELAGE+WINGS+ENGINES+RUDDER+STABILIZERS+SQ_TAIL_DETAILS'};
  const body=new Tt(geo,jcUser3DSMat);body.name='REASSEMBLED_IMPORTED_3DS_AIRCRAFT';body.frustumCulled=false;root.add(body);
  if(withDecals){
   const labelMat=brand?.titles,logoMat=code==='SQ'?jcUser3DSSQTailMat():brand?.logo;
@@ -5915,24 +5915,64 @@ function jcUser3DSAttach(parent,record,brand,side=1,rotation=0,isMobile=false,wi
     letters.name='AIRLINE_FUSELAGE_TITLE';root.add(letters);
    }
   }
-  if(logoMat){
+  if(code==='SQ'){
+   const finMat=new Xt({color:0x153865,metalness:.20,roughness:.56,side:2});
+   finMat.userData.jcSharedImportedModel=true;
+   const stabMat=new Xt({color:0xf2f3f4,metalness:.16,roughness:.60,side:2});
+   stabMat.userData.jcSharedImportedModel=true;
+   const pylonMat=new Xt({color:0xd8dde2,metalness:.25,roughness:.54});
+   pylonMat.userData.jcSharedImportedModel=true;
+   // Bold dark-blue tail fins so the SQ gold bird reads clearly in live play.
+   for(const facing of [-1,1]){
+    const finShell=new Tt(new Ge(6.0,5.7),finMat);
+    finShell.position.set(16.55,8.72,facing*.40);
+    finShell.rotation.y=facing===1?0:Math.PI;
+    finShell.renderOrder=8;finShell.frustumCulled=false;
+    finShell.name='SQ_BLUE_FIN_SHELL';root.add(finShell);
+   }
+   if(logoMat){
+    logoMat.userData.jcSharedImportedModel=true;
+    for(const facing of [-1,1]){
+      const mark=new Tt(new Ge(4.6,4.1),logoMat);
+      mark.position.set(16.45,8.78,facing*.46);
+      mark.rotation.y=facing===1?0:Math.PI;
+      mark.renderOrder=12;mark.frustumCulled=false;
+      mark.name='CLEAR_SINGAPORE_AIRLINES_GOLD_TAIL_LOGO';
+      root.add(mark);
+    }
+   }
+   // Explicit horizontal stabilisers so the tailplane is visible from mobile and desktop.
+   for(const facing of [-1,1]){
+    const stab=new Tt(new Ae(2.8,.10,1.15),stabMat);
+    stab.position.set(14.55,6.62,facing*1.92);
+    stab.rotation.y=facing*.28;stab.rotation.x=-.04;
+    stab.name='SQ_HORIZONTAL_STABILISER';root.add(stab);
+   }
+   // Engine pylons to visually attach the nacelles to the wing roots.
+   for(const facing of [-1,1]){
+    for(const cfg of [{x:3.55,z:4.55,h:3.58},{x:7.30,z:7.95,h:3.44}]){
+      const pylon=new Tt(new Ae(.92,1.12,.34),pylonMat);
+      pylon.position.set(cfg.x,cfg.h,facing*cfg.z);
+      pylon.rotation.z=facing*.08;
+      pylon.name='ENGINE_PYLON_CONNECTOR';root.add(pylon);
+    }
+   }
+  }else if(logoMat){
    logoMat.userData.jcSharedImportedModel=true;
-   // The actual 3DS tail is at x=12.8..20.2, y=5.8..11.5 and z~0.
-   // Put decals on BOTH sides of the fin, not in front of the fuselage.
    for(const facing of [-1,1]){
     const mark=new Tt(new Ge(5.45,4.8),logoMat);
-    mark.position.set(16.7,8.62,facing*.32);
+    mark.position.set(16.7,8.62,facing*.42);
     mark.rotation.y=facing===1?0:Math.PI;
     mark.renderOrder=10;mark.frustumCulled=false;
-    mark.name=code==='SQ'?'CLEAR_SINGAPORE_AIRLINES_GOLD_TAIL_LOGO':'AIRLINE_TAIL_LOGO';
+    mark.name='AIRLINE_TAIL_LOGO';
     root.add(mark);
    }
   }
  }
  // The source vertical stabilizer is now integrated with the tail; this narrow
  // rear control surface follows it as a visibly connected rudder.
- const rudder=new Tt(new Ae(.22,3.92,.35),jcUser3DSDetailMaterials.rudder);
- rudder.position.set(19.59,8.02,0);rudder.name='RUDDER_JOINED_TO_VERTICAL_TAIL';root.add(rudder);
+ const rudder=new Tt(new Ae(.24,4.15,.38),jcUser3DSDetailMaterials.rudder);
+ rudder.position.set(19.35,8.18,0);rudder.name='RUDDER_JOINED_TO_VERTICAL_TAIL';root.add(rudder);
  if(withDecals&&(record?.gate||record?.confirmedParked))jcUser3DSAddGear(root,isMobile);
  parent.add(root);return root;
 }
@@ -5940,7 +5980,7 @@ window.__jcUser3DSModelStatus=(probe=false)=>{
  const low=probe?jcUser3DSRead('low'):jcUser3DSLoaded.get('low');
  const high=probe?jcUser3DSRead('high'):jcUser3DSLoaded.get('high');
  const test=probe?jcUser3DSGeometry({flight:'SQ198'},null,'low'):null;
- return {source:'Uploaded 3d-model.3ds · procedural live fallback v40',ready:jcUser3DSLoaded.size>0,
+ return {source:'Uploaded 3d-model.3ds · active live model v41',ready:jcUser3DSLoaded.size>0,
   mobileTriangles:low?.numFaces??4578,desktopTriangles:high?.numFaces??16196,
   mobileVertices:low?.numVerts??4558,desktopVertices:high?.numVerts??14404,
   decodeTest:probe?!!(low&&high&&test):undefined,meshesCached:jcUser3DSPalettes.size,
@@ -6177,9 +6217,9 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
   if(tag)mesh.name=tag+'_'+stand.gate;
   mesh.frustumCulled=false;item.add(mesh);return mesh;
  };
- const imported=null; // v40: disable broken imported 3DS in live scenery
- jcAssembleAirliner(add,livery,side,stand.gate);
- item.userData.visualAsset='PROCEDURAL_FALLBACK_V40';
+ const imported=jcUser3DSAttach(item,flight,livery,side,rot,window.innerWidth<700,true);
+ if(!imported)jcAssembleAirliner(add,livery,side,stand.gate);
+ item.userData.visualAsset=imported?'USER_3DS_ACTIVE_V41':'PROCEDURAL_FALLBACK_V41';
  parent.add(item);
 };
  jcChangiSync3DGates();
@@ -6200,10 +6240,10 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
    if(tag)mesh.name=tag+'_'+contact.hex;
    mesh.frustumCulled=false;item.add(mesh);return mesh;
   };
-  const imported=null; // v40: disable broken imported 3DS in live scenery
-  jcAssembleAirliner(add,livery,side,contact.hex);
+  const imported=jcUser3DSAttach(item,contact,livery,side,rot,true,true);
+  if(!imported)jcAssembleAirliner(add,livery,side,contact.hex);
   item.scale.set(.74,.74,.74);
-  item.userData.visualAsset='PROCEDURAL_FALLBACK_V40';
+  item.userData.visualAsset=imported?'USER_3DS_ACTIVE_V41':'PROCEDURAL_FALLBACK_V41';
   parent.add(item);
  };
  jcChangiSync3DGround();
@@ -14267,7 +14307,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v40';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v41';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
