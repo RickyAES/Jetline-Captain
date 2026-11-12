@@ -5134,12 +5134,20 @@ function jetTrafficParallelFree(){
 // geometry. Never remove ground, sky, runway pavement or cockpit meshes.
 function jetChangiProtectedLocal(x,z,margin=0){
  const runways=Object.values(jetChangiRunways);
- if(runways.some(lane=>Math.abs(x-lane.x)<(86+margin) && z<lane.z+155+margin && z>lane.z-lane.length-155-margin))return true;
- for(const xline of [jetChangiRunways['02L'].x*.22,jetChangiRunways['02R'].x*.51]){
-  if(Math.abs(x-xline)<49+margin && z>-4020-margin && z<200+margin)return true;
+ // Clear a wider runway safety strip so no terminal blocks, scenery buildings
+ // or trees can intrude into the pavement, shoulder or immediate approach.
+ if(runways.some(lane=>Math.abs(x-lane.x)<(108+margin) && z<lane.z+255+margin && z>lane.z-lane.length-255-margin))return true;
+ // Extra protection around 02L because user-reported buildings were still
+ // appearing on or too close to the western runway corridor.
+ const r02L=jetChangiRunways['02L'],r02C=jetChangiRunways['02C'],r02R=jetChangiRunways['02R'];
+ if(x>r02L.x-210-margin&&x<r02L.x+85+margin&&z<r02L.z+345+margin&&z>r02L.z-r02L.length-345-margin)return true;
+ // Protect the central taxi spine and cross-connectors between 02L and 02C/02R.
+ for(const xline of [r02L.x*.22,r02R.x*.51,(r02L.x+r02C.x)*.5,(r02C.x+r02R.x)*.5]){
+  if(Math.abs(x-xline)<62+margin && z>-4055-margin && z<240+margin)return true;
  }
- for(const zline of [-1330,-1400,-2350,-2400]){
-  if(x>jetChangiRunways['02L'].x-70-margin&&x<jetChangiRunways['02R'].x+70+margin&&Math.abs(z-zline)<52+margin)return true;
+ // Protect the main east-west taxi corridors and terminal frontage crossings.
+ for(const zline of [-1260,-1330,-1400,-1480,-2280,-2350,-2400,-2480]){
+  if(x>r02L.x-120-margin&&x<r02R.x+120+margin&&Math.abs(z-zline)<64+margin)return true;
  }
  return false;
 }
@@ -5162,7 +5170,8 @@ function jetChangiClearObstacles(){
   const size=bb.max.clone().sub(bb.min);
   const scale=node.getWorldScale?.(new K())||new K(1,1,1);
   const h=Math.abs(size.y*scale.y),hx=Math.abs(size.x*scale.x),hz=Math.abs(size.z*scale.z);
-  if(h<3.0||h>1300||hx>8500||hz>8500)return;
+  // Remove even relatively small obstacles if they intrude into runway safety areas.
+  if(h<1.2||h>1300||hx>8500||hz>8500)return;
   const mid=bb.min.clone().add(bb.max).multiplyScalar(.5);
   const coords=[];
   for(const x of [bb.min.x,bb.max.x])for(const z of [bb.min.z,bb.max.z])for(const y of [bb.min.y,bb.max.y]){
@@ -5649,12 +5658,12 @@ function jcGatePierWall(stand){
  return pier.x+(stand.face==='W'?-pier.w/2:pier.w/2);
 }
 function jcGateTexture(gate){
- const canvas=document.createElement('canvas');canvas.width=128;canvas.height=64;
+ const canvas=document.createElement('canvas');canvas.width=160;canvas.height=72;
  const ctx=canvas.getContext('2d');if(!ctx)return null;
- ctx.fillStyle=jcGateV17Style.sign;ctx.fillRect(1,1,126,62);
- ctx.strokeStyle=jcGateV17Style.stroke;ctx.lineWidth=4;ctx.strokeRect(3,3,122,58);
- ctx.fillStyle=jcGateV17Style.text;ctx.font='bold 41px Arial,sans-serif';
- ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(gate),64,33,117);
+ ctx.fillStyle=jcGateV17Style.sign;ctx.fillRect(2,2,156,68);
+ ctx.strokeStyle=jcGateV17Style.stroke;ctx.lineWidth=4;ctx.strokeRect(4,4,152,64);
+ ctx.fillStyle=jcGateV17Style.text;ctx.font='bold 33px Arial,sans-serif';
+ ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(gate),80,37,144);
  const tex=new li(canvas);tex.colorSpace=ke;tex.needsUpdate=true;return tex;
 }
 function jcChangiBuildNumberSigns(group,worldAt){
@@ -5665,17 +5674,19 @@ function jcChangiBuildNumberSigns(group,worldAt){
  // when entering the gate-view camera from either side of the terminal.
  for(const stand of jcChangiGateRegistry){
   const wall=jcGatePierWall(stand),side=stand.face==='W'?-1:1;
-  const [x,z]=worldAt(wall+side*5.5,stand.z-7.5);
+  // Keep gate signs compact and tucked close to the terminal edge so they do
+  // not stretch visually into the runway/taxiway view.
+  const [x,z]=worldAt(wall+side*2.2,stand.z-4.8);
   const tex=jcGateTexture(stand.gate);if(!tex)continue;
   const face=new j1(new ia({map:tex,color:0xffffff,transparent:true,
    depthWrite:false,depthTest:true,sizeAttenuation:true,fog:false}));
   face.name='GATE_SIGN_'+stand.gate;
-  face.scale.set(15.5,7.1,1);face.position.set(x,18.8,z);
+  face.scale.set(8.9,4.2,1);face.position.set(x,13.2,z);
   face.userData={gate:stand.gate,terminal:stand.terminal};signs.add(face);
-  const post=new Tt(new Ae(.8,13,.8),poleMat);
-  post.position.set(x,8.0,z);post.name='GATE_SIGN_POST_'+stand.gate;signs.add(post);
-  const strip=new Tt(new Ae(4,.52,1.0),warm);
-  strip.position.set(x,14.9,z);signs.add(strip);
+  const post=new Tt(new Ae(.46,8.2,.46),poleMat);
+  post.position.set(x,5.0,z);post.name='GATE_SIGN_POST_'+stand.gate;signs.add(post);
+  const strip=new Tt(new Ae(2.3,.30,.62),warm);
+  strip.position.set(x,9.25,z);signs.add(strip);
  }
  signs.userData.labelledGates=jcChangiGateRegistry.length;
  jetTraffic.changiGateSignLayer=signs;
