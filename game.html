@@ -8846,18 +8846,29 @@ function jcTaxiSignsCanvas(text,type){
 function jcTaxiSignsBoard(group,where,text,type,heading,width){
  if(!where||!Number.isFinite(where.x)||!Number.isFinite(where.z))return;
  const texture=jcTaxiSignsCanvas(text,type);if(!texture)return;
- const w=width||32,h=9;
+ // Keep all taxi/runway signs compact and low to the ground, closer to real
+ // airfield signage proportions instead of oversized billboard-style panels.
+ const nominalW=Math.max(10,Number(width)||32);
+ const w=Math.min(16.5,Math.max(6.8,nominalW*.42));
+ const h=Math.max(2.6,Math.min(3.9,w*.29));
+ const signBottom=.55,signY=signBottom+h*.5;
  const mat=new be({map:texture,transparent:true,depthWrite:false,side:2,toneMapped:false});
  const face=new Tt(new Ge(w,h),mat);
- face.position.set(where.x,10.1,where.z);
+ face.position.set(where.x,signY,where.z);
  // Plane normal faces the approaching direction of the taxiway.
  face.rotation.y=heading;face.frustumCulled=false;
  face.name='JC_DAY_NIGHT_AIRFIELD_SIGN_'+type;
  face.userData.jcSignFace=true;
  group.add(face);
- const postMat=new be({color:0x9ea8b0});
- const post=new Tt(new Ae(.85,9.2,.85),postMat);
- post.position.set(where.x,4.9,where.z);group.add(post);
+ const postMat=new Xt({color:0xaab2b8,roughness:.88,metalness:.06});
+ const supportOffset=Math.max(1.35,Math.min(3.2,w*.22));
+ for(const side of [-1,1]){
+  const support=new Tt(new Ae(.22,signBottom+.9,.22),postMat);
+  support.position.set(where.x+Math.cos(heading)*supportOffset*side, (signBottom+.9)*.5, where.z-Math.sin(heading)*supportOffset*side);
+  support.rotation.y=heading;group.add(support);
+ }
+ const base=new Tt(new Ae(w*.92,.18,.48),new Xt({color:0xc9c8c2,roughness:.96,metalness:0}));
+ base.position.set(where.x,.09,where.z);base.rotation.y=heading;group.add(base);
 }
 function jcTaxiSignsByPath(group,path,index,text,type,side=1,offset=25,width=32){
  if(!path||path.length<2)return;
