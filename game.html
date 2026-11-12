@@ -5940,7 +5940,7 @@ window.__jcUser3DSModelStatus=(probe=false)=>{
  const low=probe?jcUser3DSRead('low'):jcUser3DSLoaded.get('low');
  const high=probe?jcUser3DSRead('high'):jcUser3DSLoaded.get('high');
  const test=probe?jcUser3DSGeometry({flight:'SQ198'},null,'low'):null;
- return {source:'Uploaded 3d-model.3ds · repaired composite v39',ready:jcUser3DSLoaded.size>0,
+ return {source:'Uploaded 3d-model.3ds · procedural live fallback v40',ready:jcUser3DSLoaded.size>0,
   mobileTriangles:low?.numFaces??4578,desktopTriangles:high?.numFaces??16196,
   mobileVertices:low?.numVerts??4558,desktopVertices:high?.numVerts??14404,
   decodeTest:probe?!!(low&&high&&test):undefined,meshesCached:jcUser3DSPalettes.size,
@@ -6131,8 +6131,12 @@ const shapes={body:new Ae(6.2*factorX,3.8,34*factorZ),
   }
   add(side*15.3,0,parkedShape.tailplane,livery.body,8.55,'TAILPLANES');
   add(side*15.0,0,parkedShape.fin,livery.tail,11.1,'TRIANGULAR_FIN');
-  const tailLogo=add(side*15.16,0,new Ge(6.3,5.8),livery.logo,10.95,'TAIL_LOGO');
-  tailLogo.rotation.y=rot+(side<0?Math.PI:0);tailLogo.position.x+=side*.34;
+  for(const finSide of [-1,1]){
+   const tailLogo=add(side*15.28,finSide*1.05,new Ge(5.4,4.9),livery.logo,10.92,'TAIL_LOGO');
+   tailLogo.rotation.y=rot+(finSide<0?Math.PI:0);
+   tailLogo.position.x+=side*.18;tailLogo.position.z+=finSide*.08;
+   tailLogo.renderOrder=8;tailLogo.frustumCulled=false;
+  }
   add(-side*15.0,0,parkedShape.cockpit,livery.window,6.95,'COCKPIT_WINDOWS');
   for(const wingSide of [-1,1]){
    const win=add(-side*1.2,wingSide*3.12,new Ge(24.5*factorX,.82),livery.cabinWindows,6.34,'CABIN_WINDOWS');
@@ -6173,9 +6177,9 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
   if(tag)mesh.name=tag+'_'+stand.gate;
   mesh.frustumCulled=false;item.add(mesh);return mesh;
  };
- const imported=jcUser3DSAttach(item,flight,livery,side,rot,window.innerWidth<700,true);
- if(!imported)jcAssembleAirliner(add,livery,side,stand.gate);
- item.userData.visualAsset=imported?'USER_3DS':'PROCEDURAL_FALLBACK';
+ const imported=null; // v40: disable broken imported 3DS in live scenery
+ jcAssembleAirliner(add,livery,side,stand.gate);
+ item.userData.visualAsset='PROCEDURAL_FALLBACK_V40';
  parent.add(item);
 };
  jcChangiSync3DGates();
@@ -6196,10 +6200,10 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
    if(tag)mesh.name=tag+'_'+contact.hex;
    mesh.frustumCulled=false;item.add(mesh);return mesh;
   };
-  const imported=jcUser3DSAttach(item,contact,livery,side,rot,true,true);
-  if(!imported)jcAssembleAirliner(add,livery,side,contact.hex);
+  const imported=null; // v40: disable broken imported 3DS in live scenery
+  jcAssembleAirliner(add,livery,side,contact.hex);
   item.scale.set(.74,.74,.74);
-  item.userData.visualAsset=imported?'USER_3DS':'PROCEDURAL_FALLBACK';
+  item.userData.visualAsset='PROCEDURAL_FALLBACK_V40';
   parent.add(item);
  };
  jcChangiSync3DGround();
@@ -6454,7 +6458,7 @@ function jcSingaporeApproachScenery(addBox,putSphere,group,worldAt,factorX,facto
  // Additional thin cloud deck at high altitude, leaving a clear hole directly
  // ahead of the runway. Use no animations / network requests / texture fetches.
  group.userData.jcSingaporeWaterTexture=water.map||null;
- group.userData.jcSingaporeVisual={version:'v33',source:'PROCEDURAL SCENERY · VIDEO-INSPIRED',
+ group.userData.jcSingaporeVisual={version:'v40',source:'PROCEDURAL SCENERY · VIDEO-INSPIRED',
   mobile,cloudBanks:maxClouds,cloudPuffs,trees,shipCount:ships,urbanBuildings:towerCount,
   boxes,coastline:true,night,landmarks:['Marina Bay-inspired skyline','Singapore Flyer-inspired outline']};
 }
@@ -6562,7 +6566,7 @@ function jetTrafficParallelMake(){
   jetTraffic.changiGateLayer=null;jetTraffic.changiGateFactory=null;
  }
 }
-window.__jcChangiStartupStatus=()=>({version:'v33',error:jetTraffic.changiLastBuildError||null,
+window.__jcChangiStartupStatus=()=>({version:'v40',error:jetTraffic.changiLastBuildError||null,
  retryInMs:Math.max(0,(jetTraffic.changiBuildRetryAt||0)-Date.now()),
  built:!!jetTraffic.parallelGroup,gateModels:jetTraffic.changiGateLayer?.children.length||0,
  bridges:jetTraffic.changiBridgeLayer?.userData.connectedCount||0});
@@ -14263,7 +14267,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v39';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v40';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
