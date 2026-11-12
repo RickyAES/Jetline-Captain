@@ -6005,9 +6005,9 @@ function jcScoot3DSTexture(mode){
   x.fillStyle='#fffefa';x.fillText('scoot',512,130,940);
  }else{
   x.textAlign='center';x.textBaseline='middle';x.font='italic 900 132px Arial,sans-serif';
-  x.lineJoin='round';x.lineWidth=12;x.strokeStyle='#3a3a37';
+  x.lineJoin='round';x.lineWidth=5;x.strokeStyle='#fff8dc';
   x.strokeText('flyscoot.com',512,134,930);
-  x.fillStyle='#fcfcfa';x.fillText('flyscoot.com',512,134,930);
+  x.fillStyle='#20252b';x.fillText('flyscoot.com',512,134,930);
  }
  const texture=new li(c);texture.colorSpace='srgb';texture.anisotropy=2;
  jcScoot3DSCache[key]=texture;return texture;
@@ -6075,54 +6075,164 @@ function jcScootCarrierCode(record){
  if(/^TR\d/.test(call)||/^TGW\d/.test(call))return 'TR';
  return '';
 }
+// V44 clean rebuild: the uploaded 3DS supplied the B787 proportions, but the
+// original exploded overlapping triangles caused visible mesh-fighting at WSSS.
+// Smooth manifold surfaces are cached once and reused across parked aircraft.
+const jcScootV44Cache={geos:new Map(),mats:null};
+function jcScootV44Surface(vertices,faces){
+ const g=new nn();g.setAttribute('position',new Ze(new Float32Array(vertices),3));
+ g.setIndex(new Ze(new Uint16Array(faces),1));g.computeVertexNormals();
+ g.computeBoundingSphere();g.userData.jcSharedImportedModel=true;return g;
+}
+function jcScootV44Fuselage(mobile){
+ const profiles=[[-28.5,.12,.12],[-27.7,.70,.70],[-26.5,1.45,1.54],
+ [-24.8,2.17,2.22],[-22,2.65,2.66],[-18,2.77,2.81],[-10,2.82,2.83],
+ [0,2.82,2.84],[12,2.79,2.82],[18,2.68,2.71],[22,2.13,2.2],
+ [25,1.38,1.46],[27.7,.32,.34],[28.6,.07,.07]];
+ const p=[],f=[],nv=mobile?20:32, cy=6.02;
+ for(let j=0;j<profiles.length;j++){
+  const [x,ry,rz]=profiles[j];
+  for(let k=0;k<nv;k++){
+   const a=2*Math.PI*k/nv;
+   p.push(x,cy+Math.cos(a)*ry,Math.sin(a)*rz);
+  }
+ }
+ for(let j=0;j<profiles.length-1;j++)for(let k=0;k<nv;k++){
+  const a=j*nv+k,b=j*nv+(k+1)%nv,c=(j+1)*nv+k,d=(j+1)*nv+(k+1)%nv;
+  f.push(a,b,c,b,d,c);
+ }
+ const g=jcScootV44Surface(p,f),color=[];
+ for(let j=0;j<profiles.length;j++)for(let k=0;k<nv;k++){
+   const x=profiles[j][0],a=2*Math.PI*k/nv;
+   const nose=Math.max(0,Math.min(1,(-x-24.1)/3.9));
+   // Bright, smooth yellow Scoot nose cap and clean warm white body.
+   const shade=Math.cos(a)<-.05?0.98:1;
+   color.push(Math.round((249*(1-nose)+255*nose)*shade),
+     Math.round((250*(1-nose)+199*nose)*shade),
+     Math.round((248*(1-nose)+39*nose)*shade));
+ }
+ g.setAttribute('color',new Ze(new Uint8Array(color),3,true));return g;
+}
+function jcScootV44Extrude(points,thick,axis){
+ // A single closed, stable surface for swept wings, horizontal stabilisers
+ // and tail fin. No overlapping imported triangle shells or z-fighting.
+ const n=points.length,p=[],f=[];
+ for(const q of points)p.push(...q);
+ for(const q of points)p.push(q[0]+(axis==='x'?thick:0),q[1]+(axis==='y'?thick:0),q[2]+(axis==='z'?thick:0));
+ for(let i=1;i<n-1;i++){f.push(0,i,i+1);f.push(n,n+i+1,n+i);}
+ for(let i=0;i<n;i++){
+  const j=(i+1)%n;f.push(i,j,n+i,j,n+j,n+i);
+ }
+ return jcScootV44Surface(p,f);
+}
+function jcScootV44Nacelle(mobile){
+ const rings=[[-3.8,1.42],[-3.45,1.90],[-2.5,2.04],[0.0,1.97],[2.2,1.72],[3.6,1.38],[3.9,1.0]];
+ const n=mobile?18:28,p=[],f=[];
+ for(const [x,r] of rings){for(let k=0;k<n;k++){
+  let a=2*Math.PI*k/n;p.push(x,Math.cos(a)*r,Math.sin(a)*r);
+ }}
+ for(let i=0;i<rings.length-1;i++)for(let k=0;k<n;k++){
+  const a=i*n+k,b=i*n+(k+1)%n,c=(i+1)*n+k,d=(i+1)*n+(k+1)%n;
+  f.push(a,b,c,b,d,c);
+ }
+ return jcScootV44Surface(p,f);
+}
+function jcScootV44Geometries(mobile){
+ const key=mobile?'mobile':'desktop';if(jcScootV44Cache.geos.has(key))return jcScootV44Cache.geos.get(key);
+ const wing=s=>jcScootV44Extrude([
+  [-5.5,5.55,s*2.15],[2.4,5.96,s*13.1],[11.5,7.01,s*25.0],
+  [14.1,7.75,s*28.4],[15.3,7.58,s*28.5],[13.4,6.99,s*24.8],
+  [11.7,5.97,s*13.1],[12.1,5.5,s*2.15]],.31,'y');
+ const stabilizer=s=>jcScootV44Extrude([
+  [19.4,7.10,s*.90],[24.4,7.32,s*7.4],[27.2,7.42,s*9.4],
+  [28.1,7.37,s*9.2],[27.4,7.12,s*6.8],[26.0,7.06,s*.95]],.20,'y');
+ const geo={body:jcScootV44Fuselage(mobile),wingL:wing(-1),wingR:wing(1),
+  tail:jcScootV44Extrude([[19.6,6.25,0],[21.5,9.2,0],[25.0,15.1,0],
+   [27.1,15.35,0],[27.15,6.26,0]],.48,'z'),
+  rudder:jcScootV44Extrude([[25.95,7.35,.26],[26.75,14.4,.26],
+   [27.14,14.2,.26],[27.14,7.3,.26]],.015,'z'),
+  stabL:stabilizer(-1),stabR:stabilizer(1),engine:jcScootV44Nacelle(mobile)};
+ jcScootV44Cache.geos.set(key,geo);return geo;
+}
+function jcScootV44Materials(){
+ if(jcScootV44Cache.mats)return jcScootV44Cache.mats;
+ const material=(color,extras={})=>new Xt(Object.assign({color,roughness:.68,metalness:.12,side:2},extras));
+ const m={
+  body:material(0xffffff,{vertexColors:true}),wing:material(0xf6f7f4),
+  tail:material(0xffc425),rudder:material(0xf2b31a),engine:material(0xf2f4f5),
+  inlet:material(0x1d2833,{metalness:.30}),fan:material(0x777f89,{metalness:.55}),
+  pylon:material(0xe9e9e4),wheel:material(0x111923),gear:material(0x909ca8),
+  window:new be({color:0x193a52,side:2}),
+  title:new be({map:jcScoot3DSTexture('name'),transparent:true,alphaTest:.06,depthWrite:false,side:2,toneMapped:false}),
+  logo:new be({map:jcScoot3DSTexture('tail'),transparent:true,alphaTest:.06,depthWrite:false,side:2,toneMapped:false})
+ };
+ for(const v of Object.values(m))v.userData.jcSharedImportedModel=true;
+ jcScootV44Cache.mats=m;return m;
+}
 function jcScoot3DSAttach(parent,record,side=1,yaw=0,isMobile=false){
  if(jcScootCarrierCode(record)!=='TR')return null;
- const lod=isMobile?'mobile':'desktop';
- const required=['fuselage','wing_left','wing_right','tail_fin','engine_left','engine_right','stab_left','stab_right'];
- const meshes=required.map(key=>jcScoot3DSGeometry(lod,key));
- if(meshes.some(v=>!v))return null;
- const m=jcScoot3DSMaterials(),root=new me();
- root.name='JC_SCOOT_UPLOADED_B787_3DS_V43';root.rotation.y=yaw;root.scale.x=side;
- root.userData={source:'USER_UPLOADED_SCOOT_3DS',airline:'Scoot',flight:String(record?.flight||record?.callsign||''),
-  type:jcScoot3DSAirframe(record),visualType:'B787 (uploaded mesh)',
+ const g=jcScootV44Geometries(isMobile),m=jcScootV44Materials();
+ if(!g?.body)return null;
+ const root=new me();root.name='JC_SCOOT_SMOOTH_B787_3D_V44';
+ root.rotation.y=yaw;root.scale.x=side;
+ root.userData={source:'SCOOT_CLEAN_3D_FROM_USER_3DS_PROPORTIONS',airline:'Scoot',
+  flight:String(record?.flight||record?.callsign||''),
+  type:jcScoot3DSAirframe(record),visualType:'B787 (smooth rebuilt game mesh)',
   confirmedParked:record?.confirmedParked===true};
- const add=(geo,mat,name)=>{const mesh=new Tt(geo,mat);mesh.name=name;mesh.frustumCulled=false;root.add(mesh);return mesh;};
- required.forEach((name,i)=>{
-  const mat=name==='fuselage'?m.fuselage:name.startsWith('wing')||name.startsWith('stab')?m.wings:
-   name==='tail_fin'?m.fin:m.engine;
-  add(meshes[i],mat,'SCOOT_3DS_'+name.toUpperCase());
- });
- // Visible 3D pylons connect each real uploaded nacelle to its actual wing.
- for(const z of [-8,8]){
-  const connector=add(new Ae(2.6,1.3,.82),m.pylon,'SCOOT_CONNECTED_ENGINE_PYLON');
-  connector.position.set(-.2,4.91,z);connector.rotation.z=-.08;
+ const add=(geo,mat,name,x=0,y=0,z=0)=>{
+  const mesh=new Tt(geo,mat);mesh.name=name;mesh.position.set(x,y,z);
+  mesh.frustumCulled=false;root.add(mesh);return mesh;
+ };
+ add(g.body,m.body,'SCOOT_SMOOTH_WHITE_AND_YELLOW_FUSELAGE');
+ add(g.wingL,m.wing,'SCOOT_SWEPT_WING_LEFT');add(g.wingR,m.wing,'SCOOT_SWEPT_WING_RIGHT');
+ add(g.tail,m.tail,'SCOOT_YELLOW_VERTICAL_TAIL');
+ add(g.rudder,m.rudder,'SCOOT_TAIL_RUDDER');
+ add(g.stabL,m.wing,'SCOOT_LEFT_HORIZONTAL_STABILISER');
+ add(g.stabR,m.wing,'SCOOT_RIGHT_HORIZONTAL_STABILISER');
+ const pylGeom=new Ae(3.2,1.65,.77);
+ const intakeGeom=new an(1.65,1.65,.16,isMobile?14:24);intakeGeom.rotateZ(Math.PI/2);
+ const fanGeom=new an(.78,.78,.22,isMobile?14:24);fanGeom.rotateZ(Math.PI/2);
+ for(const sign of [-1,1]){
+  const z=sign*9.3;
+  add(g.engine,m.engine,'SCOOT_ENGINE_NACELLE_'+sign,0,3.40,z);
+  add(pylGeom,m.pylon,'SCOOT_CONNECTED_WING_PYLON_'+sign,.10,5.02,z);
+  add(intakeGeom,m.inlet,'SCOOT_ENGINE_INTAKE_'+sign,-3.81,3.40,z);
+  add(fanGeom,m.fan,'SCOOT_TURBOFAN_'+sign,-3.95,3.40,z);
  }
- // Transparent branding, no blocky AIR label and no extra airline title.
+ // Fuselage website wordmark, cabin windows and cockpit glazing are decals,
+ // with transparent backgrounds: no grey/pixelated large overlay planes.
  for(const facing of [-1,1]){
-  const sign=add(new Ge(12.7,1.75),m.name,'SCOOT_FUSELAGE_FLYSCOOT');
-  sign.position.set(-13.1,6.65,facing*2.82);sign.rotation.y=facing===1?0:Math.PI;
-  sign.renderOrder=6;
-  const tail=add(new Ge(5.25,1.65),m.tailWord,'SCOOT_YELLOW_TAIL_WORD');
-  tail.position.set(24.65,10.8,facing*.48);tail.rotation.y=facing===1?0:Math.PI;
-  tail.renderOrder=8;
+  const title=add(new Ge(17.5,1.43),m.title,'SCOOT_FUSELAGE_WORDMARK_'+facing,-13.2,6.55,facing*2.86);
+  title.rotation.y=facing===1?0:Math.PI;title.renderOrder=4;
+  const logo=add(new Ge(5.1,1.95),m.logo,'SCOOT_YELLOW_FIN_LOGO_'+facing,24.85,11.35,facing===1?.56:-.08);
+  logo.rotation.y=facing===1?0:Math.PI;logo.renderOrder=5;
+  for(let i=0;i<29;i++){
+   // Small meshes for window rows, with count reduced on mobile.
+   if(isMobile&&i%2)continue;
+   const px=-18.8+i*1.37;
+   const dot=add(new Nn(.12,isMobile?6:8,6),m.window,'SCOOT_CABIN_WINDOW',px,7.16,facing*2.78);
+   dot.scale.set(1,.57,.18);
+  }
+  const cockpit=add(new Ae(2.3,.70,.07),m.window,'SCOOT_COCKPIT_GLAZING',-23.0,7.55,facing*2.30);
+  cockpit.rotation.y=facing===1?0:Math.PI;
  }
  if(record?.gate||record?.confirmedParked||record?.onGround){
-  const strut=new Ae(.25,2.6,.25),wheel=new an(.52,.52,.38,10);
-  wheel.rotateX(Math.PI/2);
-  const gear=(x,z,label)=>{
-   const leg=add(strut,m.landingGear,label+'_LEG');leg.position.set(x,1.5,z);
-   const tire=add(wheel,m.wheel,label+'_WHEEL');tire.position.set(x,.54,z);
+  const tire=new an(.54,.54,.4,12);tire.rotateX(Math.PI/2);
+  const leg=new Ae(.25,2.35,.25);
+  const gear=(x,z,name)=>{
+    add(leg,m.gear,name+'_STRUT',x,1.44,z);
+    add(tire,m.wheel,name+'_WHEEL',x,.55,z);
   };
-  gear(-20,0,'SCOOT_NOSE_GEAR');gear(5,-2.5,'SCOOT_MAIN_GEAR_L');gear(5,2.5,'SCOOT_MAIN_GEAR_R');
+  gear(-20,0,'SCOOT_NOSE_GEAR');gear(5,-3.0,'SCOOT_MAIN_GEAR_L');gear(5,3.0,'SCOOT_MAIN_GEAR_R');
  }
  parent.add(root);return root;
 }
 window.__jcScoot3DSStatus=()=>({
- source:'User uploaded 3d-model.3ds 2.zip',operator:'TR / TGW',
- mesh:'reassembled Boeing 787 with two connected engines, yellow Scoot fin',
- loadedParts:jcScoot3DSCache.geo.size,
- placed:(jetTraffic.changiGateLayer?.children||[]).filter(p=>p.userData?.visualAsset==='SCOOT_3DS_V43').length,
- note:'Observed gate assignments from connected feed, not independently verified parking; other reported Scoot types use 787 visual approximation.'
+ source:'User uploaded Scoot 3DS proportions · rebuilt for clean rendering',operator:'TR / TGW',
+ mesh:'Smooth B787 airframe, 2 connected underwing engines, yellow Scoot tail',
+ loadedParts:jcScootV44Cache.geos.size,
+ placed:(jetTraffic.changiGateLayer?.children||[]).filter(p=>p.userData?.visualAsset==='SCOOT_3D_V44').length,
+ note:'Reported gate assignments are simulated aircraft positions; other Scoot types still use the B787 visual.'
 });
 
 function jcChangiInstallGateFleet(group,worldAt,rot,factorX,factorZ){
@@ -6363,7 +6473,7 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
  const imported=!scoot&&livery.code==='SQ'
   ?jcUser3DSAttach(item,flight,livery,side,rot,window.innerWidth<700,true):null;
  if(!scoot&&!imported)jcAssembleAirliner(add,livery,side,stand.gate);
- item.userData.visualAsset=scoot?'SCOOT_3DS_V43':imported?'USER_3DS_SQ':'PROCEDURAL_OTHER';
+ item.userData.visualAsset=scoot?'SCOOT_3D_V44':imported?'USER_3DS_SQ':'PROCEDURAL_OTHER';
  parent.add(item);
 };
  jcChangiSync3DGates();
@@ -6389,7 +6499,7 @@ jetTraffic.changiGateFactory=(parent,stand,flight)=>{
    ?jcUser3DSAttach(item,contact,livery,side,rot,true,true):null;
   if(!scoot&&!imported)jcAssembleAirliner(add,livery,side,contact.hex);
   item.scale.set(.74,.74,.74);
-  item.userData.visualAsset=scoot?'SCOOT_3DS_V43':imported?'USER_3DS_SQ':'PROCEDURAL_OTHER';
+  item.userData.visualAsset=scoot?'SCOOT_3D_V44':imported?'USER_3DS_SQ':'PROCEDURAL_OTHER';
   parent.add(item);
  };
  jcChangiSync3DGround();
@@ -14453,7 +14563,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v43';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v44';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
