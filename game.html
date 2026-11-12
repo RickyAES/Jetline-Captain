@@ -6408,13 +6408,15 @@ const shapes={body:new Ae(6.2*factorX,3.8,34*factorZ),
   noseMesh.scale.set(5.2*factorX,2.85,3.12*factorZ);
   add(side*15.4,0,parkedShape.tailCone,livery.body,5.65,'TAIL_CONE');
   for(const wingSide of [-1,1]){
-   add(side*1.0,wingSide*7.3,parkedShape.wingInner,livery.body,5.36,'INNER_WING');
-   add(side*5.5,wingSide*16.0,parkedShape.wingOuter,livery.body,5.33,'OUTER_WING');
-   add(side*7.8,wingSide*20.3,parkedShape.winglet,livery.tail,6.8,'WINGLET');
-   add(side*4.2,wingSide*8.7,parkedShape.pylon,livery.gear,4.65,'ENGINE_PYLON');
-   add(side*3.4,wingSide*9.8,parkedShape.engine,livery.engine,3.8,'NACELLE');
-   add(-side*.7,wingSide*9.8,parkedShape.inlet,livery.window,3.8,'ENGINE_INLET');
-   add(side*7.15,wingSide*9.8,parkedShape.exhaust,livery.window,3.8,'ENGINE_EXHAUST');
+   // Move the wing box closer to the fuselage mid-point so it sits centrally,
+   // not too far aft. Keep the engines attached beneath the wing root.
+   add(-side*1.25,wingSide*7.3,parkedShape.wingInner,livery.body,5.36,'INNER_WING');
+   add(side*2.9,wingSide*16.0,parkedShape.wingOuter,livery.body,5.33,'OUTER_WING');
+   add(side*5.4,wingSide*20.1,parkedShape.winglet,livery.tail,6.8,'WINGLET');
+   add(side*1.15,wingSide*8.7,parkedShape.pylon,livery.gear,4.65,'ENGINE_PYLON');
+   add(side*.4,wingSide*9.8,parkedShape.engine,livery.engine,3.8,'NACELLE');
+   add(-side*2.6,wingSide*9.8,parkedShape.inlet,livery.window,3.8,'ENGINE_INLET');
+   add(side*4.1,wingSide*9.8,parkedShape.exhaust,livery.window,3.8,'ENGINE_EXHAUST');
    add(-side*1.05,wingSide*3.0,parkedShape.stripe,livery.stripe,6.06,'FUSELAGE_CHEATLINE');
    const accent=add(-side*1.12,wingSide*2.48,parkedShape.stripe,livery.stripe2,6.62,'FUSELAGE_ACCENT');
    accent.scale.set(1,.56,1);
@@ -6423,16 +6425,18 @@ const shapes={body:new Ae(6.2*factorX,3.8,34*factorZ),
   add(side*15.0,0,parkedShape.fin,livery.tail,11.1,'TRIANGULAR_FIN');
   for(const finSide of [-1,1]){
    const tailLogo=add(side*15.28,finSide*1.05,new Ge(5.4,4.9),livery.logo,10.92,'TAIL_LOGO');
-   tailLogo.rotation.y=rot+(finSide<0?Math.PI:0);
+   // Keep the outward-facing side of each decal readable when the parked
+   // aircraft nose points either east or west.
+   tailLogo.rotation.y=rot+((side*finSide<0)?Math.PI:0);
    tailLogo.position.x+=side*.18;tailLogo.position.z+=finSide*.08;
    tailLogo.renderOrder=8;tailLogo.frustumCulled=false;
   }
   add(-side*15.0,0,parkedShape.cockpit,livery.window,6.95,'COCKPIT_WINDOWS');
   for(const wingSide of [-1,1]){
    const win=add(-side*1.2,wingSide*3.12,new Ge(24.5*factorX,.82),livery.cabinWindows,6.34,'CABIN_WINDOWS');
-   win.rotation.y=rot+(wingSide<0?Math.PI:0);win.position.z+=wingSide*.06;
+   win.rotation.y=rot+((side*wingSide<0)?Math.PI:0);win.position.z+=wingSide*.06;
    const titles=add(-side*1.1,wingSide*2.22,new Ge(20.2*factorX,1.3),livery.titles,5.72,'FUSELAGE_TITLE');
-   titles.rotation.y=rot+(wingSide<0?Math.PI:0);titles.position.z+=wingSide*.07;
+   titles.rotation.y=rot+((side*wingSide<0)?Math.PI:0);titles.position.z+=wingSide*.07;
    add(-side*10.8,wingSide*3.1,parkedShape.door,livery.window,6.4,'PASSENGER_DOOR_FRONT');
    add(side*11.8,wingSide*3.1,parkedShape.door,livery.window,6.3,'PASSENGER_DOOR_REAR');
   }
