@@ -5386,7 +5386,7 @@ window.__jcChangiGateRegistry=jcChangiGateRegistry;
 // Convert that actual model-space position through the same yaw applied to
 // the parked airframe. No independent guessed bridge door coordinates.
 function jcChangiDockGeometry(stand,worldAt){
- const base=worldAt(stand.x,stand.z);
+ const base0=worldAt(stand.x,stand.z);
  const side=stand.face==='W'?-1:1;
  const nx=Number.isFinite(stand.nx)?stand.nx:side;
  const nz=Number.isFinite(stand.nz)?stand.nz:0;
@@ -5394,8 +5394,8 @@ function jcChangiDockGeometry(stand,worldAt){
  // Always aim the actual nose into the terminal facade, NEVER to the apron.
  const unturned=worldAt(stand.x-side*16.4,stand.z);
  const wallWorld=worldAt(stand.wallX??stand.x-nx*38,stand.wallZ??stand.z-nz*38);
- const source=[unturned[0]-base[0],unturned[1]-base[1]];
- const desired=[wallWorld[0]-base[0],wallWorld[1]-base[1]];
+ const source=[unturned[0]-base0[0],unturned[1]-base0[1]];
+ const desired=[wallWorld[0]-base0[0],wallWorld[1]-base0[1]];
  const dot=source[0]*desired[0]+source[1]*desired[1];
  // Three.js Y-positive rotation: (x,z)->(cos*x+sin*z,-sin*x+cos*z).
  const det=source[1]*desired[0]-source[0]*desired[1];
@@ -5403,17 +5403,31 @@ function jcChangiDockGeometry(stand,worldAt){
  const dockYaw=Math.atan2(-desired[0],-desired[1]);
  const place=(dx,dz)=>{
   const point=worldAt(stand.x+dx,stand.z+dz);
-  const a=point[0]-base[0],b=point[1]-base[1],c=Math.cos(dockRotation),si=Math.sin(dockRotation);
-  return [base[0]+c*a+si*b,base[1]-si*a+c*b];
+  const a=point[0]-base0[0],b=point[1]-base0[1],c=Math.cos(dockRotation),si=Math.sin(dockRotation);
+  return [base0[0]+c*a+si*b,base0[1]-si*a+c*b];
  };
- const noseWorld=place(-side*16.4,0);
- const doorWorld=place(-side*10.8,3.12);
- const tailWorld=place(side*15.4,0);
- const towardWall=[wallWorld[0]-base[0],wallWorld[1]-base[1]];
+ let noseWorld=place(-side*16.4,0);
+ let doorWorld=place(-side*10.8,3.12);
+ let tailWorld=place(side*15.4,0);
+ const towardWall=[wallWorld[0]-base0[0],wallWorld[1]-base0[1]];
+ const towardLen=Math.hypot(towardWall[0],towardWall[1])||1;
+ const towardUnit=[towardWall[0]/towardLen,towardWall[1]/towardLen];
+ const currentNoseClearance=(wallWorld[0]-noseWorld[0])*towardUnit[0]+(wallWorld[1]-noseWorld[1])*towardUnit[1];
+ const desiredNoseClearance=Math.max(5.8,Math.min(8.8,Number(stand.noseClearance)||7.2));
+ const dockAdvance=Math.max(0,Math.min(16.5,currentNoseClearance-desiredNoseClearance));
+ const shift=[towardUnit[0]*dockAdvance,towardUnit[1]*dockAdvance];
+ const base=[base0[0]+shift[0],base0[1]+shift[1]];
+ if(dockAdvance>0){
+  noseWorld=[noseWorld[0]+shift[0],noseWorld[1]+shift[1]];
+  doorWorld=[doorWorld[0]+shift[0],doorWorld[1]+shift[1]];
+  tailWorld=[tailWorld[0]+shift[0],tailWorld[1]+shift[1]];
+ }
  const dotNose=(noseWorld[0]-base[0])*towardWall[0]+(noseWorld[1]-base[1])*towardWall[1];
  const dotTail=(tailWorld[0]-base[0])*towardWall[0]+(tailWorld[1]-base[1])*towardWall[1];
+ const modelNoseBase=[unturned[0]+shift[0],unturned[1]+shift[1]];
  return {base,side,nx,nz,dockYaw,dockRotation,noseWorld,doorWorld,tailWorld,
-  noseTowardTerminal:dotNose>0&&dotTail<0,wallWorld,modelNoseBase:unturned};
+  noseTowardTerminal:dotNose>0&&dotTail<0,wallWorld,modelNoseBase,
+  desiredNoseClearance,dockAdvance};
 }
 window.__jcChangiDockPoseQA=(gate)=>{
  const stand=jcChangiGateLookup.get(String(gate||'A1').toUpperCase());
@@ -8749,29 +8763,40 @@ function jetTrafficSmoothMotion(entry,target,a,dt,now){
  const age=Math.max(0,(now-jetTraffic.liveAt)/1000+Math.max(0,Number(a.seenPos)||0));
  const moving=!(a.onGround&&a.speedKt<3);
  const worldScale=jetTrafficActiveAirport()==='WSSS'?.60:.35;
- const speed=moving?Math.min(130,Math.max(0,Number(target.speedKt??a.speedKt)||0)*.514444*worldScale):0;
+ const fallbackSpeed=moving?Math.min(130,Math.max(0,Number(target.speedKt??a.speedKt)||0)*.514444*worldScale):0;
  const stage=String(target.stage||'').toUpperCase();
  const airborne=!!target.airborne;
  const critical=airborne&&(stage.includes('APPROACH')||stage.includes('FINAL')||stage.includes('FLARE')||stage.includes('ROLLOUT')||stage.includes('DEPART')||stage.includes('TAKEOFF'));
  const coastStart=a.onGround?5:(critical?11:9),coastEnd=a.onGround?11:(critical?20:17);
  const coast=age<=coastStart?1:age>=coastEnd?0:
   Math.pow((coastEnd-age)/(coastEnd-coastStart),2)*(3-2*(coastEnd-age)/(coastEnd-coastStart));
- const velocityBlend=1-Math.exp(-step*(critical?3.2:2.3));
- const desiredX=-Math.sin(target.yaw)*speed*coast;
- const desiredZ=-Math.cos(target.yaw)*speed*coast;
+ const prev=entry.prevTarget&&Number.isFinite(entry.prevTarget.x)&&Number.isFinite(entry.prevTarget.z)?entry.prevTarget:null;
+ const sampleDt=Math.max(.04,Math.min(8,prev?((now-prev.at)/1000||step):step));
+ const dx=prev?target.x-prev.x:0,dz=prev?target.z-prev.z:0;
+ const measuredDist=Math.hypot(dx,dz);
+ const measuredYaw=measuredDist>.25?Math.atan2(-dx,-dz):target.yaw;
+ const measuredSpeed=measuredDist/sampleDt;
+ const pathYaw=measuredDist>.15?measuredYaw:target.yaw;
+ // Use actual target-to-target movement first, then fall back to reported speed.
+ // This keeps sky aircraft moving from FAR to NEAR in the same direction as the radar.
+ const pathSpeed=moving?Math.max(fallbackSpeed*.55,Math.min(145,measuredSpeed*(critical?1.14:1.06),Math.max(fallbackSpeed*1.35,measuredSpeed*1.25))):0;
+ const speed=pathSpeed*coast;
+ const velocityBlend=1-Math.exp(-step*(critical?3.3:2.35));
+ const desiredX=-Math.sin(pathYaw)*speed;
+ const desiredZ=-Math.cos(pathYaw)*speed;
  entry.vx=(Number(entry.vx)||0)+(desiredX-(Number(entry.vx)||0))*velocityBlend;
  entry.vz=(Number(entry.vz)||0)+(desiredZ-(Number(entry.vz)||0))*velocityBlend;
  entry.x+=entry.vx*step;entry.z+=entry.vz*step;
  // Predict slightly forward along the current track so scenery motion keeps up
  // with the radar feed instead of lagging behind it in the sky view.
- const leadSeconds=critical?1.8:(airborne?1.15:.35);
+ const leadSeconds=critical?1.45:(airborne?1.0:.30);
  const targetX=target.x+desiredX*leadSeconds;
  const targetZ=target.z+desiredZ*leadSeconds;
  const errorX=targetX-entry.x,errorZ=targetZ-entry.z;
- const gain=1-Math.exp(-step*(critical?2.1:1.35));
+ const gain=1-Math.exp(-step*(critical?2.3:1.45));
  let correctionX=errorX*gain,correctionZ=errorZ*gain;
  const magnitude=Math.hypot(correctionX,correctionZ);
- const correctionLimit=(Math.max(6,speed*(critical?1.6:1.2))+14)*step;
+ const correctionLimit=(Math.max(6,speed*(critical?1.7:1.25))+14)*step;
  if(magnitude>correctionLimit){const ratio=correctionLimit/magnitude;correctionX*=ratio;correctionZ*=ratio;}
  entry.x+=correctionX;entry.z+=correctionZ;
  // ADS-B fixes sometimes arrive behind their predicted positions. Let the
@@ -8789,8 +8814,16 @@ function jetTrafficSmoothMotion(entry,target,a,dt,now){
  const vrMps=(Number(target.verticalRate)||0)*0.00508;
  const targetY=Math.max(.08,target.y+Math.max(-18,Math.min(18,vrMps*(critical?1.6:.8))));
  entry.y+=(targetY-entry.y)*(1-Math.exp(-step*(a.onGround?4.0:(critical?3.1:2.1))));
- const difference=((target.yaw-entry.yaw+Math.PI*3)%(Math.PI*2))-Math.PI;
- entry.yaw+=difference*(1-Math.exp(-step*(critical?3.9:2.4)));
+ const desiredYaw=measuredDist>.15?measuredYaw:target.yaw;
+ const difference=((desiredYaw-entry.yaw+Math.PI*3)%(Math.PI*2))-Math.PI;
+ entry.yaw+=difference*(1-Math.exp(-step*(critical?4.2:2.7)));
+ const lastYaw=Number.isFinite(entry.lastYawForBank)?entry.lastYawForBank:entry.yaw;
+ const yawStep=((desiredYaw-lastYaw+Math.PI*3)%(Math.PI*2))-Math.PI;
+ const yawRate=yawStep/Math.max(.016,step);
+ const bankTarget=airborne?Math.max(-.42,Math.min(.42,yawRate*(critical ? .28 : .16))):0;
+ entry.bank=(Number(entry.bank)||0)+(bankTarget-(Number(entry.bank)||0))*(1-Math.exp(-step*3.4));
+ entry.lastYawForBank=desiredYaw;
+ entry.prevTarget={x:target.x,y:target.y,z:target.z,at:now,yaw:desiredYaw};
  if(target.stage==='ROLLOUT EST'&&target.runwayBase&&jetChangiRunways[target.runwayBase]){
   const lane=jetChangiRunways[target.runwayBase];
   const loc=jetTrafficActiveAirport()==='WSSS'&&['taxi','takeoff'].includes(E.phase)?
@@ -8895,8 +8928,11 @@ function jetTrafficDrawLiveContacts(dt){
    jetTrafficDispose(entry.group);jetTraffic.liveModels.delete(a.id);entry=null;
   }
   if(!entry){
-   const group=jetTrafficBuildLivePlane(a);group.position.set(target.x,target.y,target.z);group.rotation.y=target.yaw;
-   entry={group,x:target.x,y:target.y,z:target.z,yaw:target.yaw,vx:0,vz:0};jetTraffic.liveModels.set(a.id,entry);
+   const group=jetTrafficBuildLivePlane(a);group.position.set(target.x,target.y,target.z);
+   group.rotation.order='YXZ';group.rotation.set(0,target.yaw,0);
+   entry={group,x:target.x,y:target.y,z:target.z,yaw:target.yaw,vx:0,vz:0,bank:0,
+    prevTarget:{x:target.x,y:target.y,z:target.z,at:now,yaw:target.yaw}};
+   jetTraffic.liveModels.set(a.id,entry);
   }
   if(target.localLanding){
    // Every frame uses a deterministic local runway trajectory, not a new
@@ -8904,7 +8940,8 @@ function jetTrafficDrawLiveContacts(dt){
    entry.x=target.x;entry.z=target.z;entry.y=target.y;
    entry.yaw=target.yaw;entry.vx=0;entry.vz=0;
   }else jetTrafficSmoothMotion(entry,target,a,dt,now);
-  entry.group.position.set(entry.x,entry.y,entry.z);entry.group.rotation.y=entry.yaw;
+  entry.group.position.set(entry.x,entry.y,entry.z);
+  entry.group.rotation.order='YXZ';entry.group.rotation.set(0,entry.yaw,entry.bank||0);
   entry.group.userData.callsign=jetTrafficCallsign(a);
   entry.group.userData.onGround=a.onGround;
   entry.group.userData.reportedSpeedKt=a.speedKt;
