@@ -5299,19 +5299,19 @@ const jcChangiGateRegistry=(()=>{
 // now aligned closer to the supplied Changi overview charts.
 const jcChangiCampusV18={
  halls:[
-  {label:'TERMINAL 3',terminal:'T3',x:-283,z:-2480,w:100,d:228},
-  {label:'TERMINAL 1',terminal:'T1',x:-216,z:-2295,w:104,d:282},
-  {label:'TERMINAL 2',terminal:'T2',x:-269,z:-1648,w:116,d:240},
-  {label:'TERMINAL 4',terminal:'T4',x:-116,z:-860,w:74,d:232}
+  {label:'TERMINAL 3',terminal:'T3',x:-300,z:-2470,w:110,d:236},
+  {label:'TERMINAL 1',terminal:'T1',x:-190,z:-2310,w:112,d:294},
+  {label:'TERMINAL 2',terminal:'T2',x:-255,z:-1670,w:124,d:252},
+  {label:'TERMINAL 4',terminal:'T4',x:-110,z:-865,w:84,d:238}
  ],
  piers:[
-  {label:'A · T3',terminal:'T3',x:-345,z:-2680,w:35,d:670},
-  {label:'B · T3',terminal:'T3',x:-255,z:-2510,w:34,d:340},
-  {label:'C · T1',terminal:'T1',x:-210,z:-2935,w:34,d:640},
-  {label:'D · T1',terminal:'T1',x:-195,z:-2375,w:33,d:610},
-  {label:'E · T2',terminal:'T2',x:-220,z:-1760,w:34,d:660},
-  {label:'F · T2',terminal:'T2',x:-345,z:-1815,w:35,d:730},
-  {label:'G · T4',terminal:'T4',x:-190,z:-880,w:32,d:505}
+  {label:'A · T3',terminal:'T3',x:-360,z:-2675,w:38,d:690},
+  {label:'B · T3',terminal:'T3',x:-258,z:-2510,w:36,d:352},
+  {label:'C · T1',terminal:'T1',x:-165,z:-2935,w:36,d:650},
+  {label:'D · T1',terminal:'T1',x:-150,z:-2380,w:35,d:620},
+  {label:'E · T2',terminal:'T2',x:-178,z:-1770,w:36,d:670},
+  {label:'F · T2',terminal:'T2',x:-350,z:-1825,w:38,d:740},
+  {label:'G · T4',terminal:'T4',x:-165,z:-882,w:34,d:520}
  ],
  connectors:[
   {label:'T3 A LINK',terminal:'T3',x:-323,z:-2498,w:76,d:41},
@@ -5323,8 +5323,8 @@ const jcChangiCampusV18={
   {label:'T2 F/E LINK',terminal:'T2',x:-282,z:-1666,w:170,d:42},
   {label:'T4 G LINK',terminal:'T4',x:-162,z:-870,w:55,d:41}
  ],
- jewel:{label:'JEWEL · T1',x:-232,z:-2210,r:28},
- greenLink:{label:'JEWEL–T1 LINK',x:-207,z:-2235,w:34,d:14},
+ jewel:{label:'JEWEL · T1',x:-215,z:-2220,r:30},
+ greenLink:{label:'JEWEL–T1 LINK',x:-190,z:-2240,w:38,d:16},
  aprons:[{x:-240,z:-2225,w:448,d:2270},
   {x:-110,z:-860,w:182,d:650}]
 };
@@ -5335,11 +5335,16 @@ const jcChangiCampusV18={
 for(const stand of jcChangiGateRegistry){
  const pier=jcChangiCampusV18.piers.find(p=>p.label[0]===stand.gate[0]);
  if(!pier)continue;
+ // v54: reverse the usable apron face so parked aircraft, bridges and
+ // stand labels sit on the terminal-facing side seen from the taxi camera.
+ // The previous build mirrored the stands and made aircraft appear to face
+ // the runway instead of the terminal glass / hold-room frontage.
+ stand.face=stand.face==='W'?'E':'W';
  const side=stand.face==='W'?-1:1;
- stand.x=pier.x+side*(pier.w/2+38);
+ stand.x=pier.x+side*(pier.w/2+42);
  // Prevent a model from colliding with the main west or east runway pavement.
- const westLimit=jetChangiRunways['02L'].x+90;
- const eastLimit=jetChangiRunways['02C'].x-94;
+ const westLimit=jetChangiRunways['02L'].x+94;
+ const eastLimit=jetChangiRunways['02C'].x-98;
  stand.x=Math.max(westLimit,Math.min(eastLimit,stand.x));
 }
 window.__jcGateParkingQA=()=>jcChangiGateRegistry.map(g=>{
@@ -5727,10 +5732,10 @@ function jcChangiBuildPassengerBridge(stand,worldAt,factorX){
  group.userData={gate:stand.gate,terminal:stand.terminal,connected:true,
   source:'SIMULATED_GATE_SCENERY_NOT_LIVE'};
  const side=stand.face==='W'?-1:1,wall=jcGatePierWall(stand);
- const start={x:wall+side*1.5,z:stand.z-7.5};
- // V28: passenger door on the terminal-facing front quarter of the
- // crosswise, nose-in aircraft; jet bridge stops at the fuselage side.
- const door={x:stand.x-side*10.8,z:stand.z-3.6};
+ const start={x:wall+side*1.6,z:stand.z-7.0};
+ // v54: dock slightly closer to the front left passenger door so the
+ // bridge visually meets the aircraft parked nose-in toward the terminal.
+ const door={x:stand.x-side*11.4,z:stand.z-2.9};
  const a=worldAt(start.x,start.z),b=worldAt(door.x,door.z);
  const dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);
  if(!Number.isFinite(len)||len<6||len>125){group.userData.geometryError='INVALID_LENGTH_'+len;return group;}
@@ -5806,7 +5811,7 @@ window.__jcChangiGateSceneryStatus=()=>({
  totalAirframes:jetTraffic.changiGateLayer?.children.length||0,
  observedNearStands:jetTraffic.changiGateLayer?.userData?.observedParkedCount||0,
  examples:(jetTraffic.changiGateLayer?.children||[]).slice(0,8).map(p=>p.userData.gate),
- source:'CHANGI GATES v29 · ROUND FUSELAGE · SWEPT WINGS · DOCKED BRIDGES'
+ source:'CHANGI GATES v30 · TERMINAL-FACING PARKING · GLASS HOLD ROOMS · DOCKED BRIDGES'
 });
 
 
@@ -6565,22 +6570,44 @@ function jetChangiBuildTerminals(addBox,putSphere,group){
  const terminal=new Xt({color:0xc3ced4,roughness:.69,metalness:.12});
  const white=new Xt({color:0xe5ebe8,roughness:.62});
  const roof=new Xt({color:0x768b98,roughness:.75,metalness:.16});
- const glass=new Xt({color:0x2b839d,metalness:.58,roughness:.19,transparent:true,opacity:.81});
+ const glass=new Xt({color:0x72c6d8,metalness:.42,roughness:.12,transparent:true,opacity:.43,depthWrite:false,side:2});
  const darkGlass=new Xt({color:0x244958,metalness:.63,roughness:.22});
  const frames=new be({color:0xa8d7dc});
  const lamps=new be({color:0xffefb2});
  const path=new be({color:0xd7cfa5});
  const link=new Xt({color:0x40a66c,roughness:.84});
+ const interiorFloor=new Xt({color:0xd8d4c6,roughness:.95});
+ const seat=new Xt({color:0x8f443f,roughness:.84});
+ const seatBase=new Xt({color:0x676f78,roughness:.76,metalness:.18});
+ const gateDesk=new Xt({color:0xcfd7db,roughness:.78,metalness:.10});
+ const addHoldRoom=(f)=>{
+  if(f.w<28||f.d<38)return;
+  addBox(f.x,f.z,Math.max(8,f.w-8),Math.max(14,f.d-12),1.25,.18,interiorFloor);
+  const rows=Math.max(2,Math.min(6,Math.floor((f.d-30)/70)+2));
+  for(let i=0;i<rows;i++){
+   const z=f.z-f.d/2+22+i*Math.max(24,(f.d-44)/Math.max(1,rows-1));
+   for(const xOff of [-1,1]){
+    const x=f.x+xOff*Math.max(3,(f.w*.24));
+    addBox(x,z,8.8,2.2,2.05,.72,seat);
+    addBox(x,z-1.05,8.8,.22,1.25,1.48,seatBase);
+   }
+  }
+  addBox(f.x,f.z-f.d/2+9,Math.max(8,Math.min(18,f.w-10)),2.6,2.15,1.1,gateDesk);
+ };
  // Western and central runways flank T1/T2/T3: no building crosses pavement.
  for(const p of cfg.aprons)addBox(p.x,p.z,p.w,p.d,.06,.12,concrete);
  const parts=[...cfg.halls,...cfg.piers,...cfg.connectors];
  for(const f of parts){
   addBox(f.x,f.z,f.w+7,f.d+7,.28,.31,apron);
   addBox(f.x,f.z,f.w,f.d,6.8,12.2,terminal);
+  addHoldRoom(f);
   addBox(f.x,f.z,f.w+3,f.d+3,13.1,1.24,roof);
   for(const edge of [-1,1])addBox(f.x+edge*(f.w/2+.5),f.z,1.2,f.d-6,8.3,6.8,glass);
+  for(const edge of [-1,1])addBox(f.x,f.z+edge*(f.d/2+.5),Math.max(8,f.w-8),1.0,8.1,6.2,glass);
   for(let v=f.z-f.d/2+20;v<f.z+f.d/2-10;v+=48)
    addBox(f.x,v,Math.max(2,f.w-5),1,13.8,.11,frames);
+  for(let h=f.x-f.w/2+12;h<f.x+f.w/2-10;h+=18)
+   addBox(h,f.z,1,f.d-8,13.6,.11,frames);
  }
  const j=cfg.jewel;
  addBox(j.x,j.z,j.r*2.3,j.r*2.3,2.7,4.8,terminal);
@@ -6601,8 +6628,8 @@ function jetChangiBuildTerminals(addBox,putSphere,group){
  for(const hall of cfg.halls)for(const offset of [-1,1])
   addBox(hall.x+offset*(hall.w/2+12),hall.z,2,2,1.8,3.3,lamps);
  jcChangiBuildStandLayer(addBox,group);
- group.userData.jcChangiTerminals={version:21,components:['T1','T2','T3','T4','JEWEL'],
-  source:'Reference-matched Changi conceptual terminal and gate layout; all 4 terminals between 02L and 02C; NOT surveyed'};
+ group.userData.jcChangiTerminals={version:22,components:['T1','T2','T3','T4','JEWEL'],
+  source:'Reference-matched Changi conceptual terminal and gate layout with terminal-facing parked aircraft, glass gate hold rooms and revised bridge / gate geometry; NOT surveyed'};
 }
 
 
