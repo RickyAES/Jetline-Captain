@@ -13875,15 +13875,15 @@ window.__holdHud={update};
 #jc-airport-surface canvas{flex:1;min-height:0;width:100%;height:auto;object-fit:contain;background:#071629;border:1px solid #33576a;border-radius:7px}
 #jc-airport-surface #jc-map-footer{display:flex;justify-content:space-between;gap:6px;font-weight:700;font-size:11px;color:#d8e6ec}
 #jc-airport-surface .jc-map-legend{display:flex;justify-content:space-around;flex-wrap:wrap;gap:3px 8px;font-size:10px;color:#bbd4e0}
-body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible{display:flex!important;position:fixed!important;left:10px!important;top:auto!important;bottom:12px!important;transform:none!important;width:min(355px,29vw)!important;height:255px!important;z-index:58!important;padding:8px 8px 6px!important;border-radius:12px!important;box-shadow:0 10px 32px #000b!important;background:rgba(7,27,45,.95)!important}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible{display:flex!important;position:fixed!important;left:10px!important;top:auto!important;bottom:12px!important;transform:none!important;width:min(355px,29vw)!important;height:255px!important;z-index:58!important;padding:8px 8px 6px!important;border-radius:12px!important;box-shadow:0 10px 32px #000b!important;background:rgba(7,27,45,.95)!important}
 body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible .jc-map-hd{min-height:20px!important;gap:5px!important}
 body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible .jc-map-hd strong{font-size:11px!important}
 body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible .jc-map-hint{font-size:9px!important;max-width:none!important;flex:1 1 auto}
 body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible #jc-map-close,
 body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible .jc-map-legend{display:none!important}
 body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible canvas{flex:1 1 auto!important;min-height:0!important;border-radius:6px!important}
-body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible #jc-map-guidance{font-size:9px!important;max-height:26px!important;padding:4px 6px!important}
-body.jc-desktop-layout #jc-airport-surface.jc-desktop-mini-visible #jc-map-footer{font-size:9px!important;line-height:1.2!important}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-guidance{font-size:9px!important;max-height:26px!important;padding:4px 6px!important}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-footer{font-size:9px!important;line-height:1.2!important}
 body.jc-desktop-layout.jc-airport-map-open #jc-airport-surface.jc-desktop-mini-visible{left:50%!important;top:50%!important;bottom:auto!important;transform:translate(-50%,-50%)!important;width:min(94vw,570px)!important;height:min(86dvh,760px)!important;z-index:9998!important;padding:10px!important}
 body.jc-desktop-layout.jc-airport-map-open #jc-airport-surface.jc-desktop-mini-visible #jc-map-close,
 body.jc-desktop-layout.jc-airport-map-open #jc-airport-surface.jc-desktop-mini-visible .jc-map-legend{display:flex!important}
@@ -15524,6 +15524,40 @@ html.jc-hosted-game [data-jc-ground-act="gates"]{display:none!important}
   };
 })();
 </script>
+
+
+<style id="jc-desktop-overlap-fix-v50">
+/* v50 desktop overlap fix:
+   1) Move the desktop mini airport/radar map to the right so it no longer
+      covers the left-side thrust lever.
+   2) Hide the duplicated taxi status/route strips on desktop because the
+      mini airport map footer already shows the taxi guidance. This keeps the
+      top SPD/HDG/ALT/V/S row clear. */
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible{
+ left:clamp(118px,10vw,170px)!important;
+ top:auto!important;
+ bottom:12px!important;
+ transform:none!important;
+ width:min(320px,26vw)!important;
+ height:230px!important;
+ z-index:52!important;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-guidance{
+ font-size:9px!important;
+ max-height:24px!important;
+ padding:3px 5px!important;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-footer{
+ font-size:9px!important;
+ line-height:1.15!important;
+}
+body.jc-desktop-layout #ui.playing #jet-taxi-box .jet-taxi-status,
+body.jc-desktop-layout #ui.playing #jet-taxi-box .jet-taxi-route{
+ display:none!important;
+ visibility:hidden!important;
+ pointer-events:none!important;
+}
+</style>
 
 </body>
 </html>
