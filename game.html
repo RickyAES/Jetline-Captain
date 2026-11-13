@@ -4874,7 +4874,7 @@ if(jcMobilePanel){
  const i=E.panelMax?.72:kt('panelSize')+Math.min(1,Math.max(0,(700-e)/400))*Math.max(0,.62-kt('panelSize'));
  let s=t/Ri.w;if(Ri.h*s>e*i)s=e*i/Ri.h;
  pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;pe.world=[0,0,t,pe.by+8*s];
-}return pe.dpr=CM(t,e),Ye&&(Ye.setPixelRatio(pe.dpr),Ye.setSize(t,e,!1),Ga.style.width=t+"px",Ga.style.height=e+"px"),Ba&&Y4(Ba,pe),Mt.layout(pe,cn),je.layout(pe),Bi=!1,E.state!=="boot"&&d0(),!0}var J5=window.ResizeObserver?new ResizeObserver(()=>{Bi=!0,(pi||E.state==="end"||E.hostPaused)&&Is()}):null;J5&&J5.observe(yi);window.addEventListener("resize",()=>{Bi=!0});window.addEventListener("orientationchange",()=>setTimeout(()=>{Bi=!0,Is()},200));var BM=Bn(ni);
+}document.documentElement.style.setProperty("--jc-v51-scene-width",Math.round(pe.world[2])+"px");return pe.dpr=CM(t,e),Ye&&(Ye.setPixelRatio(pe.dpr),Ye.setSize(t,e,!1),Ga.style.width=t+"px",Ga.style.height=e+"px"),Ba&&Y4(Ba,pe),Mt.layout(pe,cn),je.layout(pe),Bi=!1,E.state!=="boot"&&d0(),!0}var J5=window.ResizeObserver?new ResizeObserver(()=>{Bi=!0,(pi||E.state==="end"||E.hostPaused)&&Is()}):null;J5&&J5.observe(yi);window.addEventListener("resize",()=>{Bi=!0});window.addEventListener("orientationchange",()=>setTimeout(()=>{Bi=!0,Is()},200));var BM=Bn(ni);
 /* Taxi-out / taxi-in routes are navigable simulated airport service roads.
    Runway IDs, headings and lengths follow the selected airport record.
    Ground taxiway centre lines are illustrative; not official airport charts. */
@@ -8852,6 +8852,7 @@ function jcSurfaceEnsure(){
  overlay.setAttribute('data-ui','true');overlay.setAttribute('aria-label','Airport surface traffic map');
  overlay.innerHTML=`<div class="jc-map-hd"><strong id="jc-map-apt">AIRPORT MAP</strong>
  <span class="jc-map-hint">N ↑ · radar orientation · taxiways schematic</span>
+ <button type="button" id="jc-map-mini-toggle" aria-label="Minimise radar" aria-expanded="true" title="Minimise radar">−</button>
  <button type="button" id="jc-map-close" aria-label="Close airport map">✕ CLOSE</button></div>
  <canvas id="jc-map-canvas" width="500" height="650" aria-label="Runways, taxiways, player location and live radar contacts"></canvas>
  <div id="jc-map-guidance" role="status" aria-live="polite">READY · SELECT A RUNWAY</div>
@@ -8859,6 +8860,16 @@ function jcSurfaceEnsure(){
  <div class="jc-map-legend"><span><b style="color:#51f4de">◆</b> Your aircraft</span><span><b style="color:#ffd67f">●</b> Ground</span><span><b style="color:#73dfff">▲</b> Airborne</span><span>ADS-B positions interpolated · runway/taxiways schematic</span></div>`;
  host.appendChild(overlay);
  overlay.querySelector('#jc-map-close').addEventListener('click',ev=>{ev.stopPropagation();jcSurfaceToggle(false)});
+ const miniButton=overlay.querySelector('#jc-map-mini-toggle');
+ miniButton.addEventListener('click',ev=>{
+  ev.preventDefault();ev.stopPropagation();
+  const collapsed=overlay.classList.toggle('jc-desktop-mini-collapsed');
+  miniButton.textContent=collapsed?'▣':'−';
+  miniButton.setAttribute('aria-label',collapsed?'Restore mini radar':'Minimise radar');
+  miniButton.setAttribute('title',collapsed?'Restore mini radar':'Minimise radar');
+  miniButton.setAttribute('aria-expanded',String(!collapsed));
+  if(!collapsed){jcMapLastDraw=0;jcSurfaceDraw(true);}
+ });
  overlay.addEventListener('pointerdown',ev=>ev.stopPropagation());
  jcSurface=overlay;
  return overlay;
@@ -9259,7 +9270,7 @@ function jcSurfaceDraw(force=false){
  // The desktop thumbnail is intentionally throttled. Building the complete
  // terminal/gate/traffic chart at 30 FPS can starve a phone or weak laptop's
  // WebGL flight renderer during the first frames after pressing PLAY.
- const thumbnail=!!(jcSurface?.classList.contains('jc-desktop-mini-visible')&&!jcMapVisible);
+ const thumbnail=!!(jcSurface?.classList.contains('jc-desktop-mini-visible')&&!jcMapVisible&&!jcSurface?.classList.contains('jc-desktop-mini-collapsed'));
  const frameMs=thumbnail?240:(jcPanelIsMobile()?48:40);
  const time=Date.now();
  if(!force&&time-jcMapLastDraw<frameMs)return;
@@ -14716,7 +14727,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v49';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v51';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -15557,6 +15568,89 @@ body.jc-desktop-layout #ui.playing #jet-taxi-box .jet-taxi-route{
  visibility:hidden!important;
  pointer-events:none!important;
 }
+</style>
+
+
+<style id="jc-v51-scene-edge-radar-and-brakes">
+/* V51: Keep the full map available, but keep the small radar AND the
+   right-side taxi controls within the SCENERY viewport, never on the ND. */
+#jc-airport-surface #jc-map-mini-toggle{display:none}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible{
+ position:fixed!important;
+ left:auto!important;
+ right:calc(100vw - var(--jc-v51-scene-width,58vw) + 12px)!important;
+ top:auto!important;bottom:12px!important;
+ transform:none!important;
+ width:clamp(172px,15vw,202px)!important;
+ height:clamp(150px,20vh,182px)!important;
+ max-width:none!important;max-height:none!important;
+ padding:5px!important;
+ gap:3px!important;
+ z-index:52!important;
+ border-radius:9px!important;
+ background:rgba(5,23,37,.96)!important;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible .jc-map-hd{
+ display:flex!important;min-height:21px!important;max-height:21px!important;
+ align-items:center!important;gap:5px!important;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible .jc-map-hd strong{
+ font-size:10px!important;line-height:1!important;overflow:hidden;text-overflow:ellipsis;
+ white-space:nowrap;min-width:0;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible .jc-map-hint,
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-guidance,
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible .jc-map-legend{
+ display:none!important;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-mini-toggle{
+ display:block!important;
+ flex:0 0 23px!important;width:23px!important;height:20px!important;min-height:0!important;
+ padding:0!important;border-radius:4px!important;
+ font:800 15px/18px system-ui,sans-serif!important;
+ background:#123e54!important;color:#b9f8ff!important;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-footer{
+ display:flex!important;gap:3px!important;font-size:8px!important;line-height:1.1!important;
+ overflow:hidden;white-space:nowrap;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible #jc-map-footer span{
+ max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* A single RADAR chip remains when minimised; click its icon to restore. */
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible.jc-desktop-mini-collapsed{
+ width:128px!important;height:34px!important;padding:4px 6px!important;
+ gap:0!important;
+}
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible.jc-desktop-mini-collapsed canvas,
+body.jc-desktop-layout:not(.jc-airport-map-open) #jc-airport-surface.jc-desktop-mini-visible.jc-desktop-mini-collapsed #jc-map-footer{
+ display:none!important;
+}
+/* The scenery occupies the LEFT side in desktop mode. The right taxi
+   BRAKE and RIGHT buttons belong just INSIDE the scenery boundary. */
+body.jc-desktop-layout #ui.playing #jet-taxi-box .jet-taxi-side.right{
+ position:fixed!important;
+ left:auto!important;
+ right:calc(100vw - var(--jc-v51-scene-width,58vw) + 12px)!important;
+ top:clamp(165px,30vh,330px)!important;bottom:auto!important;
+ width:clamp(56px,5.5vw,78px)!important;
+ gap:5px!important;
+ z-index:60!important;
+}
+body.jc-desktop-layout #ui.playing #jet-taxi-box .jet-taxi-side.left{
+ position:fixed!important;
+ left:10px!important;right:auto!important;
+ top:clamp(165px,30vh,330px)!important;bottom:auto!important;
+ width:clamp(56px,5.5vw,78px)!important;
+ gap:5px!important;
+ z-index:60!important;
+}
+body.jc-desktop-layout #ui.playing #jet-taxi-box .jet-taxi-side button{
+ width:100%!important;min-height:33px!important;
+ padding:5px 2px!important;font-size:10px!important;
+}
+/* Normal large map always retains CLOSE and the full-height display. */
+body.jc-airport-map-open #jc-airport-surface #jc-map-mini-toggle{display:none!important}
 </style>
 
 </body>
