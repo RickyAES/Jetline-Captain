@@ -8917,7 +8917,7 @@ function jetTrafficDrawLiveContacts(dt){
   // A visible approach continues to roar even while the map/ND is open.
   const listener=E.plane||ui.position;
   const range=Math.hypot(target.x-listener.x,target.y-(listener.y||0),target.z-listener.z);
-  if(range<4400&&(!a.onGround||target.localLanding||a.speedKt>=5)){
+  if(range<9000&&(!a.onGround||target.localLanding||a.speedKt>=5)){
    const power=jcTrafficThrustProfile(a,target);
    trafficAudio.push({id:a.id,distance:range,thrust:power.thrust,thrustMode:power.mode,
     speedKt:target.speedKt??a.speedKt,onGround:target.stage==='SIMULATED ROLLOUT'||a.onGround,
@@ -9010,7 +9010,7 @@ function jetTrafficDrawLiveContacts(dt){
  }}
  jetTraffic.liveMeshes=Array.from(jetTraffic.liveModels.values(),e=>e.group);
  // Immediately replace audio targets, never replaying stale/unmatched flights.
- window.__jcTrafficSoundContacts=trafficAudio.sort((a,b)=>a.distance-b.distance).slice(0,4);
+ window.__jcTrafficSoundContacts=trafficAudio.sort((a,b)=>a.distance-b.distance).slice(0,7);
 }
 
 
@@ -13263,22 +13263,55 @@ window.__holdHud={update};
   for(const k of ['musicVolume','engineVolume'])if(Number.isFinite(saved[k]))prefs[k]=Math.max(0,Math.min(100,saved[k]));
  }}catch{}
  const api={ctx:null,master:null,musicGain:null,ambientBus:null,challengeBus:null,engineBus:null,trafficBus:null,trafficVoices:new Map(),engineNoise:null,engineFilter:null,engineTone:null,engineBass:null,engineAir:null,customEngine:null,customGain:null,noiseBuffer:null,unlocked:false,currentMode:'OFF',error:'',prefs};
- // User-provided screen recording, bundled locally for TAKEOFF and LANDING
- // ONLY. Engine sound during cruise and taxi stays synthesized, as before.
- const recordedJet=new Audio('jetline_engine_takeoff_landing.mp3');
- recordedJet.loop=true;recordedJet.preload='auto';recordedJet.volume=0;
- let recordedStarted=false,recordedVolume=0,wasFlightSoundActive=false;
- api.takeoffLandingEngine=recordedJet;
- const startRecorded=()=>{
-  if(recordedStarted)return;
-  const promise=recordedJet.play();
-  if(promise&&typeof promise.then==='function')promise.then(()=>{recordedStarted=true;}).catch(()=>{});
-  else recordedStarted=true;
+ // v64: Five user-supplied MP3s, one per airplane-sound role.
+ // Both soundreality MP3 uploads are byte-identical. Their two channels are
+ // mixed independently for own-aircraft thrust and nearby-aircraft flyby;
+ // don't play them at full volume together.
+ const recordedPaths={
+  atmosphere:'audio/airport_atmos.mp3',
+  thrust:'audio/engine_thrust.mp3',
+  approach:'audio/approach_landing.mp3',
+  takeoff:'audio/takeoff_roar.mp3',
+  flyby:'audio/engine_flyby.mp3'
  };
- // Browsers require a user gesture before playing audible media.
- window.addEventListener('pointerdown',startRecorded,{capture:true});
- window.addEventListener('keydown',startRecorded,{capture:true});
+ const recordedClips={};const recordedLevel={};
+ const recordedStatus={unlocked:false,playing:{},roles:recordedPaths,contactId:null};
+ for(const [role,src] of Object.entries(recordedPaths)){
+  const a=new Audio(src);a.loop=true;a.preload='none';a.volume=0;
+  a.playsInline=true;
+  recordedClips[role]=a;recordedLevel[role]=0;
+ }
+ api.userRecordedClips=recordedClips;
+ api.recordedStatus=recordedStatus;
+ api.takeoffLandingEngine=recordedClips.approach;
+ function unlockRecorded(){
+  for(const [role,a] of Object.entries(recordedClips)){
+   if(recordedStatus.playing[role])continue;
+   const p=a.play();
+   if(p&&typeof p.then==='function')p.then(()=>{recordedStatus.playing[role]=true;recordedStatus.unlocked=true;}).catch(()=>{});
+   else {recordedStatus.playing[role]=true;recordedStatus.unlocked=true;}
+  }
+ }
+ // Browsers require the first click / tap / key press to unlock sound.
+ window.addEventListener('pointerdown',unlockRecorded,{capture:true});
+ window.addEventListener('keydown',unlockRecorded,{capture:true});
  window.__jcFlightAudio=api;
+ const smoothstep=x=>{const q=Math.max(0,Math.min(1,x));return q*q*(3-2*q)};
+ const nearVolume=(metres,near=1000,far=8200)=>1-smoothstep((Math.max(0,metres)-near)/(far-near));
+ const recordedMix=(levels,contacts,enabled)=>{
+  if(!recordedStatus.unlocked&&Object.values(levels).some(v=>v>.01))return;
+  const closest=contacts?.[0];
+  for(const [role,a] of Object.entries(recordedClips)){
+   const target=enabled?clamp(Number(levels[role])||0,0,.80):0;
+   const current=recordedLevel[role];
+   const ease=target>current?.29:.21;
+   recordedLevel[role]=current+(target-current)*ease;
+   a.volume=clamp(recordedLevel[role],0,.80);
+  }
+  recordedStatus.nearestContact=closest?{id:closest.id,distance:Math.round(closest.distance),phase:closest.phase,stage:closest.stage}:null;
+ };
+ let lastTakeoff=false,lastApproach=false,lastFlybyId='';
+
  let tickInterval=null, nextAmbient=0,nextChallenge=0, ambientStep=0,challengeStep=0;
  const hz=midi=>440*Math.pow(2,(midi-69)/12);
  const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
@@ -13286,7 +13319,7 @@ window.__holdHud={update};
  const panel=document.createElement('div');panel.id='jc-audio-panel';
  panel.setAttribute('role','group');panel.setAttribute('aria-label','Jetline sound settings');
  panel.innerHTML=`<div class="split"><div class="title">🎵 FLIGHT SOUND</div><button type="button" id="jc-audio-close">CLOSE</button></div>
-   <div class="small">Your screen-recorded jet roar for takeoff/landing · Synthesized cruise and taxi · Radar aircraft</div>
+   <div class="small">Your five jet recordings · Thrust / approach / takeoff / flyby · Distance-aware radar audio</div>
    <div class="split"><span class="vlabel">Background / Challenge music</span><button type="button" id="jc-music-on">ON</button></div>
    <label class="small" for="jc-music-volume">Music volume</label><input id="jc-music-volume" type="range" min="0" max="100" step="5">
    <div class="split"><span class="vlabel">Cockpit + nearby aircraft engines</span><button type="button" id="jc-engine-on">ON</button></div>
@@ -13383,7 +13416,7 @@ window.__holdHud={update};
  $('jc-custom-engine-reset').addEventListener('click',()=>{
   try{api.customEngine?.stop();api.customEngine?.disconnect()}catch{}
   api.customEngine=null;$('jc-custom-engine').value='';
-  $('jc-audio-info').textContent='Original synthesized high-bypass turbofan sound active.';
+  $('jc-audio-info').textContent='Default uploaded aircraft-engine recordings are active.';
  });
  // First game interaction is the browser-approved trigger; we never force autoplay.
  window.addEventListener('pointerdown',activate,{capture:true,once:true});
@@ -13605,31 +13638,54 @@ window.__holdHud={update};
    // TOGA/FLX/CL/IDLE/REVERSE without causing jumps in the engine loop.
    const power=clamp(.70*n1+.30*Math.max(0,lever),0,1);
    const engineLevel=prefs.engine&&powered?(.021+.128*power+(reverse?.036:0))*prefs.engineVolume/100:0;
-   api.trafficBus.gain.setTargetAtTime(prefs.engine&&active?(.90*prefs.engineVolume/100):0,now,.20);
+   api.trafficBus.gain.setTargetAtTime(prefs.engine&&active?(.32*prefs.engineVolume/100):0,now,.20);
    trafficSounds(c,now,prefs.engine&&active&&!mute&&!hidden);
-   // The engine fades between IDLE, CLB, FLX, TOGA and REVERSE without
-   // restarting the sound, so there are no audible clicks/spool discontinuities.
-   const approaching=(window.__jcTrafficSoundContacts||[]).filter(t=>
-    /APPROACH|FINAL|FLARE|ROLLOUT|TAKEOFF|DEPART|CLIMB|DESCEND|CIRCUIT/i.test(
-     String(t.stage||'')+' '+String(t.phase||'')));
-   const nearest=approaching.length?Math.min(...approaching.map(t=>Math.max(0,Number(t.distance)||9000))):Infinity;
-   // A real or simulated arrival is quiet at the far radar edge, then its
-   // recorded jet-engine sound grows continuously as it nears the runway.
-   const proximity=Math.max(0,Math.min(1,(6800-nearest)/6200));
-   const smoothProximity=proximity*proximity*(3-2*proximity);
-   const ownFlight=['takeoff','approach','rollout'].includes(String(info.phase||''));
-   const takeoffOrLanding=active&&(ownFlight||nearest<6800);
-   const recordedTarget=(prefs.engine&&takeoffOrLanding&&!mute&&!hidden)?
-     Math.min(.77,(ownFlight?.37:.08+.69*smoothProximity)*prefs.engineVolume/100):0;
-   recordedJet.playbackRate=.86+.20*Math.max(smoothProximity,ownFlight?.6:0);
-   if(takeoffOrLanding&&!wasFlightSoundActive){try{recordedJet.currentTime=0;}catch{}}
-   wasFlightSoundActive=takeoffOrLanding;
-   recordedVolume+=(recordedTarget-recordedVolume)*.17;
-   recordedJet.volume=clamp(recordedVolume,0,.85);
-   if(recordedTarget>.001&&!recordedStarted)startRecorded();
-   api.recordedEngineActive=recordedTarget>.001;
+   // v64: separate recorded thrust, takeoff, approach/landing, flyby and
+   // airport ambience. Real radar and simulated circuit contacts feed the same
+   // world-space attenuation curve: faint at 8km, roaring near the observer,
+   // and fading as the aircraft flies beyond the runway.
+   // v63 already places the game-only 02L circuit in the same audio contact
+   // array. Use it once, rather than double-playing the same flyby.
+   const contacts=[...(window.__jcTrafficSoundContacts||[])];
+   contacts.sort((a,b)=>a.distance-b.distance);
+   const inbound=contacts.filter(t=>!t.onGround&&
+    /APPROACH|FINAL|FLARE|ROLLOUT|DESCEND|INBOUND|CIRCUIT/i.test(String(t.stage||'')+' '+String(t.phase||'')));
+   const outbound=contacts.filter(t=>
+    /TAKEOFF|DEPART|CLIMB|ROLL/i.test(String(t.stage||'')+' '+String(t.phase||'')));
+   const nearest=contacts.find(t=>!t.onGround&&Number.isFinite(t.distance));
+   const nearestInbound=inbound[0],nearestOutbound=outbound[0];
+   const inProx=nearestInbound?nearVolume(nearestInbound.distance,430,8200):0;
+   const outProx=nearestOutbound?nearVolume(nearestOutbound.distance,350,8000):0;
+   const flyProx=nearest?nearVolume(nearest.distance,300,5000):0;
+   const phase=String(info.phase||'').toLowerCase();
+   const ownTakeoff=active&&phase==='takeoff';
+   const ownApproach=active&&(phase==='approach'||phase==='rollout'||phase==='taxiin');
+   const soundEnabled=!!(prefs.engine&&active&&!mute&&!hidden);
+   const strength=clamp(prefs.engineVolume/100,0,1);
    const usingSample=!!api.customEngine;
-   api.engineBus.gain.setTargetAtTime(usingSample?0:engineLevel*(takeoffOrLanding?.32:1),now,.24);
+   const levels={
+    atmosphere:(.045+(info.state==='play'?.025:0))*strength,
+    thrust:(powered&&!usingSample?(.07+.29*power+(reverse?.05:0)):0)*strength*(flyProx>.5?.68:1),
+    approach:(Math.max(ownApproach?.31:0,inProx*(.10+.35*(Number(nearestInbound?.thrust)||.50))))*strength,
+    takeoff:(Math.max(ownTakeoff?.37+.14*power:0,outProx*(.22+.38*(Number(nearestOutbound?.thrust)||.70))))*strength,
+    flyby:(flyProx*(.16+.33*clamp(Number(nearest?.thrust)||.48,0,1)))*strength
+   };
+   // Start the real takeoff and landing attack at the beginning of each
+   // flight-stage transition, rather than midway through a silent loop.
+   if(ownTakeoff&&!lastTakeoff&&recordedStatus.unlocked){try{recordedClips.takeoff.currentTime=0}catch{}}
+   if(ownApproach&&!lastApproach&&recordedStatus.unlocked){try{recordedClips.approach.currentTime=0}catch{}}
+   if(nearest&&nearest.id!==lastFlybyId&&nearest.distance<2400&&recordedStatus.unlocked){
+    try{recordedClips.flyby.currentTime=0}catch{}
+   }
+   lastFlybyId=nearest?.distance<2400?nearest.id:'';
+   lastTakeoff=ownTakeoff;lastApproach=ownApproach;
+   recordedClips.thrust.playbackRate=.83+.25*power;
+   recordedClips.flyby.playbackRate=.92+.10*flyProx;
+   recordedMix(levels,contacts,soundEnabled);
+   api.recordedEngineActive=soundEnabled&&Object.values(levels).some(v=>v>.015);
+   // The uploaded jet audio is the foreground; keep synthesized noise only
+   // as a light engine-floor layer so the mix does not roar twice.
+   api.engineBus.gain.setTargetAtTime(usingSample?0:engineLevel*.22,now,.24);
    api.customGain?.gain?.setTargetAtTime(usingSample?engineLevel*1.9:0,now,.24);
    api.customEngine?.playbackRate?.setTargetAtTime(.80+.55*power,now,.30);
    api.engineFilter.frequency.setTargetAtTime(430+2850*power+(reverse?630:0),now,.25);
@@ -13641,12 +13697,12 @@ window.__holdHud={update};
    $('jc-audio-mode').textContent=api.currentMode;
    const hint=panel.querySelector('#jc-audio-info');
    if(mute)hint.textContent='Game is muted. Unmute it to hear the soundtrack and engine.';
-   else hint.textContent='Your uploaded screen recording plays automatically on TAKEOFF, APPROACH, FLARE and ROLLOUT. During cruise/taxi the regular engine sound continues. Tap once to unlock audio. You can still load a different sample under SOUND settings.';
+   else hint.textContent='Recorded aircraft: ambient/taxi, thrust, takeoff, landing/approach and nearby flyby. Aircraft get louder as they approach, fade on departure. Tap once to unlock audio. All five MP3s must be deployed in the audio folder.';
  }
  setInterval(update,350);
- document.addEventListener('visibilitychange',()=>{if(!api.ctx)return;if(document.hidden)api.ctx.suspend().catch(()=>{});else if(api.unlocked)api.ctx.resume().catch(()=>{})});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden){for(const a of Object.values(recordedClips))a.volume=0;for(const key of Object.keys(recordedLevel))recordedLevel[key]=0;}if(!api.ctx)return;if(document.hidden)api.ctx.suspend().catch(()=>{});else if(api.unlocked)api.ctx.resume().catch(()=>{})});
  api.activate=activate;
- api.debug=()=>({engineVersion:'v60_user_supplied_takeoff_landing',customSample:!!api.customEngine,bundledSample:recordedJet.currentSrc||recordedJet.src,recordedActive:!!api.recordedEngineActive,unlocked:api.unlocked,audioState:api.ctx?.state||'not created',music:prefs.music,engine:prefs.engine,trafficVoices:api.trafficVoices.size,mode:api.currentMode,error:api.error});
+ api.debug=()=>({engineVersion:'v64_five_uploaded_aircraft_recordings',customSample:!!api.customEngine,bundledSamples:recordedPaths,clipVolumes:{...recordedLevel},recordedActive:!!api.recordedEngineActive,unlocked:api.unlocked,recordedUnlocked:recordedStatus.unlocked,nearestContact:recordedStatus.nearestContact,audioState:api.ctx?.state||'not created',music:prefs.music,engine:prefs.engine,trafficVoices:api.trafficVoices.size,mode:api.currentMode,error:api.error});
  renderUI();
 })();
 </script>
