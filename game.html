@@ -5460,13 +5460,13 @@ window.__jcGateParkingQA=()=>jcChangiGateRegistry.map(g=>({
  noseFacesTerminal:Math.hypot(g.x-g.wallX,g.z-g.wallZ)>20&&g.nx*(g.x-g.wallX)+g.nz*(g.z-g.wallZ)>0
 }));
 window.__jcChangiCampusV18=jcChangiCampusV18;
-window.__jcChangiLayoutStatus=()=>({build:'v65',gateCount:jcChangiGateRegistry.length,
+window.__jcChangiLayoutStatus=()=>({build:'v77',gateCount:jcChangiGateRegistry.length,
  terminals:Object.fromEntries(['T1','T2','T3','T4'].map(t=>
   [t,jcChangiGateRegistry.filter(g=>g.terminal===t).length])),
  jewel:jcChangiCampusV18.jewel,
  reference:'User-supplied Changi terminal layout icon plus gate-number sequence chart',
  layout:'A/B Terminal 3 · C/D Terminal 1 · E/F Terminal 2 · G Terminal 4',
- source:'Reference-inspired v58 Changi layout: T3 west, T1 north, T2 east, T4 below T2, shared nose-in dock geometry, tower beside Jewel and all gates numbered in sequence (not surveyed)'
+ source:'Reference-inspired v77 Changi layout: T3 west, T1 north, T2 east, T4 below T2, shared nose-in dock geometry, tower beside Jewel, apron service vehicles and cargo support kept clear of taxiways and runways (not surveyed)'
 });
 const jcChangiGateLookup=new Map(jcChangiGateRegistry.map(r=>[r.gate,r]));
 window.__jcChangiGateRegistry=jcChangiGateRegistry;
@@ -6821,9 +6821,74 @@ function jetChangiBuildTerminals(rawAddBox,putSphere,group){
  const seat=new Xt({color:0x935958,roughness:.89});
  const upholstery=new Xt({color:0x633d43,roughness:.84});
  const floor=new Xt({color:0xc2c4c2,roughness:.85});
+ const serviceWhite=new Xt({color:0xe9edf0,roughness:.84,metalness:.08});
+ const serviceSilver=new Xt({color:0xc7d1d8,roughness:.62,metalness:.22});
+ const serviceYellow=new Xt({color:0xf2c94a,roughness:.82,metalness:.10});
+ const serviceOrange=new Xt({color:0xe39a39,roughness:.82,metalness:.08});
+ const serviceGreen=new Xt({color:0x5f8f65,roughness:.86,metalness:.06});
+ const serviceRed=new Xt({color:0x9a4b42,roughness:.87,metalness:.05});
+ const tire=new Xt({color:0x23262a,roughness:.98});
  const warm=new be({color:0xffecc0});
  const mobile=window.innerWidth<700;
  const rotate=(mesh,theta)=>{mesh.rotation.y+=theta;return mesh;};
+ const servicePulse=(x,z,w,d,y,thick,mat,theta=0)=>rotate(addBox(x,z,w,d,y,thick,mat),theta);
+ const servicePaints=[serviceWhite,serviceSilver,serviceYellow,serviceOrange,serviceGreen];
+ function jcApronVehicle(x,z,theta,kind='maintenance',colorMat=serviceWhite){
+  if(kind==='maintenance'){
+   servicePulse(x,z,8.2,3.9,.90,1.25,colorMat,theta);
+   servicePulse(x-.6*Math.sin(theta),z-.6*Math.cos(theta),4.3,3.0,1.86,.58,glass,theta);
+   for(const sx of [-2.5,2.5])for(const sz of [-1.5,1.5])
+    servicePulse(x+Math.cos(theta)*sx+Math.sin(theta)*sz,z+Math.sin(theta)*sx-Math.cos(theta)*sz,.85,.85,.36,.52,tire,theta);
+   servicePulse(x+2.7*Math.sin(theta),z+2.7*Math.cos(theta),1.0,.5,2.1,.18,new be({color:0xffc766}),theta);
+  }else if(kind==='cargo'){
+   servicePulse(x,z,13.5,4.2,.95,1.3,colorMat,theta);
+   servicePulse(x-3.3*Math.sin(theta),z-3.3*Math.cos(theta),4.4,3.1,1.98,.72,glass,theta);
+   servicePulse(x+3.6*Math.sin(theta),z+3.6*Math.cos(theta),7.0,3.2,2.12,1.52,serviceSilver,theta);
+   for(const sx of [-4.2,-1.1,2.0,5.0])for(const sz of [-1.6,1.6])
+    servicePulse(x+Math.cos(theta)*sx+Math.sin(theta)*sz,z+Math.sin(theta)*sx-Math.cos(theta)*sz,.92,.92,.38,.56,tire,theta);
+   servicePulse(x+6.9*Math.sin(theta),z+6.9*Math.cos(theta),1.2,.55,2.28,.20,new be({color:0xffc766}),theta);
+  }else if(kind==='container'){
+   servicePulse(x,z,12.5,4.4,.78,.65,serviceSilver,theta);
+   servicePulse(x,z,8.1,3.4,1.82,1.45,colorMat,theta);
+   servicePulse(x,z,7.7,.24,2.28,.20,frames,theta);
+   servicePulse(x,z,7.7,.24,1.34,.20,frames,theta);
+   for(const sx of [-4.0,-1.4,1.4,4.0])for(const sz of [-1.7,1.7])
+    servicePulse(x+Math.cos(theta)*sx+Math.sin(theta)*sz,z+Math.sin(theta)*sx-Math.cos(theta)*sz,.84,.84,.34,.48,tire,theta);
+  }else if(kind==='tow'){
+   servicePulse(x,z,6.4,3.2,.72,.82,colorMat,theta);
+   servicePulse(x+3.2*Math.sin(theta),z+3.2*Math.cos(theta),3.2,.72,.92,.20,serviceYellow,theta);
+   for(const sx of [-2.2,2.2])for(const sz of [-1.1,1.1])
+    servicePulse(x+Math.cos(theta)*sx+Math.sin(theta)*sz,z+Math.sin(theta)*sx-Math.cos(theta)*sz,.82,.82,.32,.42,tire,theta);
+  }
+ }
+ function jcApronContainerStack(x,z,theta,count=3){
+  const mats=[serviceOrange,serviceRed,serviceGreen,serviceSilver];
+  for(let i=0;i<count;i++)servicePulse(x,z,6.4,2.7,1.05+i*1.28,1.06,mats[i%mats.length],theta);
+ }
+ function jcGateServiceSpot(gate,offsetBack=17,offsetSide=0){
+  const stand=jcChangiGateLookup.get(String(gate||'').toUpperCase());
+  if(!stand)return null;
+  return {stand,
+   x:stand.x-stand.nx*offsetBack+stand.tangentX*offsetSide,
+   z:stand.z-stand.nz*offsetBack+stand.tangentZ*offsetSide,
+   theta:Math.atan2(stand.tangentX,stand.tangentZ)};
+ }
+ function jcAddGateSupport(gate,style='mixed'){
+  const a=jcGateServiceSpot(gate,18,0);if(!a)return;
+  const b=jcGateServiceSpot(gate,22,8);const c=jcGateServiceSpot(gate,22,-8);
+  if(style==='cargo'){
+   jcApronVehicle(a.x,a.z,a.theta,'cargo',serviceWhite);
+   if(b)jcApronVehicle(b.x,b.z,a.theta,'container',serviceOrange);
+   if(c)jcApronVehicle(c.x,c.z,a.theta,'tow',serviceYellow);
+  }else if(style==='maintenance'){
+   jcApronVehicle(a.x,a.z,a.theta,'maintenance',serviceWhite);
+   if(b)jcApronVehicle(b.x,b.z,a.theta,'maintenance',serviceSilver);
+  }else{
+   jcApronVehicle(a.x,a.z,a.theta,'maintenance',servicePaints[Math.abs((gate||'').length)%servicePaints.length]);
+   if(b)jcApronVehicle(b.x,b.z,a.theta,'tow',serviceYellow);
+   if(c)jcApronVehicle(c.x,c.z,a.theta,'container',serviceSilver);
+  }
+ }
  // The roof is opaque; all vertical facade glazing is genuinely see-through.
  const hall=(f)=>{
   addBox(f.x,f.z,f.w+7,f.d+7,.12,.26,apron);
@@ -6909,10 +6974,28 @@ function jetChangiBuildTerminals(rawAddBox,putSphere,group){
   p.rotation.y+=Math.atan2(-stand.nx,-stand.nz);
  }
  jcChangiBuildStandLayer(addBox,group);
- group.userData.jcChangiTerminals={version:65,runwayGuardSkipped,
+ // Static Changi-inspired apron service scene. Vehicles are kept on aprons or
+ // service roads near terminals so they do not obstruct the taxiway network.
+ for(const gate of ['A3','A10','A18','B4','C11','C20','D34','D46','E6','E18','E27','F40','F52','G5','G12','G18'])
+  jcAddGateSupport(gate,['C20','D34','E27','F52'].includes(gate)?'cargo':'mixed');
+ for(const gate of ['B8','C4','D41','F56'])jcAddGateSupport(gate,'maintenance');
+ // Landside/inner-airside service loop between T1/Jewel/T2: container and
+ // maintenance traffic visually matches the supplied Changi reference photos.
+ for(const [x,z,theta,kind,mat] of [
+  [-242,-2472,Math.PI*.50,'maintenance',serviceWhite],
+  [-229,-2460,Math.PI*.50,'maintenance',serviceSilver],
+  [-170,-2446,Math.PI*.50,'cargo',serviceWhite],
+  [-157,-2416,Math.PI*.50,'container',serviceOrange],
+  [-189,-2340,Math.PI*.52,'tow',serviceYellow],
+  [-206,-1942,Math.PI*.48,'maintenance',serviceWhite],
+  [-173,-1892,Math.PI*.48,'container',serviceGreen],
+  [-219,-1012,Math.PI*.48,'maintenance',serviceSilver]
+ ])jcApronVehicle(x,z,theta,kind,mat);
+ group.userData.jcChangiTerminals={version:77,runwayGuardSkipped,
   components:['T3 A/B','T1 C/D','T2 E/F','T4 G','JEWEL'],
   transparentHoldRoom:true,branchingPiers:true,controlTower:true,gateCount:jcChangiGateRegistry.length,
-  source:'SCHEMATIC v65, T3 west, T1 north, T2 east, T4 below T2, Changi control tower beside Jewel, buildings clear of all three runway strips, 02C default WSSS taxi departure, nose-in gate parking and aerobridges; NOT surveyed or certified airport data'};
+  supportVehicles:true,cargoApron:true,
+  source:'SCHEMATIC v77, Changi 4-terminal layout with Jewel and control tower, gate numbering by user reference, additional apron service vehicles, cargo/container trucks and maintenance cars kept clear of taxiways and all three runway strips; NOT surveyed or certified airport data'};
 }
 
 
