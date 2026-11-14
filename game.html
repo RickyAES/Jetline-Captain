@@ -5368,9 +5368,9 @@ const jcChangiGateRegistry=(()=>{
 const jcChangiCampusV18={
  halls:[
   {label:'TERMINAL 3',terminal:'T3',x:-300,z:-2360,w:116,d:198},
-  {label:'TERMINAL 1',terminal:'T1',x:-182,z:-2545,w:108,d:168},
-  {label:'TERMINAL 2',terminal:'T2',x:-213,z:-1820,w:105,d:188},
-  {label:'TERMINAL 4',terminal:'T4',x:-214,z:-960,w:82,d:146}
+  {label:'TERMINAL 1',terminal:'T1',x:-196,z:-2545,w:110,d:170},
+  {label:'TERMINAL 2',terminal:'T2',x:-206,z:-1820,w:108,d:190},
+  {label:'TERMINAL 4',terminal:'T4',x:-224,z:-960,w:84,d:150}
  ],
  piers:[
   {label:'A · T3',terminal:'T3',x:-317,z:-2520,w:32,d:760},
@@ -5393,8 +5393,22 @@ const jcChangiCampusV18={
  ],
  jewel:{label:'JEWEL · T1',x:-214,z:-2398,r:29},
  greenLink:{label:'JEWEL–T1 LINK',x:-196,z:-2403,w:26,d:14},
- aprons:[{x:-245,z:-2170,w:300,d:2180},
-  {x:-250,z:-950,w:195,d:500}]
+ aprons:[{x:-245,z:-2170,w:356,d:2240},
+  {x:-246,z:-950,w:236,d:560}],
+ serviceRoads:[
+  {x:-102,z:-2195,w:20,d:1920},
+  {x:-362,z:-2140,w:18,d:1710},
+  {x:-228,z:-2460,w:170,d:18},
+  {x:-210,z:-1678,w:182,d:18},
+  {x:-238,z:-958,w:110,d:16}
+ ],
+ taxiGuideLines:[
+  {x:-102,z:-2195,w:2.2,d:1900},
+  {x:-362,z:-2140,w:2.0,d:1690},
+  {x:-228,z:-2460,w:164,d:2.0},
+  {x:-210,z:-1678,w:176,d:2.0},
+  {x:-238,z:-958,w:104,d:1.8}
+ ]
 };
 
 // V56 SCHEMATIC TERMINAL PIERS AND STANDS.
@@ -5460,13 +5474,13 @@ window.__jcGateParkingQA=()=>jcChangiGateRegistry.map(g=>({
  noseFacesTerminal:Math.hypot(g.x-g.wallX,g.z-g.wallZ)>20&&g.nx*(g.x-g.wallX)+g.nz*(g.z-g.wallZ)>0
 }));
 window.__jcChangiCampusV18=jcChangiCampusV18;
-window.__jcChangiLayoutStatus=()=>({build:'v77',gateCount:jcChangiGateRegistry.length,
+window.__jcChangiLayoutStatus=()=>({build:'v78',gateCount:jcChangiGateRegistry.length,
  terminals:Object.fromEntries(['T1','T2','T3','T4'].map(t=>
   [t,jcChangiGateRegistry.filter(g=>g.terminal===t).length])),
  jewel:jcChangiCampusV18.jewel,
  reference:'User-supplied Changi terminal layout icon plus gate-number sequence chart',
  layout:'A/B Terminal 3 · C/D Terminal 1 · E/F Terminal 2 · G Terminal 4',
- source:'Reference-inspired v77 Changi layout: T3 west, T1 north, T2 east, T4 below T2, shared nose-in dock geometry, tower beside Jewel, apron service vehicles and cargo support kept clear of taxiways and runways (not surveyed)'
+ source:'Reference-inspired v78 Changi layout: T3 west, T1 north, T2 east, T4 below T2 between 02L and 02C, wider aprons, clearer service roads and taxi guide lines, plus apron vehicles kept clear of taxiways and runways (not surveyed)'
 });
 const jcChangiGateLookup=new Map(jcChangiGateRegistry.map(r=>[r.gate,r]));
 window.__jcChangiGateRegistry=jcChangiGateRegistry;
@@ -6827,6 +6841,8 @@ function jetChangiBuildTerminals(rawAddBox,putSphere,group){
  const serviceOrange=new Xt({color:0xe39a39,roughness:.82,metalness:.08});
  const serviceGreen=new Xt({color:0x5f8f65,roughness:.86,metalness:.06});
  const serviceRed=new Xt({color:0x9a4b42,roughness:.87,metalness:.05});
+ const serviceAsphalt=new Xt({color:0x76858d,roughness:.95,metalness:.02});
+ const serviceEdge=new be({color:0xd2b769,transparent:true,opacity:.84,depthWrite:false});
  const tire=new Xt({color:0x23262a,roughness:.98});
  const warm=new be({color:0xffecc0});
  const mobile=window.innerWidth<700;
@@ -6914,6 +6930,8 @@ function jetChangiBuildTerminals(rawAddBox,putSphere,group){
  // Halls and the connecting concourses are kept in the same glass language.
  for(const apronArea of cfg.aprons)
   addBox(apronArea.x,apronArea.z,apronArea.w,apronArea.d,.05,.11,concrete);
+ for(const road of (cfg.serviceRoads||[]))addBox(road.x,road.z,road.w,road.d,.07,.05,serviceAsphalt);
+ for(const line of (cfg.taxiGuideLines||[]))addBox(line.x,line.z,line.w,line.d,.10,.03,serviceEdge);
  for(const f of [...cfg.halls,...cfg.connectors])hall(f);
  // Branching piers follow the user-supplied A/B, C/D, E/F and G topology.
  // Every stand, numbered sign, aerobridge and gate map uses these same paths.
@@ -6991,11 +7009,11 @@ function jetChangiBuildTerminals(rawAddBox,putSphere,group){
   [-173,-1892,Math.PI*.48,'container',serviceGreen],
   [-219,-1012,Math.PI*.48,'maintenance',serviceSilver]
  ])jcApronVehicle(x,z,theta,kind,mat);
- group.userData.jcChangiTerminals={version:77,runwayGuardSkipped,
+ group.userData.jcChangiTerminals={version:78,runwayGuardSkipped,
   components:['T3 A/B','T1 C/D','T2 E/F','T4 G','JEWEL'],
   transparentHoldRoom:true,branchingPiers:true,controlTower:true,gateCount:jcChangiGateRegistry.length,
   supportVehicles:true,cargoApron:true,
-  source:'SCHEMATIC v77, Changi 4-terminal layout with Jewel and control tower, gate numbering by user reference, additional apron service vehicles, cargo/container trucks and maintenance cars kept clear of taxiways and all three runway strips; NOT surveyed or certified airport data'};
+  source:'SCHEMATIC v78, terminals 1-4 placed between 02L and 02C, wider aprons and clearer service roads for truck circulation, gate numbering by user reference, additional apron service vehicles, cargo/container trucks and maintenance cars kept clear of taxiways and all three runway strips; NOT surveyed or certified airport data'};
 }
 
 
