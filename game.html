@@ -11657,7 +11657,7 @@ function jcV53FaultUI(){
  msg.setAttribute('aria-live','polite');root.appendChild(msg);
  return button;
 }
-/* Jetline Captain v69 — male-voice-only GPWS/cockpit callouts;
+/* Jetline Captain v71 — male-voice-only GPWS/cockpit callouts;
     source-recorded male callouts where available, male synthesis otherwise. */
 const jcV68Cockpit={
  clips:Object.freeze({
@@ -12482,17 +12482,19 @@ function jcEmReset(){jcV53ReleaseNight();jcCabinPAReset();jcEmRemoveRunway();Obj
    flown approach (including the simulated MAYDAY emergency runway).
    The sign is enforced while a game emergency is active. */
 const jcCabinPA={
- file:'audio/cabin_announcer_recorded.mp3',
- airborneFile:'audio/cabin_airborne_seatbelts.mp3?v=user-recording-20261110',
- landingFile:'audio/cabin_landing_localiser.mp3?v=loc-capture-20261110',
+ // v71: user-provided, UNEDITED takeoff / airborne / localiser-capture recordings.
+ file:'audio/cabin/takeoff_recorded.mp3',
+ airborneFile:'audio/cabin/airborne_recorded.mp3',
+ landingFile:'audio/cabin/landing_localiser_recorded.mp3',
+ emergencyFile:'audio/cabin/emergency_seatbelts_male.mp3',
  buffers:{},loads:{},failed:{},source:null,
- takeoffPlayed:false,landingPlayed:false,airbornePlayed:false,
+ takeoffPlayed:false,landingPlayed:false,airbornePlayed:false,emergencyPlayed:false,
   localizerHandled:false,manualLandingHandled:false,landingTrigger:'',
   finalWaypointCollected:false,finalWaypointName:'',finalLandingHandled:false,
   cabinSecured:false,cabinSecuredAt:0,landingPlayedAt:0,
  pending:'',lastAnnouncement:'',lastPhase:'',playCount:0,serial:0
 };
-// v69: Recorded cabin voices excluded from this male-only-voice build.
+// v71: Only requested cabin recordings are used. GPWS/AP/FD sounds unchanged.
 const jcCabinEmbeddedAudio={};
 function jcCabinPAStop(){
  jcCabinPA.serial++;
@@ -12501,7 +12503,7 @@ function jcCabinPAStop(){
 }
 function jcCabinPAReset(){
  jcCabinPAStop();jcCabinPA.takeoffPlayed=false;jcCabinPA.landingPlayed=false;
- jcCabinPA.airbornePlayed=false;jcCabinPA.localizerHandled=false;
+ jcCabinPA.airbornePlayed=false;jcCabinPA.emergencyPlayed=false;jcCabinPA.localizerHandled=false;
   jcCabinPA.manualLandingHandled=false;jcCabinPA.landingTrigger='';
   jcCabinPA.finalWaypointCollected=false;jcCabinPA.finalWaypointName='';
   jcCabinPA.finalLandingHandled=false;jcCabinPA.cabinSecured=false;
@@ -12510,12 +12512,13 @@ function jcCabinPAReset(){
  jcCabinPA.lastAnnouncement='';jcCabinPA.lastPhase='';jcCabinPA.failed={};
 }
 function jcCabinPALoad(kind){
- const key=kind==='airborne'?'airborne':kind==='landing'?'landing':'original';
+ const key=kind==='airborne'?'airborne':kind==='landing'?'landing':
+  kind==='emergency'?'emergency':'original';
  if(jcCabinPA.buffers[key])return Promise.resolve(jcCabinPA.buffers[key]);
  if(jcCabinPA.loads[key])return jcCabinPA.loads[key];
  try{wt.unlock()}catch(_e){}
- const file=jcCabinEmbeddedAudio[key]||(kind==='airborne'?jcCabinPA.airborneFile:
-  kind==='landing'?jcCabinPA.landingFile:jcCabinPA.file);
+ const file=kind==='airborne'?jcCabinPA.airborneFile:kind==='landing'?jcCabinPA.landingFile:
+  kind==='emergency'?jcCabinPA.emergencyFile:jcCabinPA.file;
  const load=fetch(file,{cache:'force-cache'})
   .then(response=>{if(!response.ok)throw new Error('Cabin audio HTTP '+response.status);
    return response.arrayBuffer();})
@@ -12529,36 +12532,75 @@ function jcCabinPALoad(kind){
  return load;
 }
 function jcCabinPAValidPhase(kind){
+ if(kind==='emergency')return E.state==='play';
+  // ILS landing PA must wait for actual localiser capture, not the last waypoint.
   if(kind==='landing')return E.phase==='approach'&&
-   (jcCabinPA.finalLandingHandled||jcCabinPA.localizerHandled||jcCabinPA.manualLandingHandled);
+   (jcCabinPA.localizerHandled||jcCabinPA.manualLandingHandled);
  if(kind==='airborne')return !E.plane?.onGround&&
   (E.phase==='takeoff'||E.phase==='route');
  return E.phase==='taxi'||E.phase==='taxiIn'||(E.phase==='takeoff'&&!!E.plane?.onGround);
 }
 function jcCabinPAPlay(kind){
- // v69 male-only speech: suppress the previously embedded cabin crew voice.
- // Retain seatbelt chime, game notifications, and cabin-secured mission logic.
- if(E.state!=='play'||!jcEm.seatOn||!jcCabinPAValidPhase(kind))return;
- const field=kind==='landing'?'landingPlayed':kind==='airborne'?'airbornePlayed':'takeoffPlayed';
+ // v71: Play the three original user recordings unchanged. Keep
+ // GPWS / AP / FD warning clips exactly as they were in v70.
+ const key=kind==='airborne'?'airborne':kind==='landing'?'landing':
+  kind==='emergency'?'emergency':'original';
+ if(E.state!=='play'||!jcEm.seatOn||wt?.muted||jcCabinPA.failed[key]||
+  !jcCabinPAValidPhase(kind)||jcCabinPA.pending||
+  (kind!=='emergency'&&jcEmEmergencyActive()))return;
+ const field=kind==='landing'?'landingPlayed':kind==='airborne'?'airbornePlayed':
+  kind==='emergency'?'emergencyPlayed':'takeoffPlayed';
  if(jcCabinPA[field])return;
- jcCabinPAStop();
- jcCabinPA[field]=true;
- jcCabinPA.pending='';
- jcCabinPA.lastAnnouncement=kind+' · voice suppressed';
- jcCabinPA.playCount++;
- try{wt.play('chime',.22)}catch(_e){}
- if(kind==='landing'){
-  jcCabinPA.landingPlayedAt=E.t;
-  jcCabinPA.cabinSecured=true;
-  jcCabinPA.cabinSecuredAt=E.t;
-  try{ee('cabin_secured_simulated',jcCabinPA.landingTrigger||'landing')}catch(_e){}
- }
- try{ee('cabin_pa_muted_'+kind,'seat_belts_on')}catch(_e){}
+ jcCabinPA.pending=kind;
+ const serial=jcCabinPA.serial;
+ jcCabinPALoad(kind).then(buffer=>{
+  if(!buffer||serial!==jcCabinPA.serial||E.state!=='play'||!jcEm.seatOn||wt?.muted||
+   !jcCabinPAValidPhase(kind))return;
+  const ctx=wt.ctx;if(!ctx||!wt.sfx)return;
+  jcCabinPAStop();
+  const source=ctx.createBufferSource(),gain=ctx.createGain();
+  source.buffer=buffer;gain.gain.value=.88;
+  source.connect(gain);gain.connect(wt.sfx);
+  source.onended=()=>{
+   const completed=jcCabinPA.source===source;
+   if(completed){
+    jcCabinPA.source=null;
+    if(kind==='landing'&&E.state==='play'&&E.phase==='approach'&&jcEm.seatOn){
+     jcCabinPA.cabinSecured=true;jcCabinPA.cabinSecuredAt=E.t;
+     try{ee('cabin_secured_simulated',jcCabinPA.landingTrigger||'landing')}catch(_e){}
+    }
+   }
+   try{gain.disconnect()}catch(_e){}
+  };
+  try{
+   // Belt chime also occurs at toggle; this soft start chime covers an
+   // automatic landing/approach announcement when the sign was already ON.
+   if(kind==='landing')wt.play('chime',.19);
+   source.start(ctx.currentTime+.28);
+   jcCabinPA.source=source;jcCabinPA[field]=true;
+   jcCabinPA.lastAnnouncement=kind+' · supplied recording';jcCabinPA.playCount++;
+   if(kind==='landing')jcCabinPA.landingPlayedAt=E.t;
+   try{ee('cabin_pa_recorded_'+kind,'seat_belts_on')}catch(_e){}
+  }catch(error){
+   console.warn('Jetline cabin recorded announcement playback failed',kind,error);
+   try{source.disconnect();gain.disconnect()}catch(_e){}
+   jcCabinPA.source=null;
+  }
+ }).finally(()=>{if(jcCabinPA.pending===kind)jcCabinPA.pending='';});
 }
 
+window.__jcSeatbeltAudioStatus=()=>({
+ version:'v71',signOn:!!jcEm.seatOn,phase:E.phase,
+ source:'user-recorded cabin announcements',
+ files:[jcCabinPA.file,jcCabinPA.airborneFile,jcCabinPA.landingFile,jcCabinPA.emergencyFile],
+ loaded:Object.keys(jcCabinPA.buffers),failed:Object.keys(jcCabinPA.failed),
+ lastPlayed:jcCabinPA.lastAnnouncement,playCount:jcCabinPA.playCount,
+ cabinSecured:jcCabinPA.cabinSecured
+});
 function jcCabinPAForPhase(justSwitchedOn=false){
  if(E.state!=='play'||!jcEm.seatOn)return;
- if(E.phase==='approach')jcCabinPAPlay('landing');
+ if(jcEmEmergencyActive())jcCabinPAPlay('emergency');
+ else if(E.phase==='approach')jcCabinPAPlay('landing');
  else if(jcCabinPAValidPhase('airborne')){
   // Airborne announcement ONLY on OFF->ON. Staying ON after takeoff
   // never replays the cabin reminder when the flight enters ROUTE.
@@ -12581,26 +12623,35 @@ function jcCabinPALocalizerCaptured(){
 }
 function jcCabinPAManualLandingReady(){
  const p=E.plane;
+ const nonILS=(_t?.app==='vor'||E.route?.app==='vor');
+ // For an ILS, even hand-flown, wait for LOC CAPTURED. Non-ILS and
+ // emergency approaches retain a safe manual fallback once on approach.
  return E.state==='play'&&E.phase==='approach'&&p&&!p.onGround&&
-  (jcEm.active||!p.apOn);
+  (jcEm.active||nonILS);
 }
 function jcCabinPATick(){
  if(E.state!=='play')return;
  jcCabinPA.lastPhase=E.phase;
+ // Prepare for departure: turn the sign ON once takeoff starts on ground.
+ // The supplied takeoff announcement then plays automatically.
+ if(E.phase==='takeoff'&&E.plane?.onGround&&!jcEm.seatOn)jcEmSeatToggle(true);
+ // If an emergency occurs while the belt sign is already ON, play its
+ // male announcement once instead of staying silent.
+ if(jcEm.seatOn&&jcEmEmergencyActive()&&!jcCabinPA.emergencyPlayed)
+  jcCabinPAPlay('emergency');
   // When the last ring was truly collected, the core will now be in
   // APPROACH phase. This takes precedence over ILS/manual fallbacks.
   if(jcCabinPA.finalWaypointCollected&&!jcCabinPA.finalLandingHandled&&
      E.phase==='approach'&&!E.plane?.onGround){
    jcCabinPA.finalLandingHandled=true;
    jcCabinPA.landingTrigger='final_waypoint';
+   // Arm sign but defer recorded landing PA until localiser capture.
    if(!jcEm.seatOn)jcEmSeatToggle(true);
-   else jcCabinPAPlay('landing');
    try{ee('cabin_seatbelt_auto_final_waypoint',jcCabinPA.finalWaypointName)}catch(_e){}
   }
   const loc=jcCabinPALocalizerCaptured();
   const manual=jcCabinPAManualLandingReady();
-  if(!jcCabinPA.finalLandingHandled&&!jcCabinPA.localizerHandled&&
-     !jcCabinPA.manualLandingHandled&&(loc||manual)){
+  if(!jcCabinPA.localizerHandled&&!jcCabinPA.manualLandingHandled&&(loc||manual)){
   // Prefer true LOC capture when both events occur together. Otherwise a
   // hand-flown approach triggers exactly once without waiting for an ILS.
   if(loc)jcCabinPA.localizerHandled=true;
@@ -12648,9 +12699,9 @@ function jcEmSeatToggle(force){
  jcEm.seatOn=next;
  try{wt.unlock();wt.play('chime',.18)}catch(_e){}
  if(!jcEm.seatOn){
-  // A new OFF -> ON cycle must replay the original prerecorded cabin message.
+  // A new OFF -> ON cycle re-arms the male belt-sign announcements.
   jcCabinPAStop();jcCabinPA.takeoffPlayed=false;jcCabinPA.airbornePlayed=false;
-  jcCabinPA.pending='';
+  jcCabinPA.emergencyPlayed=false;jcCabinPA.pending='';
  }
  else if(!wasOn)jcCabinPAForPhase(true);
  if(jcEm.seatOn&&jcEm.seatRequested&&!jcEm.seatAwarded){
