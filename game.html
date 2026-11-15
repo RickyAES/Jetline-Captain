@@ -6872,16 +6872,16 @@ function jcChangiSync3DGround(){
  layer.userData.lastContactSnapshot=key;
  while(layer.children.length)layer.remove(layer.children[0]);
  if(jetTrafficActiveAirport()!=='WSSS'||E.state!=='play')return;
- const liveIds=new Set((jetTraffic.live||[]).filter(a=>a.onGround).map(a=>String(a.id||'').toLowerCase()));
+ const renderedLiveIds=new Set(jetTraffic.liveModels.keys());
  const parkedHex=new Set(Array.from(jetTraffic.changiGateLayer?.userData?.observedParkedHex||[]).map(v=>String(v).toLowerCase()));
  let drawn=0;
  for(const a of aircraft){
   const hex=String(a?.hex||'').toLowerCase();
-  if(drawn>=65||liveIds.has(hex)||parkedHex.has(hex))continue;
+  if(drawn>=65||renderedLiveIds.has(hex)||parkedHex.has(hex))continue;
   if(!Number.isFinite(a.lat)||!Number.isFinite(a.lon)||a.onGround!==true)continue;
-  // Below taxi speed, show only the gate-docked aircraft model. This avoids a
-  // duplicate radar aircraft with a random nose direction beside the stand.
-  if(!Number.isFinite(Number(a.speedKt))||Number(a.speedKt)<5)continue;
+  // A stopped observed aircraft can still be parked away from a known gate or
+  // waiting at a holding point. Render it only if there is no existing model.
+  // Live ground contacts are ALWAYS kept at their reported geographic position.
   const pos=jetWSSSAlongCross(a.lat,a.lon);
   factory(layer,{x:pos.cross*jetWSSSScale.across,z:-pos.along*jetWSSSScale.along},a);
   drawn++;
@@ -8170,7 +8170,7 @@ function jetTrafficActiveAirport(){
 }
 function jetTrafficLiveFresh(){return jetTraffic.liveAirport===jetTrafficActiveAirport()&&
  !!jetTraffic.liveRef&&Date.now()-jetTraffic.liveAt<95000;}
-// v83 — OSINT-backed ADS-B polling. Browser calls this site's Vercel API,
+// v84 — OSINT-backed ADS-B polling. Browser calls this site's Vercel API,
 // NOT ADSB.lol directly (the upstream does not allow third-party CORS).
 // Only receiver-observed positions become live tracks; game ATC, gates,
 // runway occupancy and simulated flight are never described as real reports.
@@ -17189,6 +17189,7 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
  const groundSection=document.createElement('section');groundSection.id='jc-ground-panel';
  groundSection.innerHTML=`<div class="jc-ground-top"><h3>WSSS · AIRCRAFT ON GROUND</h3><button id="jc-ground-refresh" type="button">↻ UPDATE</button></div>
   <div class="jc-ground-meta" id="jc-ground-meta">Awaiting a ground-position feed</div>
+  <div class="jc-ground-meta"><a href="/api/changi-ground" target="_blank" rel="noopener noreferrer" style="color:#88eaff">VIEW FEED DIAGNOSTICS ↗</a> · Recorded contacts only, not synthetic ground traffic</div>
   <canvas id="jc-ground-map" width="530" height="380" aria-label="North-up Changi runways with reported ADS-B on-ground aircraft positions"></canvas>
   <div class="jc-ground-legend">● OBSERVED GROUND POSITION · ◇ SELECTED AIRCRAFT · NORTH UP · RUNWAYS GEOGRAPHIC</div>
   <div class="jc-ground-table" role="region" aria-label="Reported Changi ground aircraft"><table><thead><tr><th>CALLSIGN / REG</th><th>TYPE</th><th>GS</th><th>LAST FIX</th></tr></thead><tbody id="jc-ground-rows"></tbody></table></div>
@@ -17227,9 +17228,16 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
   const updated=raw.asOf||raw.updatedAt||null;
   const age=updated?Date.now()-new Date(updated).getTime():NaN;
   const fresh=Number.isFinite(age)&&age>=-120000&&age<95000;
-  state={source:String(raw.source||'Ground position feed').slice(0,85),asOf:updated,
-   aircraft:fresh?sanitizeRows(raw.aircraft):[],mode:mode==='test'?'test':fresh?'live':'stale',
-   status:fresh?'':'Ground feed missing valid timestamp or is older than 95 seconds'};
+  const aircraft=fresh?sanitizeRows(raw.aircraft):[];
+  const observedNear=Math.max(0,Number(raw.diagnostics?.observedNearWSSS)||0);
+  const lowAlt=Math.max(0,Number(raw.diagnostics?.lowAltitudeNotGround)||0);
+  const source=String(raw.source||'Ground position feed').slice(0,85);
+  state={source,asOf:updated,aircraft,mode:mode==='test'?'test':fresh?'live':'stale',
+   providers:Array.isArray(raw.providers)?raw.providers:[],
+   observedNear,lowAlt,reportedGround:aircraft.length,
+   status:!fresh?'Ground feed missing valid timestamp or is older than 95 seconds':
+    aircraft.length===0?(observedNear?`Feed online, ${observedNear} nearby aircraft but none confirmed on ground`:
+      'Feed online, but no aircraft positions reported near WSSS'):'Ground positions observed'};
   window.__jcGroundSnapshot=state;
   window.dispatchEvent(new Event('jc-changi-ground-updated'));
   render();return state;
@@ -17263,7 +17271,8 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
  function render(){
   const t=state.asOf?new Date(state.asOf):null;
   const stamp=t&&!Number.isNaN(t.getTime())?t.toLocaleTimeString('en-SG',{timeZone:'Asia/Singapore',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' SGT':'unavailable';
-  $('jc-ground-meta').textContent=`${state.mode==='live'?'OBSERVED ADS-B':'NOT LIVE'} · ${state.aircraft.length} contacts · ${state.source} · ${stamp}${state.status?' · '+state.status:''}`;
+  $('jc-ground-meta').textContent=`${state.mode==='live'?'LIVE ADS-B FEED':'FEED NOT LIVE'} · ${state.aircraft.length} confirmed ground · ${state.observedNear||0} observed near WSSS · ${state.source} · ${stamp}${state.status?' · '+state.status:''}`;
+  groundButton.textContent='🛬 GROUND '+state.aircraft.length;
   const body=$('jc-ground-rows');body.textContent='';
   for(const a of state.aircraft){
    const tr=document.createElement('tr');tr.dataset.hex=a.hex;tr.tabIndex=0;tr.style.cursor='pointer';
@@ -17271,7 +17280,7 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
    tr.innerHTML=`<td><b>${toHtml(a.callsign||'NO CALLSIGN')}</b><small>${toHtml(a.registration||a.hex)}</small></td><td>${toHtml(a.type||'—')}</td><td>${a.speedKt==null?'—':Math.round(a.speedKt)+' kt'}</td><td>${Math.round(a.seenPos)}s ago</td>`;
    const choose=()=>{selected=a.hex;render();};tr.addEventListener('click',choose);tr.addEventListener('keydown',ev=>{if(ev.key==='Enter'){choose();ev.preventDefault();}});body.append(tr);
   }
-  if(!state.aircraft.length){const tr=document.createElement('tr');tr.innerHTML='<td colspan="4">No fresh reported ground positions. Check the feed and try again; this does not imply the airport is empty.</td>';body.append(tr);}
+  if(!state.aircraft.length){const tr=document.createElement('tr');tr.innerHTML='<td colspan="4">No receiver-confirmed ground aircraft available at WSSS in this snapshot. Ground coverage can be absent even while aircraft are taxiing. No simulated traffic is presented here as live.</td>';body.append(tr);}
   const chosen=state.aircraft.find(a=>a.hex===selected);
   $('jc-ground-selected').textContent=chosen?`${chosen.callsign||chosen.hex} · ${chosen.registration||'registration unknown'} · ${chosen.type||'type unknown'} · ${chosen.lat.toFixed(5)}, ${chosen.lon.toFixed(5)} · HDG ${chosen.heading==null?'—':Math.round(chosen.heading)+'°'} · GROUND POSITION ONLY · GATE UNKNOWN`:'Select a reported aircraft to see its geographic position. Gate assignment and physical stand occupancy remain unknown.';
   renderMap();
@@ -17303,8 +17312,13 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
  const timer=setInterval(()=>{
   if(document.hidden)return;
   if(state.mode==='live'&&state.asOf&&Date.now()-Date.parse(state.asOf)>95000){state={...state,aircraft:[],mode:'stale',status:'Position feed expired'};window.__jcGroundSnapshot=state;window.dispatchEvent(new Event('jc-changi-ground-updated'));render();}
-  if(gatePanel.classList.contains('open')&&gatePanel.classList.contains('jc-ground-active'))refresh();
+  const liveAirport=window.__jcOsintFlightData?.status?.().activeAirport;
+  if(gatePanel.classList.contains('open')&&gatePanel.classList.contains('jc-ground-active')||
+    liveAirport==='WSSS')refresh();
  },30000);
+ // Preload ground positions as soon as WSSS is selected, not only after the
+ // user opens the GATES > ON GROUND tab. Avoid continuously polling menus.
+ setTimeout(()=>{try{if(!document.hidden)refresh();}catch{}},1500);
  window.__jcGroundControl={refresh,applyTestData:raw=>apply(raw,'test'),snapshot:()=>state,show:()=>{gatePanel.classList.add('open');toggle(true)}};
  render();
 })();
