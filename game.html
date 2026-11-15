@@ -4930,24 +4930,41 @@ const jcMobilePanel=jcPanelIsMobile();
 const jcDesktopDock=!jcMobilePanel&&(
  t>=900 || (t>=720&&window.matchMedia&&window.matchMedia('(pointer:fine)').matches)
 );
+// v82: A rotated PHONE must NOT use the centered portrait cockpit geometry.
+// The same responsive decision drives both the WebGL cockpit and HTML gauges.
+const jcPhoneLandscapeDock=jcMobilePanel&&t>e*1.18&&e<=650;
 document.body.classList.toggle('jc-desktop-layout',!!jcDesktopDock);
+document.body.classList.toggle('jc-mobile-landscape-dock',!!jcPhoneLandscapeDock);
 if(jcMobilePanel){
  if(!E.__mobilePanelAutoSized){E.__mobilePanelAutoSized=true}
  E.panelMax=jcPanelMode!=='essential';
  Mt?.setPanelMax?.(E.panelMax);
  const target=jcPanelMode==='65'?.65:jcPanelMode==='55'?.55:0;
  const widthScale=t/Ri.w;
- // Essential mode uses the full scene. Non-essential modes occupy exactly
- // 65% / 55% of viewport height when physical screen width permits.
  let s;
  if(jcPanelMode==='essential'){
+   // ESSENTIAL: no central cockpit; a narrow right-side touch rail is used
+   // in landscape, while portrait retains its original bottom control bar.
    s=Math.min(.96*t/Ri.w,.37*e/Ri.h);
+   pe.W=t;pe.H=e;pe.landscape=jcPhoneLandscapeDock;
+   pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;
+   pe.world=[0,0,t,e];
+ }else if(jcPhoneLandscapeDock){
+   // Landscape phone: put the entire instrument group at the RIGHT edge.
+   // Reserve ~60% or more of the view for runway / outside scenery.
+   const rightInset=8;
+   s=Math.max(.28,Math.min((e-12)/Ri.h,(t*.43)/Ri.w));
+   pe.W=t;pe.H=e;pe.landscape=true;
+   pe.s=s;pe.bx=Math.max(t*.51,t-Ri.w*s-rightInset);
+   pe.by=Math.max(0,(e-Ri.h*s)/2);
+   pe.world=[0,0,Math.max(1,pe.bx-3),e];
  }else{
+   // Portrait retains the proven 65% / 55% bottom-docked geometry.
    s=Math.min(widthScale,Math.max(.25,e*target/Ri.h));
+   pe.W=t;pe.H=e;pe.landscape=e/t<1.15;
+   pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;
+   pe.world=[0,0,t,Math.max(1,pe.by+8*s)];
  }
- pe.W=t;pe.H=e;pe.landscape=e/t<1.15;
- pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;
- pe.world=jcPanelMode==='essential'?[0,0,t,e]:[0,0,t,Math.max(1,pe.by+8*s)];
 }else if(jcDesktopDock){
  // DESKTOP: the real cockpit ALWAYS occupies the RIGHT side, regardless of
  // browser aspect ratio and any previously saved mobile 65/55/Essential mode.
@@ -4965,7 +4982,14 @@ if(jcMobilePanel){
  const i=E.panelMax?.72:kt('panelSize')+Math.min(1,Math.max(0,(700-e)/400))*Math.max(0,.62-kt('panelSize'));
  let s=t/Ri.w;if(Ri.h*s>e*i)s=e*i/Ri.h;
  pe.s=s;pe.bx=(t-Ri.w*s)/2;pe.by=e-Ri.h*s;pe.world=[0,0,t,pe.by+8*s];
-}document.documentElement.style.setProperty("--jc-v51-scene-width",Math.round(pe.world[2])+"px");return pe.dpr=CM(t,e),Ye&&(Ye.setPixelRatio(pe.dpr),Ye.setSize(t,e,!1),Ga.style.width=t+"px",Ga.style.height=e+"px"),Ba&&Y4(Ba,pe),Mt.layout(pe,cn),je.layout(pe),Bi=!1,E.state!=="boot"&&d0(),!0}var J5=window.ResizeObserver?new ResizeObserver(()=>{Bi=!0,(pi||E.state==="end"||E.hostPaused)&&Is()}):null;J5&&J5.observe(yi);window.addEventListener("resize",()=>{Bi=!0});window.addEventListener("orientationchange",()=>setTimeout(()=>{Bi=!0,Is()},200));var BM=Bn(ni);
+}document.documentElement.style.setProperty("--jc-v51-scene-width",Math.round(pe.world[2])+"px");return pe.dpr=CM(t,e),Ye&&(Ye.setPixelRatio(pe.dpr),Ye.setSize(t,e,!1),Ga.style.width=t+"px",Ga.style.height=e+"px"),Ba&&Y4(Ba,pe),Mt.layout(pe,cn),je.layout(pe),Bi=!1,E.state!=="boot"&&d0(),!0}var J5=window.ResizeObserver?new ResizeObserver(()=>{Bi=!0,(pi||E.state==="end"||E.hostPaused)&&Is()}):null;J5&&J5.observe(yi);window.addEventListener("resize",()=>{Bi=!0});
+// Mobile Safari updates its viewport after the rotation event. Re-layout on
+// successive stable frames to avoid retaining the old portrait centre panel.
+window.addEventListener("orientationchange",()=>{
+ for(const delay of [80,280,650])setTimeout(()=>{Bi=!0;Is();jcPanelPickerTick?.()},delay);
+});
+window.visualViewport?.addEventListener('resize',()=>{Bi=!0;});
+var BM=Bn(ni);
 /* Taxi-out / taxi-in routes are navigable simulated airport service roads.
    Runway IDs, headings and lengths follow the selected airport record.
    Ground taxiway centre lines are illustrative; not official airport charts. */
@@ -9385,8 +9409,18 @@ function jcPanelPickerTick(){
  const bar=document.getElementById('jc-flight-min-overlay');
  const bh=jcPanelMode==='essential'&&bar?.classList.contains('active')?bar.getBoundingClientRect().height:0;
  const vh=Math.max(1,window.innerHeight);
- const occupied=jcPanelMode==='essential'?Math.max(0,bh):jcPanelMode==='65'?.65*vh:.55*vh;
- picker.style.bottom=Math.min(vh-70,Math.max(4,occupied+5))+'px';
+ if(document.body.classList.contains('jc-mobile-landscape-dock')){
+  // Keep the view selector in a slim rail BESIDE the cockpit, not over PFD/MCDU.
+  const rightEdge=jcPanelMode==='essential'?Math.min(window.innerWidth*.34,220)+12:
+   Math.max(6,pe.W-pe.bx+4);
+  picker.style.bottom='auto';
+  picker.style.top='max(46px, env(safe-area-inset-top))';
+  picker.style.right=Math.round(rightEdge)+'px';
+ }else{
+  picker.style.top='';picker.style.right='';
+  const occupied=jcPanelMode==='essential'?Math.max(0,bh):jcPanelMode==='65'?.65*vh:.55*vh;
+  picker.style.bottom=Math.min(vh-70,Math.max(4,occupied+5))+'px';
+ }
 }
 function jcMobileSceneryOnly(){
  return E.state==='play' && jcPanelIsMobile() && jcPanelMode==='essential';
@@ -16657,7 +16691,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v79';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v82';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
@@ -17581,6 +17615,45 @@ body.jc-desktop-layout #ui.playing #jet-taxi-box .jet-taxi-side button{
 }
 /* Normal large map always retains CLOSE and the full-height display. */
 body.jc-airport-map-open #jc-airport-surface #jc-map-mini-toggle{display:none!important}
+</style>
+
+
+<style id="jc-v82-phone-landscape-right-dock">
+/* v82: Mobile Safari landscape is a RIGHT-docked cockpit, never centered. */
+@media (orientation:landscape) and (max-height:650px){
+ body.jc-mobile-landscape-dock #jc-panel-view-modes.active{
+  flex-direction:column!important;gap:2px!important;width:56px!important;
+  max-width:56px!important;padding:3px!important;align-items:stretch!important;
+  z-index:71!important;
+ }
+ body.jc-mobile-landscape-dock #jc-panel-view-modes .jc-pick-caption{
+  text-align:center!important;font-size:8px!important;
+ }
+ body.jc-mobile-landscape-dock #jc-panel-view-modes button{
+  min-width:0!important;width:100%!important;min-height:29px!important;
+  padding:3px 0!important;font-size:10px!important;
+ }
+ /* Essential view has no full cockpit. Touch controls become a narrow rail on
+    the far right, leaving the left 2/3 of the windshield unobstructed. */
+ body.jc-mobile-landscape-dock #jc-flight-min-overlay.active{
+  left:auto!important;right:max(4px,env(safe-area-inset-right))!important;
+  top:max(38px,env(safe-area-inset-top))!important;
+  bottom:max(4px,env(safe-area-inset-bottom))!important;
+  width:min(220px,34vw)!important;max-height:none!important;height:auto!important;
+  overflow-y:auto!important;padding:4px!important;z-index:65!important;
+  border-top:1px solid #5babc3!important;border-left:1px solid #5babc3!important;
+  border-radius:10px!important;
+ }
+ body.jc-mobile-landscape-dock #jc-flight-min-overlay .jc-min-top{display:none!important;}
+ body.jc-mobile-landscape-dock #jc-flight-min-overlay .jc-min-buttons{
+  display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:3px!important;
+ }
+ body.jc-mobile-landscape-dock #jc-flight-min-overlay button{
+  min-height:29px!important;max-height:40px!important;font-size:9px!important;
+  padding:3px 1px!important;
+ }
+}
 </style>
 
 </body>
