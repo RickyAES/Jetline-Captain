@@ -17232,12 +17232,17 @@ body.jc-ground-clear #jc-gate-camera-data-toggle{display:none!important}
   const observedNear=Math.max(0,Number(raw.diagnostics?.observedNearWSSS)||0);
   const lowAlt=Math.max(0,Number(raw.diagnostics?.lowAltitudeNotGround)||0);
   const source=String(raw.source||'Ground position feed').slice(0,85);
+  const providers=Array.isArray(raw.providers)?raw.providers:[];
+  const extra=providers.find(p=>p.name==='Airplanes.live');
+  const alternateNote=extra?.status==='disabled'?' · Airplanes.live needs approved access':
+   extra?.status==='access_denied'?' · Airplanes.live denied access (403)':
+   extra?.status==='rate_limited'?' · Airplanes.live rate-limited':
+   extra?.status==='connected'?' · Airplanes.live connected':'';
   state={source,asOf:updated,aircraft,mode:mode==='test'?'test':fresh?'live':'stale',
-   providers:Array.isArray(raw.providers)?raw.providers:[],
-   observedNear,lowAlt,reportedGround:aircraft.length,
-   status:!fresh?'Ground feed missing valid timestamp or is older than 95 seconds':
+   providers,observedNear,lowAlt,reportedGround:aircraft.length,
+   status:(!fresh?'Ground feed missing valid timestamp or is older than 95 seconds':
     aircraft.length===0?(observedNear?`Feed online, ${observedNear} nearby aircraft but none confirmed on ground`:
-      'Feed online, but no aircraft positions reported near WSSS'):'Ground positions observed'};
+      'Feed online, but no aircraft positions reported near WSSS'):'Ground positions observed')+alternateNote};
   window.__jcGroundSnapshot=state;
   window.dispatchEvent(new Event('jc-changi-ground-updated'));
   render();return state;
