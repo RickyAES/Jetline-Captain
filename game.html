@@ -8170,6 +8170,60 @@ function jetTrafficActiveAirport(){
 }
 function jetTrafficLiveFresh(){return jetTraffic.liveAirport===jetTrafficActiveAirport()&&
  !!jetTraffic.liveRef&&Date.now()-jetTraffic.liveAt<95000;}
+// v83 — OSINT-backed ADS-B polling. Browser calls this site's Vercel API,
+// NOT ADSB.lol directly (the upstream does not allow third-party CORS).
+// Only receiver-observed positions become live tracks; game ATC, gates,
+// runway occupancy and simulated flight are never described as real reports.
+const jcV83OsintState={enabled:true,mode:'starting',airport:'',count:0,
+ asOf:null,updatedAt:0,error:'',source:'ADSB.lol · ODbL 1.0',lastAttempt:0,busy:false};
+async function jcV83OsintRefresh(force=false){
+ if(!jcV83OsintState.enabled||jcV83OsintState.busy||document.hidden)return false;
+ if(E.state!=='play')return false;
+ const airport=jetTrafficActiveAirport();
+ if(!airport)return false;
+ const now=Date.now(),s=jcV83OsintState;
+ if(!force&&s.airport===airport&&now-s.lastAttempt<42000)return false;
+ s.lastAttempt=now;s.airport=airport;s.busy=true;
+ s.mode=s.count&&jetTrafficLiveFresh()?'refreshing':'connecting';s.error='';
+ const controller=new AbortController();
+ const cancel=setTimeout(()=>controller.abort(),15000);
+ try{
+  const url='/api/live-traffic?airport='+encodeURIComponent(airport);
+  const response=await fetch(url,{cache:'no-store',signal:controller.signal,
+   headers:{Accept:'application/json'}});
+  const data=await response.json().catch(()=>null);
+  if(!response.ok||!data?.aircraft||!Array.isArray(data.aircraft))
+   throw new Error(data?.message||('ADS-B endpoint HTTP '+response.status));
+  if(airport!==jetTrafficActiveAirport())return false;
+  if(!data.asOf||Date.now()-Date.parse(data.asOf)>95000)
+   throw new Error('Aircraft positions are stale');
+  if(!jetTrafficAccept(data))throw new Error('Traffic snapshot was not accepted for this airport');
+  s.mode='live';s.count=data.aircraft.length;s.asOf=data.asOf;
+  s.updatedAt=Date.now();s.error='';s.source=data.source||'ADSB.lol · ODbL 1.0';
+  return true;
+ }catch(err){
+  s.mode='offline';s.error=String(err?.message||err).slice(0,150);
+  s.count=jetTrafficLiveFresh()?jetTraffic.live.length:0;
+  return false;
+ }finally{s.busy=false;clearTimeout(cancel);}
+}
+window.__jcOsintFlightData={
+ status:()=>({...jcV83OsintState,activeAirport:jetTrafficActiveAirport(),live:jetTrafficLiveFresh(),
+   currentContacts:jetTrafficLiveFresh()?jetTraffic.live.length:0}),
+ refresh:()=>jcV83OsintRefresh(true),
+ disable:()=>{jcV83OsintState.enabled=false;jcV83OsintState.mode='disabled';
+  jetTraffic.live=[];jetTraffic.liveAt=0;jetTraffic.liveAirport='';jetTrafficClearModels();},
+ enable:()=>{jcV83OsintState.enabled=true;jcV83OsintState.lastAttempt=0;
+  return jcV83OsintRefresh(true);}
+};
+// Game-only auto polling. A single request every ~45 s per player is enough
+// for a 50-km radar view; the Vercel edge/server caches snapshots for 35-40 s.
+setInterval(()=>{if(E.state==='play'&&!document.hidden)jcV83OsintRefresh();},5000);
+window.addEventListener('focus',()=>{if(E.state==='play')jcV83OsintRefresh();});
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden&&E.state==='play')jcV83OsintRefresh();
+});
+setTimeout(()=>jcV83OsintRefresh(),2200);
 function jetTrafficShowHud(){
  let hud=document.getElementById('jet-runway-traffic');if(hud)return hud;
  const style=document.createElement('style');style.textContent=`
@@ -9437,7 +9491,7 @@ function jcSurfaceEnsure(){
  <canvas id="jc-map-canvas" width="500" height="650" aria-label="Runways, taxiways, player location and live radar contacts"></canvas>
  <div id="jc-map-guidance" role="status" aria-live="polite">READY · SELECT A RUNWAY</div>
  <div id="jc-map-footer"><span id="jc-map-count">Radar synchronizing...</span><span id="jc-map-pilot">YOU</span></div>
- <div class="jc-map-legend"><span><b style="color:#51f4de">◆</b> Your aircraft</span><span><b style="color:#ffd67f">●</b> Ground</span><span><b style="color:#73dfff">▲</b> Airborne</span><span>ADS-B positions interpolated · runway/taxiways schematic</span></div>`;
+ <div class="jc-map-legend"><span><b style="color:#51f4de">◆</b> Your aircraft</span><span><b style="color:#ffd67f">●</b> Ground</span><span><b style="color:#73dfff">▲</b> Airborne</span><span>Observed ADS-B / MLAT positions · <a href="https://www.adsb.lol/" target="_blank" rel="noopener noreferrer">ADSB.lol · ODbL 1.0</a> · runway/taxiways schematic · not actual ATC</span></div>`;
  host.appendChild(overlay);
  overlay.querySelector('#jc-map-close').addEventListener('click',ev=>{ev.stopPropagation();jcSurfaceToggle(false)});
  const miniButton=overlay.querySelector('#jc-map-mini-toggle');
@@ -10114,8 +10168,9 @@ function jcSurfaceDraw(force=false){
   jcMapLastStatus=time;
   const count=overlay.querySelector('#jc-map-count');
   const lastAge=Math.max(0,Math.round((time-jetTraffic.liveAt)/1000));
-  count.textContent=jetTrafficLiveFresh()?`ADS-B · ${live.length} contacts · ${rendered} shown · ${lastAge}s feed`:
-   'ADS-B unavailable / stale · awaiting new report';
+  const osint=window.__jcOsintFlightData?.status?.();
+  count.textContent=jetTrafficLiveFresh()?`ADSB.lol OSINT · ${live.length} observed · ${rendered} shown · ${lastAge}s age`:
+   ('OSINT feed '+(osint?.mode||'offline')+' · '+(osint?.error||'awaiting observed aircraft'));
   const heading=String(Math.round(($i(E.plane.psi)||0)+360)%360).padStart(3,'0');
  overlay.querySelector('#jc-map-pilot').textContent=`YOU · ${Math.round((E.plane.v||0)*wn)} KT · HDG ${heading}°`;
  const instruction=overlay.querySelector('#jc-map-guidance');
@@ -10132,7 +10187,7 @@ function jcSurfaceDraw(force=false){
   instruction.textContent=msg;
  }
   overlay.querySelector('.jc-map-hint').textContent=isWSSS?
-   'Radar / scenery aligned · taxi & hold corrected · 1s status':
+   'OSINT aircraft positions · runway/taxiways schematic · 1s status':
    (ref.simulated?'N ↑ · SIM runway · positions animated · 1s status':
    'N ↑ · RADAR aligned · animated contacts · 1s status');
  }
@@ -16691,7 +16746,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v82';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v83';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
