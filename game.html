@@ -4969,8 +4969,8 @@ if(jcMobilePanel){
  // DESKTOP: the real cockpit ALWAYS occupies the RIGHT side, regardless of
  // browser aspect ratio and any previously saved mobile 65/55/Essential mode.
  // Leave the runway/airport view on the left. Scale uniformly, never squeeze.
- const panelShare=t>=1500?.34:t>=1100?.40:.44;
- const i=Math.max(.36,Math.min((e-14)/Ri.h,t*panelShare/Ri.w));
+ const panelShare=t>=1500?.315:t>=1100?.36:.395;
+ const i=Math.max(.30,Math.min((e-14)/Ri.h,t*panelShare/Ri.w));
  pe.W=t;pe.H=e;pe.landscape=true;
  pe.s=i;pe.bx=t-Ri.w*i;pe.by=Math.max(0,(e-Ri.h*i)/2);
  pe.world=[0,0,Math.max(1,pe.bx+4),e];
@@ -13735,7 +13735,7 @@ window.__game={cabinPAInfo(){return {source:'user-supplied recorded clips for ta
   jcEmReleaseATCHolding();
   return {ok:false,active:false,reason:'EMERGENCY_PRIORITY_NO_HOLD',timeRemaining:jetMissionLeft()};
  }
- if(n){if(E.state!=="play")return{ok:!1,active:!!E.holdExempt};if(!E.holdExempt){E.holdExempt=!0;ee("atc_hold","start")}}else if(E.holdExempt){E.holdExempt=!1;let t=0;if(_t&&_t.wps&&E.plane&&E.phase==="route")while(E.wpIdx<_t.wps.length&&E.plane.z<_t.wps[E.wpIdx].z-160){let e=_t.wps[E.wpIdx];e.hit=!0;let i=It&&It.rings&&It.rings[E.wpIdx];i&&(i.visible=!1),E.wpIdx++,t++}if(atcClearance&&E.state==="play"&&!E.trailer){let f=jetMissionCap(),remaining=f-(E.t-(E.holdTimeExcluded||0)),bonus=Math.max(0,900-remaining);E.holdTimeExcluded+=bonus;E.holdClearanceGrace=bonus}ee("atc_hold","resume:"+t)}return{ok:!0,active:!!E.holdExempt,misses:E.misses,wpIdx:E.wpIdx,timeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0}},step(n,t,e){t=t||1/30,n=n||1;for(let i=0;i<n;i++){if(E.hostPaused)continue;let s=typeof e=="function"?()=>{let o=e(window.__game);return o&&typeof o=="object"&&"lever"in o?o:null}:e&&typeof e=="object"&&"lever"in e?()=>e:null;Dp(t,s)}d0()},render(){d0()},begin(){Lo()},bot(n){return W4(E,n)},fcuTurn(n,t){nd(n,t)},fcuTap(n){Lp(n)},efis(n,t){return t===void 0?q3["k"+n[0].toUpperCase()+n.slice(1)]?Np(n):bp(n,!1):n in E.efis&&(E.efis[n]=t),Object.assign({},E.efis)},fullscreen(){Pp()},fcuButton(n){id(n,!1)},ap(n){Oo(!1,n)},restart(){ii()},pause(){return vo(!0,"api")},resume(){return vo(!1,"api")},quit(){return Sp()},restartFlight(){return Mp()},account(n,t,e){return xp(n,t,e)},save(){return za(!0)},continueFlight(){return Tp()},setting(n){return gp(n)},saved(){let n=ir();return{flight:n.flight||null,settings:n.settings||null,lastLevel:n.lastLevel||null}},panel(n){Ql(n==null?!E.panelMax:!!n,!0)},info(){return E.plane?(pi&&Ye&&E.state!=="boot"&&(Bp(),E.objects.scene=Object.assign({props:12,dressingShare:.7},xo||{})),{pads:xs.count,devices:xs.devices.map(n=>({name:n.name,kind:n.kind,roles:n.roles.slice()})),rwys:_t?{dep:pt.from,depRwy:pt.depRwy,depCrs:pt.depCrs,arr:pt.dest,arrRwy:pt.ils.rwy,arrCrs:pt.arrCrs,ils:pt.ils.ident+" "+pt.ils.freq+" "+pt.ils.crs+(pt.ils.real?"":" GEN"),vor:pt.vor.ident+" "+pt.vor.freq,depRot:+((_t.depRot||0)*An).toFixed(1),realFixes:_t.realNames||0,fixes:_t.wps.map(n=>n.name+(n.lat!=null?"@"+n.lat.toFixed(2)+","+n.lon.toFixed(2):"")),db:_t.db.length}:null,nav:(()=>{let n=gs(E);return n?{ils:{ident:n.ils.ident,freq:n.ils.freq,crs:n.ils.crs,rwy:n.ils.rwy,loc:+n.ils.loc.toFixed(2),gs:+n.ils.gs.toFixed(2),locValid:n.ils.locValid,gsValid:n.ils.gsValid,dme:+n.ils.dme.toFixed(1)},papi:n.papi,vor:{ident:n.vor.ident,brg:Math.round(n.vor.brg),dme:+n.vor.dme.toFixed(1)},app:n.app,vapp:n.vapp?{dev:+n.vapp.dev.toFixed(2),vdevFt:Math.round(n.vapp.vdevFt),dme:+n.vapp.dme.toFixed(1),valid:n.vapp.valid,next:n.vapp.next?[n.vapp.next.dme,n.vapp.next.alt]:null,visual:n.vapp.visual}:null,x:Math.round(E.plane.x),gsKt:Math.round(n.gs),wind:[n.wind.dir,n.wind.kt],dest:pt.dest,wps:_t.wps.map(t=>t.name)}:null})(),atc:Object.assign(X5(E.atc),{text:E.atc.log.length?k5(Bt,E.atc.log[E.atc.log.length-1]):""}),traffic:(E.trafficList||[]).map(n=>({cs:n.cs,kind:n.kind,dist:Math.round(n.dist||0),dy:Math.round((n.dy||0)*oe),ta:!!n.ta})),settings:f0(),lastSave:E.lastSave,level:E.level,levels:bn,unlocked:E.unlocked,lv:E.lv||null,panelMax:E.panelMax,account:Ep(),community:(()=>{let n=Q3();return{source:ap()?"live":"demo",live:!!n.live,linked:fi.linked,sent:fi.sent,got:fi.got,online:n.online,flying:n.flying,registered:n.registered,simulated:n.simulated,top:n.score.slice(0,3).map(t=>t.name+"/"+t.cc+"/"+t.best),me:n.me,countries:n.countries.length,open:Mt.commOpen()}})(),guide:E.guide?{altT:E.guide.altT!=null?Math.round(E.guide.altT*oe):null,obst:E.guide.obst?{h:Math.round(E.guide.obst.o.h*oe),along:Math.round(E.guide.obst.along),danger:!!E.guide.obst.danger,pass:E.guide.obst.o.pass}:null,hint:E.guide.hint}:null,fuel:E.fuel?{startKg:E.fuel.startKg,remainingKg:Math.round(E.fuel.remainingKg),usedKg:Math.round(E.fuel.usedKg),burnKgH:Math.round(E.fuel.burnKgH),enduranceMin:E.fuel.enduranceMin,reserveKg:E.fuel.reserveKg,requiredBlockKg:Math.round(jetRequiredBlock(E.fms)*1000),predictedEFOBKg:Math.round(jetFuelPred(E.fms)*1000),pct:Math.round(E.fuel.remainingKg/E.fuel.startKg*100),flamedOut:!!E.fuel.flamedOut}:null,holdingExempt:!!E.holdExempt,missionPlan:E.routeFlight||null,missionLimitSec:jetMissionCap(),missionTime:Math.max(0,E.t-(E.holdTimeExcluded||0)),missionTimeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0,holdClearanceGrace:E.holdClearanceGrace||0,wpIdx:E.wpIdx,route:_t?{storms:_t.storms.map(n=>({x:Math.round(n.x),z:Math.round(n.z),r:n.r})),plan:Object.assign({},E.plan),stats:E.routeStats,misses:E.misses,wps:_t.wps.map(n=>({name:n.name,x:Math.round(n.x),z:Math.round(n.z),alt:Math.round(n.alt*oe)})),obst:_t.obst.map(n=>({kind:n.kind,pass:n.pass,x:Math.round(n.x),z:Math.round(n.z),h:Math.round(n.h*oe),r:Math.round(n.r)})),hdgOff:pt.ils.crs,dest:pt.dest,rwy:pt.ils.rwy}:null,gpws:E.gpws?{warn:E.gpws.warn,last:E.gpws.last,counts:Object.assign({},E.gpws.counts)}:null,efis:Object.assign({},E.efis),autoflight:{ap:!!E.plane.apOn,apN:E.plane.apN,athr:!!E.plane.athrOn,athrActive:!!E.plane.athr,spdTarget:Math.round(E.plane.spdTarget),fcu:Object.assign({},E.plane.fcu),lat:(E.guide||{}).latMode||"nav",vert:(E.guide||{}).vertMode||"man",att:{theta:+E.plane.theta.toFixed(2),aoa:+E.plane.aoa.toFixed(2),gamma:+E.plane.gamma.toFixed(2),fdPitch:E.guide?+(+E.guide.pitch).toFixed(2):null,v:+E.plane.v.toFixed(1),vy:+E.plane.vy.toFixed(2)}},fms:E.fms?{legs:E.fms.legs.map(n=>({name:n.name,seq:n.seq,alt:n.alt!=null?Math.round(n.alt*oe):null,spd:n.spd,ring:n.ring})),tmpy:!!E.fms.tmpy,ci:E.fms.ci,crzAlt:E.fms.crzAlt,vapp:E.fms.vapp,ils:E.fms.ilsFreq,fob:+E.fms.fob.toFixed(2),edits:E.fms.edits}:null,mcdu:{open:je.open,page:je.page,sp:je.sp,msg:je.msg},t:+E.t.toFixed(3),st:E.state==="boot"?"boot":E.state,nogl:td,stage:E.stage,phase:E.phase,runwaySignal:{simulated:true,source:jetTraffic.mode,clear:jetTraffic.clear,phase:jetTrafficAircraftAirborne()?'airborne':jetTraffic.phase,airport:jetTraffic.airport,liveCount:jetTraffic.live.length,arrivalId:jetTraffic.arrivalId||null,arrivalCallsign:jetTraffic.arrivalCallsign||null,departureId:jetTraffic.departureId||null,departureCallsign:jetTraffic.departureCallsign||null,departureRunway:jetTraffic.departureRunway||null,departureStage:jetTraffic.departureStage||null,departureBlocking:!!jetTraffic.departureBlocking,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null},taxi:E.groundTaxi?{mode:E.groundTaxi.mode,airport:E.groundTaxi.airport,runway:E.groundTaxi.runway,path:E.groundTaxi.waypoints.map(p=>[Math.round(p.x),Math.round(p.z)]),next:E.groundTaxi.next,total:E.groundTaxi.waypoints.length,distance:E.groundTaxi.distance||0,gateDistance:E.groundTaxi.gateDistance||0,headingError:E.groundTaxi.headingError||0,speedKt:E.groundTaxi.speedKt||0,atGate:!!E.groundTaxi.atGate}:null,won:E.won,gated:E.gated,outcome:E.outcome,progress:E.phase==="takeoff"?.15:E.phase==="route"?.3+.4*E.wpIdx/Math.max(1,_t.wps.length):E.phase==="approach"?.8:1,danger:+E.danger.toFixed(3),maxDanger:+E.maxDanger.toFixed(3),maxDangerByStage:E.maxDangerByStage,score:E.score,scenario:E.scenario,events:E.events.slice(),objects:E.objects,textures:Ip,assets:{loaded:Jl.loaded.slice(),fallback:Jl.fallback.slice()},loop:{zones:E.loop.zones,inFlight:E.loop.frames?+(E.loop.inFlightFrames/E.loop.frames).toFixed(3):0,firstRewardAt:E.loop.firstRewardAt,firstPayoffAt:E.loop.firstPayoffAt},scenery:_t?{dep:_t.from,arr:_t.dest,depCountry:Vn(_t.from),arrCountry:Vn(_t.dest),depLandmark:Xi(_t.from),arrLandmark:Xi(_t.dest),depBiome:C0(_t.from),arrBiome:C0(_t.dest),biomeK:E.biomeK||0,mode:kt("countryScenery"),built:It&&It.landmarks?It.landmarks.map(n=>n.userData.landmark+"@"+n.userData.icao):[],extras:{dep:Sa(_t.from,1),arr:Sa(_t.dest,1)},winter:{dep:h0(_t.from),arr:h0(_t.dest)},ocean:_t.oceanBand?[Math.round(_t.oceanBand.z0),Math.round(_t.oceanBand.z1)]:null,cities:It?It.cities:[],runways:It?It.extraRwys:[],enroute:It?It.enroute:null,airports:Ws.length}:null,paused:!!E.userPaused,shaders:Ap,fx:!0,flight:E.scen?{approach:_t?_t.app:null,mda:_t&&_t.app==="vor"?Math.round(_t.mda*oe):null,dmeSteps:_t&&_t.steps?_t.steps.map(n=>[n.dme,n.alt]):[],wind:(()=>{let n=Es(E);return{mode:n.mode,dir:Math.round(n.dir),kt:Math.round(n.kt),steady:Math.round(n.steady)}})(),weather:E.scen.wx,emergency:E.scen.em,engine:E.scen.eng,afterFix:E.scen.at,fired:!!E.scen.fired,active:!!E.scen.active,cleared:!!E.scen.cleared,memo:E.scen.memo?E.scen.memo.k:null,cat:(_t.cat||[]).length,fires:(_t.fires||[]).length,volcano:!!_t.volcano,ash:_t.storms.filter(n=>n.kind==="ash").length,storms:_t.storms.length}:null,params:{difficulty:$e.diff,thrustPower:kt("thrustPower"),turbulence:kt("turbulence"),stormCount:kt("stormCount")},layout:{design:"390x844",min:"320x480",critical:"390x600",framing:{farY:.3,playerY:.7,heroPx:Math.round(Ri.h*pe.s),groundWidth:16}},plane:{eng1:!!E.plane.eng1,eng2:!!E.plane.eng2,n1:Math.round(E.plane.n1),n1b:Math.round(E.plane.n1b),kt:Math.round(E.plane.v*wn),alt:Math.round(E.plane.y*oe),vs:Math.round(E.plane.vy*hi),hdg:Math.round($i(E.plane.psi)),lever:E.plane.lever,reverseThrust:!!E.plane.reverseThrust,gear:E.plane.gear,flaps:E.plane.flaps,spoilerMode:E.plane.spoilMode||0,spoilerPct:Math.round(100*(E.plane.spoilT||0)),spoilerActive:!!E.plane.spoilActive,damage:Math.round(E.plane.damage),tdFpm:E.plane.tdFpm}}):{st:E.state,won:!1,outcome:null,events:[],assets:{loaded:[],fallback:[]}}},flight(){let n=E.plane;return{phase:E.phase,t:E.t,alt:n.y*oe,vs:n.vy*hi,gpws:E.gpws?E.gpws.warn:null}},probe(){let n=E.plane;return{hero:{x:n.x,y:n.y,z:n.z,yaw:n.psi,scale:1},camera:{x:ui.position.x,y:ui.position.y,z:ui.position.z},counters:{score:{shown:Mt.shownScore(),real:E.score}}}},stats(){let n=Ye?Ye.info.render:{triangles:0,calls:0};return{tris:n.triangles,calls:n.calls,fps:+j3.toFixed(1)}},params(){return $e.list()},paramsSchema(){return $e.schema()},paramsValues(){return $e.values()},settingsValues(){return{cta_text:Oe.cta_text,locale:Oe.locale,difficulty:Oe.difficulty,max_play_time:Oe.max_play_time,hint_delay:Oe.hint_delay}},mcdu:{open:n=>yo(n),close:()=>je.close(),type:n=>{String(n).split("").forEach(t=>je.type(t))},clr:()=>je.clr(),lsk:(n,t)=>je.lsk(n,t),go:n=>je.go(n),key:n=>je.key(n)},setLevel(n){Ka(n),ii()},setParam(n,t){$e.set(n,t)&&(n==="background"&&sd(t),Wa(),Tn.params[n]&&Tn.params[n].apply==="restart"&&Vp()),d0()},showEnd(n){return pi?n===null?(Mt.hideEnd(),null):(Mt.showEnd(n,jl(),!0),Mt.endTexts()):null},audioLog(){return wt.log.slice()},renderAudio(n){return wt.renderAudio(n)}};function kp(){document.documentElement.lang=u0,Mt.relang(),je.relang();{let n=ir().settings;n&&n.muted&&!n0&&ka(!0)}if(td||!Ye){Ha("intro"),Mt.hideLoader(),np();return}if(!Is()){requestAnimationFrame(kp);return}DM().then(()=>{q5(),Rp(),kt("background")!==Tn.params.background.def&&sd(kt("background")),De.forEach((n,t)=>{Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,n)}),Hn&&Hn.params&&Object.keys(Hn.params).forEach(n=>{let t=wa(n);Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,Hn.params[n])}),Wa(),yp(),Ha("intro"),Is(),d0(),setTimeout(()=>q5(),1500),Mt.hideLoader(),Mt.showStart(),De.has("tune")&&Mt.buildTune($e,(n,t)=>window.__game.setParam(n,t),()=>ii(),Tn),np(),pi||requestAnimationFrame(Hp)})}function np(){if(Hn)try{Hn.onUpdate=XM,Hn.onCommand=YM,Hn.ready()}catch{}}function zp(n){let t=window.mraid;if(!t)return n();try{if(t.getState()==="loading"){t.addEventListener("ready",()=>zp(n));return}if(!t.isViewable()){let e=i=>{i&&(t.removeEventListener("viewableChange",e),n())};t.addEventListener("viewableChange",e);return}}catch{}n()}/* Jetline Captain v88 — A320-style managed/selected guidance on original cockpit FCU.
+ if(n){if(E.state!=="play")return{ok:!1,active:!!E.holdExempt};if(!E.holdExempt){E.holdExempt=!0;ee("atc_hold","start")}}else if(E.holdExempt){E.holdExempt=!1;let t=0;if(_t&&_t.wps&&E.plane&&E.phase==="route")while(E.wpIdx<_t.wps.length&&E.plane.z<_t.wps[E.wpIdx].z-160){let e=_t.wps[E.wpIdx];e.hit=!0;let i=It&&It.rings&&It.rings[E.wpIdx];i&&(i.visible=!1),E.wpIdx++,t++}if(atcClearance&&E.state==="play"&&!E.trailer){let f=jetMissionCap(),remaining=f-(E.t-(E.holdTimeExcluded||0)),bonus=Math.max(0,900-remaining);E.holdTimeExcluded+=bonus;E.holdClearanceGrace=bonus}ee("atc_hold","resume:"+t)}return{ok:!0,active:!!E.holdExempt,misses:E.misses,wpIdx:E.wpIdx,timeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0}},step(n,t,e){t=t||1/30,n=n||1;for(let i=0;i<n;i++){if(E.hostPaused)continue;let s=typeof e=="function"?()=>{let o=e(window.__game);return o&&typeof o=="object"&&"lever"in o?o:null}:e&&typeof e=="object"&&"lever"in e?()=>e:null;Dp(t,s)}d0()},render(){d0()},begin(){Lo()},bot(n){return W4(E,n)},fcuTurn(n,t){nd(n,t)},fcuTap(n){Lp(n)},efis(n,t){return t===void 0?q3["k"+n[0].toUpperCase()+n.slice(1)]?Np(n):bp(n,!1):n in E.efis&&(E.efis[n]=t),Object.assign({},E.efis)},fullscreen(){Pp()},fcuButton(n){id(n,!1)},ap(n){Oo(!1,n)},restart(){ii()},pause(){return vo(!0,"api")},resume(){return vo(!1,"api")},quit(){return Sp()},restartFlight(){return Mp()},account(n,t,e){return xp(n,t,e)},save(){return za(!0)},continueFlight(){return Tp()},setting(n){return gp(n)},saved(){let n=ir();return{flight:n.flight||null,settings:n.settings||null,lastLevel:n.lastLevel||null}},panel(n){Ql(n==null?!E.panelMax:!!n,!0)},info(){return E.plane?(pi&&Ye&&E.state!=="boot"&&(Bp(),E.objects.scene=Object.assign({props:12,dressingShare:.7},xo||{})),{pads:xs.count,devices:xs.devices.map(n=>({name:n.name,kind:n.kind,roles:n.roles.slice()})),rwys:_t?{dep:pt.from,depRwy:pt.depRwy,depCrs:pt.depCrs,arr:pt.dest,arrRwy:pt.ils.rwy,arrCrs:pt.arrCrs,ils:pt.ils.ident+" "+pt.ils.freq+" "+pt.ils.crs+(pt.ils.real?"":" GEN"),vor:pt.vor.ident+" "+pt.vor.freq,depRot:+((_t.depRot||0)*An).toFixed(1),realFixes:_t.realNames||0,fixes:_t.wps.map(n=>n.name+(n.lat!=null?"@"+n.lat.toFixed(2)+","+n.lon.toFixed(2):"")),db:_t.db.length}:null,nav:(()=>{let n=gs(E);return n?{ils:{ident:n.ils.ident,freq:n.ils.freq,crs:n.ils.crs,rwy:n.ils.rwy,loc:+n.ils.loc.toFixed(2),gs:+n.ils.gs.toFixed(2),locValid:n.ils.locValid,gsValid:n.ils.gsValid,dme:+n.ils.dme.toFixed(1)},papi:n.papi,vor:{ident:n.vor.ident,brg:Math.round(n.vor.brg),dme:+n.vor.dme.toFixed(1)},app:n.app,vapp:n.vapp?{dev:+n.vapp.dev.toFixed(2),vdevFt:Math.round(n.vapp.vdevFt),dme:+n.vapp.dme.toFixed(1),valid:n.vapp.valid,next:n.vapp.next?[n.vapp.next.dme,n.vapp.next.alt]:null,visual:n.vapp.visual}:null,x:Math.round(E.plane.x),gsKt:Math.round(n.gs),wind:[n.wind.dir,n.wind.kt],dest:pt.dest,wps:_t.wps.map(t=>t.name)}:null})(),atc:Object.assign(X5(E.atc),{text:E.atc.log.length?k5(Bt,E.atc.log[E.atc.log.length-1]):""}),traffic:(E.trafficList||[]).map(n=>({cs:n.cs,kind:n.kind,dist:Math.round(n.dist||0),dy:Math.round((n.dy||0)*oe),ta:!!n.ta})),settings:f0(),lastSave:E.lastSave,level:E.level,levels:bn,unlocked:E.unlocked,lv:E.lv||null,panelMax:E.panelMax,account:Ep(),community:(()=>{let n=Q3();return{source:ap()?"live":"demo",live:!!n.live,linked:fi.linked,sent:fi.sent,got:fi.got,online:n.online,flying:n.flying,registered:n.registered,simulated:n.simulated,top:n.score.slice(0,3).map(t=>t.name+"/"+t.cc+"/"+t.best),me:n.me,countries:n.countries.length,open:Mt.commOpen()}})(),guide:E.guide?{altT:E.guide.altT!=null?Math.round(E.guide.altT*oe):null,obst:E.guide.obst?{h:Math.round(E.guide.obst.o.h*oe),along:Math.round(E.guide.obst.along),danger:!!E.guide.obst.danger,pass:E.guide.obst.o.pass}:null,hint:E.guide.hint}:null,fuel:E.fuel?{startKg:E.fuel.startKg,remainingKg:Math.round(E.fuel.remainingKg),usedKg:Math.round(E.fuel.usedKg),burnKgH:Math.round(E.fuel.burnKgH),enduranceMin:E.fuel.enduranceMin,reserveKg:E.fuel.reserveKg,requiredBlockKg:Math.round(jetRequiredBlock(E.fms)*1000),predictedEFOBKg:Math.round(jetFuelPred(E.fms)*1000),pct:Math.round(E.fuel.remainingKg/E.fuel.startKg*100),flamedOut:!!E.fuel.flamedOut}:null,holdingExempt:!!E.holdExempt,missionPlan:E.routeFlight||null,missionLimitSec:jetMissionCap(),missionTime:Math.max(0,E.t-(E.holdTimeExcluded||0)),missionTimeRemaining:jetMissionLeft(),holdTimeExcluded:E.holdTimeExcluded||0,holdClearanceGrace:E.holdClearanceGrace||0,wpIdx:E.wpIdx,route:_t?{storms:_t.storms.map(n=>({x:Math.round(n.x),z:Math.round(n.z),r:n.r})),plan:Object.assign({},E.plan),stats:E.routeStats,misses:E.misses,wps:_t.wps.map(n=>({name:n.name,x:Math.round(n.x),z:Math.round(n.z),alt:Math.round(n.alt*oe)})),obst:_t.obst.map(n=>({kind:n.kind,pass:n.pass,x:Math.round(n.x),z:Math.round(n.z),h:Math.round(n.h*oe),r:Math.round(n.r)})),hdgOff:pt.ils.crs,dest:pt.dest,rwy:pt.ils.rwy}:null,gpws:E.gpws?{warn:E.gpws.warn,last:E.gpws.last,counts:Object.assign({},E.gpws.counts)}:null,efis:Object.assign({},E.efis),autoflight:{ap:!!E.plane.apOn,apN:E.plane.apN,athr:!!E.plane.athrOn,athrActive:!!E.plane.athr,spdTarget:Math.round(E.plane.spdTarget),fcu:Object.assign({},E.plane.fcu),lat:(E.guide||{}).latMode||"nav",vert:(E.guide||{}).vertMode||"man",att:{theta:+E.plane.theta.toFixed(2),aoa:+E.plane.aoa.toFixed(2),gamma:+E.plane.gamma.toFixed(2),fdPitch:E.guide?+(+E.guide.pitch).toFixed(2):null,v:+E.plane.v.toFixed(1),vy:+E.plane.vy.toFixed(2)}},fms:E.fms?{legs:E.fms.legs.map(n=>({name:n.name,seq:n.seq,alt:n.alt!=null?Math.round(n.alt*oe):null,spd:n.spd,ring:n.ring})),tmpy:!!E.fms.tmpy,ci:E.fms.ci,crzAlt:E.fms.crzAlt,vapp:E.fms.vapp,ils:E.fms.ilsFreq,fob:+E.fms.fob.toFixed(2),edits:E.fms.edits}:null,mcdu:{open:je.open,page:je.page,sp:je.sp,msg:je.msg},t:+E.t.toFixed(3),st:E.state==="boot"?"boot":E.state,nogl:td,stage:E.stage,phase:E.phase,runwaySignal:{simulated:true,source:jetTraffic.mode,clear:jetTraffic.clear,phase:jetTrafficAircraftAirborne()?'airborne':jetTraffic.phase,airport:jetTraffic.airport,liveCount:jetTraffic.live.length,arrivalId:jetTraffic.arrivalId||null,arrivalCallsign:jetTraffic.arrivalCallsign||null,departureId:jetTraffic.departureId||null,departureCallsign:jetTraffic.departureCallsign||null,departureRunway:jetTraffic.departureRunway||null,departureStage:jetTraffic.departureStage||null,departureBlocking:!!jetTraffic.departureBlocking,scenario:jetTraffic.mode==='SIM'?jetTraffic.scenarioId:null},taxi:E.groundTaxi?{mode:E.groundTaxi.mode,airport:E.groundTaxi.airport,runway:E.groundTaxi.runway,path:E.groundTaxi.waypoints.map(p=>[Math.round(p.x),Math.round(p.z)]),next:E.groundTaxi.next,total:E.groundTaxi.waypoints.length,distance:E.groundTaxi.distance||0,gateDistance:E.groundTaxi.gateDistance||0,headingError:E.groundTaxi.headingError||0,speedKt:E.groundTaxi.speedKt||0,atGate:!!E.groundTaxi.atGate}:null,won:E.won,gated:E.gated,outcome:E.outcome,progress:E.phase==="takeoff"?.15:E.phase==="route"?.3+.4*E.wpIdx/Math.max(1,_t.wps.length):E.phase==="approach"?.8:1,danger:+E.danger.toFixed(3),maxDanger:+E.maxDanger.toFixed(3),maxDangerByStage:E.maxDangerByStage,score:E.score,scenario:E.scenario,events:E.events.slice(),objects:E.objects,textures:Ip,assets:{loaded:Jl.loaded.slice(),fallback:Jl.fallback.slice()},loop:{zones:E.loop.zones,inFlight:E.loop.frames?+(E.loop.inFlightFrames/E.loop.frames).toFixed(3):0,firstRewardAt:E.loop.firstRewardAt,firstPayoffAt:E.loop.firstPayoffAt},scenery:_t?{dep:_t.from,arr:_t.dest,depCountry:Vn(_t.from),arrCountry:Vn(_t.dest),depLandmark:Xi(_t.from),arrLandmark:Xi(_t.dest),depBiome:C0(_t.from),arrBiome:C0(_t.dest),biomeK:E.biomeK||0,mode:kt("countryScenery"),built:It&&It.landmarks?It.landmarks.map(n=>n.userData.landmark+"@"+n.userData.icao):[],extras:{dep:Sa(_t.from,1),arr:Sa(_t.dest,1)},winter:{dep:h0(_t.from),arr:h0(_t.dest)},ocean:_t.oceanBand?[Math.round(_t.oceanBand.z0),Math.round(_t.oceanBand.z1)]:null,cities:It?It.cities:[],runways:It?It.extraRwys:[],enroute:It?It.enroute:null,airports:Ws.length}:null,paused:!!E.userPaused,shaders:Ap,fx:!0,flight:E.scen?{approach:_t?_t.app:null,mda:_t&&_t.app==="vor"?Math.round(_t.mda*oe):null,dmeSteps:_t&&_t.steps?_t.steps.map(n=>[n.dme,n.alt]):[],wind:(()=>{let n=Es(E);return{mode:n.mode,dir:Math.round(n.dir),kt:Math.round(n.kt),steady:Math.round(n.steady)}})(),weather:E.scen.wx,emergency:E.scen.em,engine:E.scen.eng,afterFix:E.scen.at,fired:!!E.scen.fired,active:!!E.scen.active,cleared:!!E.scen.cleared,memo:E.scen.memo?E.scen.memo.k:null,cat:(_t.cat||[]).length,fires:(_t.fires||[]).length,volcano:!!_t.volcano,ash:_t.storms.filter(n=>n.kind==="ash").length,storms:_t.storms.length}:null,params:{difficulty:$e.diff,thrustPower:kt("thrustPower"),turbulence:kt("turbulence"),stormCount:kt("stormCount")},layout:{design:"390x844",min:"320x480",critical:"390x600",framing:{farY:.3,playerY:.7,heroPx:Math.round(Ri.h*pe.s),groundWidth:16}},plane:{eng1:!!E.plane.eng1,eng2:!!E.plane.eng2,n1:Math.round(E.plane.n1),n1b:Math.round(E.plane.n1b),kt:Math.round(E.plane.v*wn),alt:Math.round(E.plane.y*oe),vs:Math.round(E.plane.vy*hi),hdg:Math.round($i(E.plane.psi)),lever:E.plane.lever,reverseThrust:!!E.plane.reverseThrust,gear:E.plane.gear,flaps:E.plane.flaps,spoilerMode:E.plane.spoilMode||0,spoilerPct:Math.round(100*(E.plane.spoilT||0)),spoilerActive:!!E.plane.spoilActive,damage:Math.round(E.plane.damage),tdFpm:E.plane.tdFpm}}):{st:E.state,won:!1,outcome:null,events:[],assets:{loaded:[],fallback:[]}}},flight(){let n=E.plane;return{phase:E.phase,t:E.t,alt:n.y*oe,vs:n.vy*hi,gpws:E.gpws?E.gpws.warn:null}},probe(){let n=E.plane;return{hero:{x:n.x,y:n.y,z:n.z,yaw:n.psi,scale:1},camera:{x:ui.position.x,y:ui.position.y,z:ui.position.z},counters:{score:{shown:Mt.shownScore(),real:E.score}}}},stats(){let n=Ye?Ye.info.render:{triangles:0,calls:0};return{tris:n.triangles,calls:n.calls,fps:+j3.toFixed(1)}},params(){return $e.list()},paramsSchema(){return $e.schema()},paramsValues(){return $e.values()},settingsValues(){return{cta_text:Oe.cta_text,locale:Oe.locale,difficulty:Oe.difficulty,max_play_time:Oe.max_play_time,hint_delay:Oe.hint_delay}},mcdu:{open:n=>yo(n),close:()=>je.close(),type:n=>{String(n).split("").forEach(t=>je.type(t))},clr:()=>je.clr(),lsk:(n,t)=>je.lsk(n,t),go:n=>je.go(n),key:n=>je.key(n)},setLevel(n){Ka(n),ii()},setParam(n,t){$e.set(n,t)&&(n==="background"&&sd(t),Wa(),Tn.params[n]&&Tn.params[n].apply==="restart"&&Vp()),d0()},showEnd(n){return pi?n===null?(Mt.hideEnd(),null):(Mt.showEnd(n,jl(),!0),Mt.endTexts()):null},audioLog(){return wt.log.slice()},renderAudio(n){return wt.renderAudio(n)}};function kp(){document.documentElement.lang=u0,Mt.relang(),je.relang();{let n=ir().settings;n&&n.muted&&!n0&&ka(!0)}if(td||!Ye){Ha("intro"),Mt.hideLoader(),np();return}if(!Is()){requestAnimationFrame(kp);return}DM().then(()=>{q5(),Rp(),kt("background")!==Tn.params.background.def&&sd(kt("background")),De.forEach((n,t)=>{Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,n)}),Hn&&Hn.params&&Object.keys(Hn.params).forEach(n=>{let t=wa(n);Tn.params[t]&&Tn.params[t].type==="color"&&$e.set(t,Hn.params[n])}),Wa(),yp(),Ha("intro"),Is(),d0(),setTimeout(()=>q5(),1500),Mt.hideLoader(),Mt.showStart(),De.has("tune")&&Mt.buildTune($e,(n,t)=>window.__game.setParam(n,t),()=>ii(),Tn),np(),pi||requestAnimationFrame(Hp)})}function np(){if(Hn)try{Hn.onUpdate=XM,Hn.onCommand=YM,Hn.ready()}catch{}}function zp(n){let t=window.mraid;if(!t)return n();try{if(t.getState()==="loading"){t.addEventListener("ready",()=>zp(n));return}if(!t.isViewable()){let e=i=>{i&&(t.removeEventListener("viewableChange",e),n())};t.addEventListener("viewableChange",e);return}}catch{}n()}/* Jetline Captain v89 — A320-style managed/selected guidance on original cockpit FCU.
  * Simulated flight controls, not aircraft-certified avionics.
  * Independent PUSH (managed) and PULL (selected) actions control the existing
  * FMS guidance model, PFD/ND, autopilot and autothrust state.
@@ -17923,6 +17923,210 @@ body.jc-airport-map-open #jc-airport-surface #jc-map-mini-toggle{display:none!im
  }
 }
 </style>
+
+<style id="jc-v89-ecam-master-style">
+/* V89: Fault indications are strictly bounded to the ECAM engine screen.
+   MASTER WARN/CAUT buttons remain INSIDE the EWD footprint; nothing floats
+   over the MCDU, flight stick, runway map, or the outside scenery. */
+#jc-v53-master-warning,#jc-v53-ecam-warning{display:none!important;pointer-events:none!important}
+#jc-v89-master-pair{
+ position:absolute;z-index:95;display:none;flex-direction:column;gap:2px;
+ pointer-events:auto;box-sizing:border-box;
+}
+#jc-v89-master-pair button{
+ display:flex;align-items:center;justify-content:center;min-height:0;min-width:0;
+ padding:0 1px;box-sizing:border-box;border-radius:3px;
+ border:1px solid #71818b;background:#202c36;color:#98a7b4;
+ font:900 9px/1.1 system-ui,sans-serif;letter-spacing:-.2px;
+ cursor:pointer;touch-action:manipulation;user-select:none;
+}
+#jc-v89-master-pair button.jc-v89-active.warn{
+ color:#fff;background:#ad1727;border-color:#ff6575;box-shadow:0 0 6px #ff475688;
+}
+#jc-v89-master-pair button.jc-v89-active.caut{
+ color:#0b1922;background:#f7be43;border-color:#ffe3a3;box-shadow:0 0 6px #edb34a88;
+}
+#jc-v89-master-pair button.jc-v89-active:not(.jc-v89-ack){animation:jc-v89-flash .75s steps(2,end) infinite;}
+#jc-v89-master-pair button.jc-v89-active.jc-v89-ack{animation:none;box-shadow:none;opacity:.8}
+#jc-v89-master-pair button:focus-visible{outline:2px solid #8edff5;outline-offset:1px}
+@keyframes jc-v89-flash{0%,49%{filter:brightness(1.25)}50%,100%{filter:brightness(.6)}}
+#jc-v89-ecam-errors{
+ position:absolute;display:none;box-sizing:border-box;overflow:hidden;
+ background:rgba(0,8,9,.98);border-top:1px solid #586a65;
+ padding:2px 4px;z-index:32;pointer-events:none;
+ font:800 9px/1.14 Consolas,Menlo,monospace;letter-spacing:.1px;
+}
+#jc-v89-ecam-errors .jc-v89-row{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:1px 0}
+#jc-v89-ecam-errors .warn{color:#ff626c}
+#jc-v89-ecam-errors .caut{color:#ffca70}
+#jc-v89-ecam-errors .action{color:#86dff2;font-weight:650}
+#jc-v89-ecam-errors .head{color:#edf7f9;font-size:8px;letter-spacing:.4px}
+/* Desktop instrument scaling remains uniform, with more dedicated space for
+   scenery. Only cockpit-based elements are resized with the existing renderer. */
+@media (min-width:900px) and (pointer:fine){
+ #jc-v89-master-pair button{font-size:9px}
+}
+</style>
+<script id="jc-v89-master-fault-logic">
+(()=>{
+ 'use strict';
+ if(window.__jcV89Installed)return;
+ window.__jcV89Installed=true;
+ const ui=document.getElementById('ui');if(!ui)return;
+ const ewd=ui.querySelector('.disp-ewd');if(!ewd)return;
+ const pair=document.createElement('div');pair.id='jc-v89-master-pair';
+ pair.setAttribute('data-ui','true');pair.setAttribute('aria-label','Master warning and master caution annunciators');
+ const warn=document.createElement('button');warn.id='jc-v89-master-warn';warn.type='button';warn.className='warn';warn.textContent='WARN';warn.title='MASTER WARN — acknowledge, fault remains';
+ const caut=document.createElement('button');caut.id='jc-v89-master-caut';caut.type='button';caut.className='caut';caut.textContent='CAUT';caut.title='MASTER CAUT — acknowledge, fault remains';
+ warn.setAttribute('aria-label','Acknowledge Master Warning');caut.setAttribute('aria-label','Acknowledge Master Caution');
+ pair.append(warn,caut);ui.appendChild(pair);
+ const ecam=document.createElement('div');ecam.id='jc-v89-ecam-errors';
+ ecam.setAttribute('role','status');ecam.setAttribute('aria-live','polite');ui.appendChild(ecam);
+ const state={active:[],signature:'',warnAck:'',cautAck:'',lastTone:-5000,lastLayout:'',lastHTML:'',phase:'',seen:0};
+ const levelRank={red:0,amber:1};
+ const num=v=>(v===null||v===undefined||v==='')?NaN:(Number.isFinite(Number(v))?Number(v):NaN);
+ function faultsFor(info){
+  if(!info||info.st!=='play')return [];
+  const out=[],uniq=new Set(),p=info.plane||{},f=info.fuel||{};
+  const phase=String(info.phase||'').toLowerCase();
+  const alt=num(p.alt),spd=num(p.kt),vs=num(p.vs),flaps=num(p.flaps),gear=num(p.gear);
+  const onGround=!!p.onGround,airborne=!onGround&&(phase==='route'||phase==='approach'||alt>120);
+  const approach=phase==='approach'||phase==='landing';
+  function add(code,level,text,action){if(uniq.has(code))return;uniq.add(code);out.push({code,level,text,action});}
+  // All fault checks use game telemetry, not invented real-world sensors.
+  if(p.fire)add('FIRE','red','ENG FIRE','ENGINE FIRE PROCEDURE');
+  if((f.flamedOut||num(f.remainingKg)<=0)&&f.remainingKg!=null)add('FUEL_EMPTY','red','FUEL EXHAUSTED','LAND AS SOON AS POSSIBLE');
+  if(airborne&&p.eng1===false&&p.eng2===false)add('ENG_DUAL','red','DUAL ENG FAILURE','EMERGENCY LANDING');
+  else if(airborne&&p.eng1===false)add('ENG1','red','ENG 1 FAIL','CHECK ENGINE 1');
+  else if(airborne&&p.eng2===false)add('ENG2','red','ENG 2 FAIL','CHECK ENGINE 2');
+  if(airborne&&approach&&Number.isFinite(alt)&&alt<750&&alt>30&&Number.isFinite(gear)&&gear<.85)
+    add('GEAR','red','L/G NOT DOWN','CHECK GEAR DOWN');
+  if(airborne&&Number.isFinite(alt)&&alt<1700&&Number.isFinite(vs)&&vs< -1500)
+    add('SINK','red','EXCESSIVE SINK RATE','REDUCE DESCENT');
+  if(airborne&&Number.isFinite(spd)&&spd>(approach?245:350))
+    add('OVERSPEED',approach?'red':'amber','OVERSPEED','REDUCE AIRSPEED');
+  const remain=num(f.enduranceMin);
+  if(Number.isFinite(remain)&&remain<=5&&remain>0)add('FUEL_CRITICAL','red','FUEL CRITICAL','LAND IMMEDIATELY');
+  else if(Number.isFinite(remain)&&remain<=10&&remain>5)add('FUEL_LOW','amber','FUEL LOW','MONITOR REMAINING FUEL');
+  if(airborne&&approach&&Number.isFinite(alt)&&alt<600&&alt>50&&Number.isFinite(flaps)&&flaps<.7)
+    add('FLAPS','amber','FLAPS NOT SET','CHECK LANDING CONFIG');
+  if(airborne&&approach&&Number.isFinite(spd)&&spd>195&&spd<=245)
+    add('APP_SPD','amber','APPROACH SPEED HIGH','REDUCE SPEED');
+  const system=window.__jcV53Warning?.();
+  if(system?.active&&system.message){
+   const text=String(system.message).slice(0,90),level=system.level==='red'?'red':'amber';
+   if(!out.some(a=>a.text===text))add('SYSTEM_'+text,level,text,'CHECK ECAM / SYSTEM');
+  }
+  // The original flight checklist also reports real game-condition faults.
+  const list=window.__jcChecklist?.detail?.()?.alerts||[];
+  if(Array.isArray(list))for(const item of list){
+   if(!item||!['red','amber'].includes(item.level)||!item.text)continue;
+   const label=String(item.text).slice(0,80);
+   if(!out.some(a=>a.text===label))add('CHECK_'+label,item.level,label,'CHECK SYSTEM');
+  }
+  out.sort((a,b)=>(levelRank[a.level]??9)-(levelRank[b.level]??9));
+  return out;
+ }
+ function sound(level){
+  const now=performance.now();if(now-state.lastTone<2500)return;state.lastTone=now;
+  try{
+   // Honor the game's SOUND switch; existing GPWS callouts still have priority.
+   if(typeof wt!=='undefined'&&wt?.muted)return;
+   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+   const ctx=state.ctx||(state.ctx=new AC());if(ctx.state==='suspended')ctx.resume().catch(()=>{});
+   const start=ctx.currentTime;const count=level==='red'?3:1;
+   for(let i=0;i<count;i++){
+    const osc=ctx.createOscillator(),gain=ctx.createGain(),at=start+i*.20;
+    osc.type=level==='red'?'square':'sine';osc.frequency.value=level==='red'?780:655;
+    gain.gain.setValueAtTime(.0001,at);
+    gain.gain.linearRampToValueAtTime(.040,at+.015);
+    gain.gain.exponentialRampToValueAtTime(.0001,at+.13);
+    osc.connect(gain);gain.connect(ctx.destination);osc.start(at);osc.stop(at+.14);
+   }
+  }catch(_e){}
+ }
+ function acknowledge(level){
+  if(level==='red')state.warnAck=state.active.filter(x=>x.level==='red').map(x=>x.code).join('|');
+  else state.cautAck=state.active.filter(x=>x.level==='amber').map(x=>x.code).join('|');
+  try{window.__game?.clickSound?.()}catch(_e){}
+  updateButtons();
+ }
+ warn.addEventListener('pointerdown',e=>e.stopPropagation());
+ caut.addEventListener('pointerdown',e=>e.stopPropagation());
+ warn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();acknowledge('red')});
+ caut.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();acknowledge('amber')});
+ function updateButtons(){
+  const r=state.active.filter(x=>x.level==='red').map(x=>x.code).join('|');
+  const a=state.active.filter(x=>x.level==='amber').map(x=>x.code).join('|');
+  for(const [button,signature,ack] of [[warn,r,state.warnAck],[caut,a,state.cautAck]]){
+   button.classList.toggle('jc-v89-active',!!signature);
+   button.classList.toggle('jc-v89-ack',!!signature&&signature===ack);
+   button.setAttribute('aria-pressed',String(!!signature));
+  }
+ }
+ function layout(){
+  const w=ewd.offsetWidth,h=ewd.offsetHeight;
+  if(w<40||h<35)return false;
+  const x=ewd.offsetLeft,y=ewd.offsetTop;
+  // Both fault annunciators fit inside the upper-left of existing EWD.
+  // They never occupy MCDU or joystick hit boxes.
+  const bw=Math.max(23,Math.min(49,w*.22));
+  const bh=Math.max(12,Math.min(20,h*.15));
+  const geom=[x,y,w,h].join('|');
+  if(geom!==state.lastLayout){
+   pair.style.left=(x+3)+'px';pair.style.top=(y+2)+'px';
+   pair.style.width=Math.round(bw)+'px';pair.style.height=Math.round(bh*2+2)+'px';
+   warn.style.height=caut.style.height=Math.round(bh)+'px';
+   ecam.style.left=(x+2)+'px';ecam.style.top=(y+h*.67)+'px';
+   ecam.style.width=Math.max(35,w-4)+'px';ecam.style.height=Math.max(10,h*.33-2)+'px';
+   const f=Math.max(7,Math.min(11,w/27));
+   ecam.style.fontSize=f+'px';
+   pair.style.fontSize=Math.max(7,Math.min(10,w/28))+'px';
+   state.lastLayout=geom;
+  }
+  return true;
+ }
+ function tick(){
+  let info=null;try{info=window.__game?.info?.()}catch(_e){}
+  const view=!!(info?.st==='play'&&ewd.offsetWidth>40&&!window.__game?.mcduIsOpen?.());
+  if(!view){pair.style.display='none';ecam.style.display='none';state.signature='';state.active=[];state.lastHTML='';return;}
+  if(!layout())return;
+  pair.style.display='flex';
+  const next=faultsFor(info),signature=next.map(x=>x.code+':'+x.level).join('||');
+  if(signature!==state.signature){
+   const before=new Set(state.active.map(x=>x.code));
+   const fresh=next.filter(x=>!before.has(x.code));
+   state.signature=signature;state.active=next;state.seen++;
+   if(fresh.length){
+    if(fresh.some(x=>x.level==='red'))state.warnAck='';
+    if(fresh.some(x=>x.level==='amber'))state.cautAck='';
+    sound(fresh.some(x=>x.level==='red')?'red':'amber');
+   }
+  }
+  updateButtons();
+  ecam.style.display=next.length?'block':'none';
+  if(next.length){
+   const rows=next.slice(0,2).map(x=>'<div class="jc-v89-row '+(x.level==='red'?'warn':'caut')+'">'+x.text.replace(/[&<>"']/g,'')+'</div>');
+   const guidance=next[0]?.action||'CHECK SYSTEM';
+   rows.push('<div class="jc-v89-row action">'+guidance+'</div>');
+   const html=rows.join('');if(html!==state.lastHTML){ecam.innerHTML=html;state.lastHTML=html;}
+  }else state.lastHTML='';
+ }
+ window.__jcV89FaultStatus=()=>({version:'v89',faults:state.active.map(({code,level,text})=>({code,level,text})),
+  masterWarning:!!state.active.some(x=>x.level==='red'),masterCaution:!!state.active.some(x=>x.level==='amber'),
+  acknowledgedWarning:state.warnAck,acknowledgedCaution:state.cautAck,geometry:state.lastLayout});
+ window.__jcV89InjectFault=(text,level='amber')=>{
+  // Debug-only: inject a single synthetic message for cockpit UI QA.
+  const original=window.__jcV53Warning;
+  window.__jcV53Warning=()=>({active:true,message:String(text).slice(0,90),level:level==='red'?'red':'amber'});
+  setTimeout(()=>{window.__jcV53Warning=original;},5000);
+ };
+ setInterval(tick,260);
+ window.addEventListener('resize',()=>{state.lastLayout='';tick()});
+ window.addEventListener('orientationchange',()=>{state.lastLayout='';setTimeout(tick,220)});
+ setTimeout(tick,450);
+})();
+</script>
 
 </body>
 </html>
