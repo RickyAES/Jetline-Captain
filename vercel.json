@@ -1,13 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
+  "redirects": [
     {
       "source": "/api/jetline-stats-auth",
-      "destination": "/api/jetline-stats?mode=auth"
+      "destination": "/api/jetline-stats?mode=auth",
+      "permanent": false
     },
     {
       "source": "/api/jetline-stats-health",
-      "destination": "/api/jetline-stats?mode=health"
+      "destination": "/api/jetline-stats?mode=health",
+      "permanent": false
     }
   ]
 }
