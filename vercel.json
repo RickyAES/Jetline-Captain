@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/jetline-stats-auth",
+      "destination": "/api/jetline-stats?mode=auth"
+    },
+    {
+      "source": "/api/jetline-stats-health",
+      "destination": "/api/jetline-stats?mode=health"
+    }
+  ]
+}
