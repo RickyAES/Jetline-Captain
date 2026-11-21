@@ -6,7 +6,7 @@
 a{color:var(--ice)}button,select,input{font:inherit}button{cursor:pointer;border:1px solid #286587;background:#113b59;color:var(--text);padding:10px 14px;border-radius:9px}button:hover{background:#205576}button:disabled{opacity:.55;cursor:default}
 .container{max-width:1250px;padding:30px 22px 80px;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:28px}
 .logo{display:flex;align-items:center;gap:12px}.mark{background:#124566;border:1px solid #3cc2de;border-radius:12px;padding:13px;font-size:24px}.overline{letter-spacing:.17em;color:var(--ice);font-size:11px;font-weight:850}h1{font-size:28px;line-height:1.12;margin:4px 0 0}h2{font-size:17px;margin:0 0 14px}
-.sub{font-size:13px;color:var(--muted);margin-top:8px}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}select{border:1px solid var(--outline);background:#09192a;padding:10px;color:var(--text);border-radius:9px}
+.sub{font-size:13px;color:var(--muted);margin-top:8px}[hidden]{display:none!important}.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}select{border:1px solid var(--outline);background:#09192a;padding:10px;color:var(--text);border-radius:9px}
 .panel{background:linear-gradient(140deg,rgba(14,40,64,.97),rgba(9,23,40,.96));border:1px solid var(--outline);border-radius:15px;padding:20px;box-shadow:0 8px 25px #0003}
 #login{max-width:430px;margin:8vh auto 0}label{font-weight:650;font-size:13px;color:#c8e4f1;display:block;margin:15px 0 6px}input{width:100%;padding:12px 13px;border:1px solid #345b75;background:#051525;border-radius:9px;color:white}#login button{margin-top:18px;width:100%;background:#1178a1;font-weight:800}
 #error{min-height:20px;margin:14px 0;color:#ffc19b;font-size:13px;white-space:pre-line}.tiny{font-size:12px;color:var(--muted);line-height:1.45}
@@ -42,8 +42,10 @@ a{color:var(--ice)}button,select,input{font:inherit}button{cursor:pointer;border
  $('signin').addEventListener('submit',async e=>{
   e.preventDefault();const btn=$('signin').querySelector('button');btn.disabled=true;err('');
   try{
-   const r=await fetch('/api/jetline-stats-auth',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({email:$('email').value.trim(),password:$('password').value})});
-   const data=await r.json();if(!r.ok)throw Error(data.error+(data.missing?'\nMissing: '+data.missing.join(', '):''));
+   const r=await fetch('/api/jetline-stats?mode=auth',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({email:$('email').value.trim(),password:$('password').value})});
+   const responseText=await r.text();
+   let data;try{data=JSON.parse(responseText)}catch{throw Error('Login API response is not JSON (HTTP '+r.status+'). Check Vercel deployment and API route.')} 
+   if(!r.ok)throw Error((data.error||'Owner login failed')+(data.missing?'\nMissing: '+data.missing.join(', '):''));
    token=data.access_token;try{sessionStorage.setItem(TOKEN_KEY,token)}catch{}
    $('password').value='';signedIn();await refresh();
   }catch(e){signedOut(e.message||'Sign in failed')}finally{btn.disabled=false}
