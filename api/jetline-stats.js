@@ -1,6 +1,24 @@
 'use strict';
 const util=require('../lib/jetline-stats');
 module.exports=async function handler(req,res){
+ // Keep owner login, public readiness and private metrics in a SINGLE
+ // Vercel function. Vercel rewrites preserve the original public URLs.
+ const parsed=new URL(req.url||'/', 'http://localhost');
+ const mode=String(req.query?.mode||parsed.searchParams.get('mode')||'').toLowerCase();
+ if(mode==='auth')return require('../lib/jetline-stats-auth')(req,res);
+ if(mode==='health')return require('../lib/jetline-stats-health')(req,res);
+ // v96 compatibility: some deployed rewrite configurations drop ?mode=auth.
+ // This allows a cached v96 stats.html to sign in without accepting unrelated POST payloads.
+ // Authentication is still performed ONLY by the verified Supabase owner login handler.
+ if(req.method==='POST'){
+  let credentials=req.body;
+  if(typeof credentials==='string'){try{credentials=JSON.parse(credentials)}catch{credentials=null}}
+  if(credentials && typeof credentials==='object' && !Array.isArray(credentials) &&
+     typeof credentials.email==='string' && typeof credentials.password==='string' &&
+     !('type' in credentials) && Object.keys(credentials).every(k=>k==='email'||k==='password')){
+    return require('../lib/jetline-stats-auth')(req,res);
+  }
+ }
  util.cors(req,res);
  if(req.method==='OPTIONS')return res.status(204).end();
  if(!util.originAllowed(req))return util.send(res,403,{error:'Origin not allowed'});
