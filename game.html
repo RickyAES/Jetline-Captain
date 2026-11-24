@@ -321,6 +321,25 @@ body.jc-mcdu-overlay-clear #jc-weather-atc {display:none!important}
 body.jc-airport-map-open #jc-v67-mission-clock,
 body.jc-mcdu-expanded #jc-v67-mission-clock{display:none!important;}
 </style>
+
+<!-- v101: Remove unavailable Changi gate-data feature from all UI views.
+     Retain 3D terminal buildings, parked planes, boarding bridges and ground radar. -->
+<style id="jc-v101-hide-changi-gate-data">
+#jc-gates-open,
+#jc-gates-panel,
+#jc-gate-camera-panel,
+#jc-gate-camera-toggle,
+#jc-gate-camera-toolbar,
+#jc-gate-map-open,
+#jc-gate-camera-data-toggle,
+#jc-terminal-map-panel,
+#jc-ground-timeboard,
+#jc-ground-gate-board,
+#jc-ground-back,
+button[data-jc-ground-act="gates"] {
+ display:none!important;visibility:hidden!important;pointer-events:none!important;
+}
+</style>
 </head>
 <body>
 <script>window.__NETWORK="universal";window.__STORE={"ios":"","android":""};window.__UI_SKIN="";window.__LANG="";window.__DIFF="normal";window.__PARAMS={"end_sub":"","crosswind":10.0,"end_title":"","fog_color":"#9CC9F2","ui_accent":"#33E0FF","wind_gust":12.0,"wind_mode":"Random","background":"Frost","camera_fov":0.0,"camera_yaw":1.0,"panel_size":0.54,"path_color":"#2C4778","sfx_volume":81.0,"turbulence":1.6,"wind_speed":23.0,"camera_lead":0.9,"enemy_color":"#C2352B","flight_pace":0.8,"storm_count":6.0,"camera_pitch":-2.5,"camera_shake":1.1,"ground_color":"#3FA52E","music_volume":27.0,"player_color":"#35608E","reward_color":"#FF9A1F","rotate_speed":142.0,"thrust_power":1.3,"weather_mode":"Random","approach_type":"Random","camera_follow":0.9,"camera_height":1.0,"landing_limit":710.0,"player_color2":"#2BEA5A","sky_top_color":"#2F7FE8","callout_volume":59.0,"emergency_mode":"Random","waypoint_count":4.0,"camera_distance":1.15,"country_scenery":"Country","panel_maximized":"off","community_source":"Live server","weather_strength":1.1,"camera_intro_zoom":0.8,"stick_sensitivity":1.0,"camera_payoff_zoom":0.8,"locale":"auto","cta_text":"","difficulty":"normal","hint_delay":3.0,"max_play_time":5400.0,"endSub":"","endTitle":"","fogColor":"#9CC9F2","uiAccent":"#33E0FF","windGust":12.0,"windMode":"Random","cameraFov":0.0,"cameraYaw":1.0,"panelSize":0.54,"pathColor":"#2C4778","sfxVolume":81.0,"windSpeed":23.0,"cameraLead":0.9,"enemyColor":"#C2352B","flightPace":0.8,"stormCount":6.0,"cameraPitch":-2.5,"cameraShake":1.1,"groundColor":"#3FA52E","musicVolume":27.0,"playerColor":"#35608E","rewardColor":"#FF9A1F","rotateSpeed":142.0,"thrustPower":1.3,"weatherMode":"Random","approachType":"Random","cameraFollow":0.9,"cameraHeight":1.0,"landingLimit":710.0,"playerColor2":"#2BEA5A","skyTopColor":"#2F7FE8","calloutVolume":59.0,"emergencyMode":"Random","waypointCount":4.0,"cameraDistance":1.15,"countryScenery":"Country","panelMaximized":"off","communitySource":"Live server","weatherStrength":1.1,"cameraIntroZoom":0.8,"stickSensitivity":1.0,"cameraPayoffZoom":0.8,"ctaText":"","hintDelay":3.0,"maxPlayTime":5400.0};</script>
@@ -10560,7 +10579,7 @@ function jcGroundHUDEnsure(){
  <button type="button" data-jc-ground-act="lights">LIGHTS</button>
  <button type="button" data-jc-ground-act="weather">WX / ATC</button>
  <button type="button" data-jc-ground-act="emergency">EMERGENCY</button>
- <button type="button" data-jc-ground-act="gates" aria-label="Show Changi flight and gate data">✈ CHANGI GATES</button>
+ 
  </div>
  <div class="jc-rollout-controls" id="jc-rollout-controls" hidden>
   <div class="jc-rollout-indicator" id="jc-rollout-indicator">SPOILERS · DEPLOYED</div>
@@ -17155,7 +17174,7 @@ body.jc-airport-map-open #jc-build-version{z-index:1;opacity:0}
 (()=>{
  const add=()=>{
   if(document.getElementById('jc-build-version'))return;
-  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v99';
+  const b=document.createElement('div');b.id='jc-build-version';b.textContent='JETLINE CAPTAIN · v101';
   b.title='Map, terminals, gates, aerobridges and stationary aircraft synced with Changi ground snapshot • 11 Nov 2026';document.body.append(b);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});
