@@ -195,6 +195,8 @@
     .routeFeedback.warn{color:#ffd18a}
     .routeDisclaimer{font-size:11px;color:#a9c4d7}
     @media(max-width:640px){#routePanel{padding:12px} .routeGrid{grid-template-columns:1fr;gap:6px} .routeField select{min-height:118px;max-height:155px}#routePanel p{font-size:11px}}
+  
+    #holdApron{display:none!important}
   </style>
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2036,7 +2038,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function hello(){sendToGame({src:'jetline-host',type:'hello'});sendFeed()}
   function startGame(reload=false){
-    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html'+(reload?'?cloud_reload='+Date.now():'')}
+    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=106'+(reload?'&cloud_reload='+Date.now():'')}
   }
   frame.addEventListener('load',()=>{
     gameLoaded=true;
