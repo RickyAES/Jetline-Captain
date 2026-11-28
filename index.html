@@ -217,7 +217,7 @@
 #jcGlobeLegend{padding:8px 10px;color:#a7bfd9;font:10px/1.4 system-ui}
 @media(max-width:600px){#jcGlobeCanvas{height:clamp(250px,43dvh,420px)}#jcGlobeControls button{padding:7px 8px;font-size:10px}}
 </style>
-</head>
+<style>#jc137AirportChart[hidden]{display:none!important}</style></head>
 <body>
   <header id="bar">
     <div class="left">
@@ -240,7 +240,7 @@
 
   <div id="routeShade" aria-hidden="true">
     <section id="routePanel" role="dialog" aria-modal="true" aria-labelledby="routeTitle">
-      <div class="routeTitleRow"><h2 id="routeTitle">✈ WORLD FLIGHT ROUTE</h2><button id="routeClose" class="close" type="button" aria-label="Close flight route selection">×</button></div>
+      <div class="routeTitleRow"><h2 id="routeTitle">✈ WORLD FLIGHT ROUTE</h2><button class="pill" id="jc137AirportChart" type="button" hidden>FLIGHT CHART</button><button id="routeClose" class="close" type="button" aria-label="Close flight route selection">×</button></div>
       <p>Search the same airport directory used by live radar. Pick any two ICAO airports, then apply the route to your flight. Detailed runway data is used when published; otherwise a practice runway is labelled simulated.</p>
       <div class="routeGrid">
         <div class="routeField"><label for="routeDepSearch">FROM · Departure airport</label>
@@ -2217,7 +2217,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function hello(){sendToGame({src:'jetline-host',type:'hello'});sendFeed()}
   function startGame(reload=false){
-    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=136'+(reload?'&cloud_reload='+Date.now():'')}
+    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=137'+(reload?'&cloud_reload='+Date.now():'')}
   }
   frame.addEventListener('load',()=>{
     gameLoaded=true;
@@ -2282,13 +2282,16 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function routeRender(){routeOptions('Dep');routeOptions('Arr');routeLandscape();}
   function routeFeedback(message,warning=false){const el=$('routeFeedback');el.textContent=message;el.classList.toggle('warn',!!warning)}
+  function jc137ChartSync(){try{const b=frame.contentWindow?.__jc136BriefAPI?.get();$('jc137AirportChart').hidden=!b?.complete;}catch(_){$('jc137AirportChart').hidden=true;}}
+  $('jc137AirportChart').onclick=()=>{routeClosePicker();try{frame.contentWindow.__jc136ChartUI.open()}catch(_){}};
   async function routeOpenPicker(){
+    jc137ChartSync();
     routeOpen=true;
     const current=routeGameChoice();routeDraft.dep=current.dep;routeDraft.arr=current.arr;
     $('routeDepSearch').value='';$('routeArrSearch').value='';
     $('routeShade').classList.add('show');$('routeShade').setAttribute('aria-hidden','false');
     routeFeedback('Loading shared airport directory…');
-    await loadRadarAirports();routeRender();
+    await loadRadarAirports();routeRender();jc137ChartSync();
     routeFeedback('Search by ICAO, airport name, city or country.');
   }
   function routeClosePicker(){routeOpen=false;$('routeShade').classList.remove('show');$('routeShade').setAttribute('aria-hidden','true')}
