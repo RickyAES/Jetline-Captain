@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08162f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Jetline Captain v135 · World Pilots</title>
+  <title>Jetline Captain v140 · World Pilots</title>
   <style>
     :root{color-scheme:dark;--ink:#edf5ff;--muted:#a6b8d1;--blue:#42d8ff;--base:#07132c;--panel:#10234a;--stroke:#31527c;--green:#48e0a0}
     *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--base);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink)}
@@ -227,7 +227,7 @@
       <span class="pilots"><span class="dot" id="liveDot"></span><span id="liveLabel">OFFLINE MODE</span></span>
       <button class="pill" id="rankingOpen" type="button">🏆 RANKING</button>
       <button class="pill" id="routeOpen" type="button">✈ AIRPORTS</button>
-      <button class="pill" id="radarOpen" type="button">📡 RADAR</button>
+      <button class="pill" id="jc139RadioOpen" type="button" aria-label="ATC radio monitor">🎙 RADIO</button><button class="pill" id="radarOpen" type="button">📡 RADAR</button>
       <button class="pill" id="fuelOpen" type="button" aria-label="Show simulated aircraft fuel">⛽ FUEL</button>
       <button class="pill toolbutton" id="settingsOpen" type="button" aria-label="General Settings" title="General Settings"><span class="toolicon">⚙</span><span class="tooltext">SETTINGS</span></button>
       <button class="pill toolbutton" id="soundOpen" type="button" aria-label="Sound settings" title="Music and engine sound"><span class="toolicon">♫</span><span class="tooltext">SOUND</span></button>
@@ -2217,7 +2217,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function hello(){sendToGame({src:'jetline-host',type:'hello'});sendFeed()}
   function startGame(reload=false){
-    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=138'+(reload?'&cloud_reload='+Date.now():'')}
+    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=140'+(reload?'&cloud_reload='+Date.now():'')}
   }
   frame.addEventListener('load',()=>{
     gameLoaded=true;
@@ -2764,6 +2764,102 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   setInterval(()=>{if(presenceReady)countPresence()},15000);
   window.addEventListener('pagehide',()=>{if(db&&pilot)backUp();presence?.untrack?.()});
   init();
+})();
+</script>
+
+<style>
+#jc139RadioPanel[hidden]{display:none!important}
+#jc139RadioPanel{position:fixed;z-index:99990;top:64px;right:12px;width:min(390px,calc(100vw - 24px));max-height:calc(100dvh - 80px);overflow:auto;border:1px solid #4d7197;border-radius:12px;background:#0b1f39;color:#edf6ff;padding:14px;box-shadow:0 15px 50px #0008;font:13px system-ui}
+#jc139RadioPanel h3{margin:0;font:700 15px system-ui}
+#jc139RadioPanel label{display:block;color:#a9c7e4;font-size:11px;margin-top:10px}
+#jc139RadioPanel select,#jc139RadioPanel input[type=url]{width:100%;background:#142f50;color:white;border:1px solid #42678b;padding:9px;border-radius:6px;font:13px system-ui}
+#jc139RadioPanel input[type=range]{width:100%}
+#jc139RadioPanel button{background:#1b4164;color:white;border:1px solid #567d9f;border-radius:6px;padding:8px;font:700 12px system-ui}
+#jc139RadioPanel a{color:#83dbff}
+#jc139RadioFreq{font:bold 27px monospace;color:#7cf2b3;margin:10px 0 0}
+#jc139RadioStatus,#jc139RadioLast{background:#07172b;padding:9px;border-radius:6px;margin:8px 0;line-height:1.4;overflow-wrap:anywhere}
+</style>
+<section id="jc139RadioPanel" hidden aria-label="ATC radio monitor"><div style="display:flex;align-items:center;justify-content:space-between"><h3>ATC RADIO · MONITOR</h3><button id="jc139RadioClose">×</button></div>
+<div id="jc139RadioFreq">118.600 MHz</div><div id="jc139RadioService">Singapore Tower</div>
+<label for="jc139Mode">Audio source</label><select id="jc139Mode"><option value="sim">Traffic-based simulated radio</option><option value="stream">Authorized live audio stream</option><option value="off">Off</option></select>
+<label for="jc139Channel">Changi channel · simulator selection</label><select id="jc139Channel"><option value="auto">AUTO · Flight phase / runway</option><option value="118.600">118.600 · Tower 02L/20R</option><option value="118.250">118.250 · Tower 02C/20C</option><option value="131.400">131.400 · Tower 02R/20L</option><option value="124.300">124.300 · Ground (west)</option><option value="119.300">119.300 · Arrival</option><option value="120.300">120.300 · Departure</option></select>
+<div id="jc139StreamBox" hidden><label for="jc139StreamURL">Provider-authorized HTTPS audio URL for selected channel</label><input id="jc139StreamURL" type="url" placeholder="https://…"><small>Audio is heard from the supplied stream; channel labels do not tune its receiver. Change the URL for another channel. Only use a source authorized for in-game playback.</small></div>
+<label for="jc139Vol">Radio volume</label><input type="range" id="jc139Vol" min="0" max="100" value="35">
+<div style="display:flex;gap:8px;margin-top:8px"><button id="jc139Start">START MONITOR</button><button id="jc139Stop">STOP</button></div>
+<div id="jc139RadioStatus" role="status">Radio off. Listening only; no transmission.</div><div id="jc139RadioLast">No traffic call yet.</div>
+<a href="https://www.liveatc.net/search/?icao=wsss" target="_blank" rel="noopener noreferrer">Open Changi live listener (LiveATC)</a> · <a href="https://rotatepilot.com/live-atc/wsss" target="_blank" rel="noopener noreferrer">Alternative listener</a>
+<p style="font-size:11px;color:#a9c7e4">ADS-B provides positions, not radio speech. Generated calls are fictional training audio, never actual clearances. No guaranteed one-to-one sync with external audio. Game warnings take priority.</p></section>
+
+<script id="jc139-radio">
+(()=>{
+const $=id=>document.getElementById(id),panel=$('jc139RadioPanel'),audio=new Audio(),synth=window.speechSynthesis;
+audio.preload='none';audio.crossOrigin=null;
+let running=false,next=0,lastKey='',lastSpeech=null,speaking=false,streamReady=false,token=0,seen=new Map();
+const freqMap={'118.600':'Singapore Tower · 02L / 20R','118.250':'Singapore Tower · 02C / 20C','131.400':'Singapore Tower · 02R / 20L','124.300':'Singapore Ground · west sector','119.300':'Singapore Arrival','120.300':'Singapore Departure'};
+const tower=r=>['02C','20C'].includes(r)?'118.250':['02R','20L'].includes(r)?'131.400':'118.600';
+function frequency(d){if($('jc139Channel').value!=='auto')return $('jc139Channel').value;
+ return ['taxi','taxiIn'].includes(d.phase)?'124.300':d.phase==='route'?'120.300':d.phase==='approach'?'119.300':tower(d.runway);}
+function data(){try{return $('gameFrame').contentWindow?.__jc139RadioData?.()||{}}catch(_){return {}}}
+function status(t){$('jc139RadioStatus').textContent=t;}
+function audible(v){window.__jc139RadioAudible=!!v;}
+function stop(){running=false;token++;audio.pause();audio.removeAttribute('src');audio.load();streamReady=false;audible(false);status('Radio off.');}
+function valid(a,f){
+ if(!a.callsign||!a.id)return false;
+ if(f==='124.300')return a.onGround&&a.speedKt>=3&&a.speedKt<45;
+ if(f==='119.300')return !a.onGround&&a.verticalRate< -150&&a.altFt<12000;
+ if(f==='120.300')return !a.onGround&&a.verticalRate>150&&a.altFt<15000;
+ return a.runway&&tower(a.runway)===f&&((a.onGround&&a.speedKt>45)||(!a.onGround&&a.altFt<3500&&a.verticalRate< -150));
+}
+function sentence(a,f){const id=a.callsign.replace(/[^A-Z0-9 ]/gi,'').split('').join(' '),rw=a.runway?a.runway.replace('L',' left').replace('R',' right').replace('C',' centre'):'';
+ if(f==='124.300')return id+', ground, taxiing.';
+ if(f==='119.300')return id+', Singapore arrival, descending through '+(Math.round(a.altFt/100)*100)+' feet.';
+ if(f==='120.300')return id+', Singapore departure, climbing through '+(Math.round(a.altFt/100)*100)+' feet.';
+ return id+', Singapore tower, '+(a.onGround?'departure roll':'on approach')+', runway '+rw+'.';
+}
+function tick(){
+ const d=data(),f=frequency(d),mode=$('jc139Mode').value,vol=+$('jc139Vol').value/100;
+ $('jc139RadioFreq').textContent=f+' MHz';$('jc139RadioService').textContent=freqMap[f]||'Singapore radio';
+ if(!running)return;
+ const quiet=d.state!=='play'||d.paused||d.muted||d.priority||d.emergency||d.holding||document.hidden;
+ if(mode==='stream'){
+  // Pause instead of relying on volume alone (iOS ignores media volume).
+  if(quiet||!vol){if(!audio.paused)audio.pause();audible(false);status('Live monitor paused · game audio priority.');}
+  else if(streamReady&&audio.paused){audio.play().catch(()=>status('Tap START to resume stream.'));}
+  if(!audio.paused){audio.volume=vol;audible(true);status('External stream playing · channel is set by provider.');}
+  return;
+ }
+ if(quiet||!vol||d.airport!=='WSSS'){audible(false);status(d.airport!=='WSSS'?'Traffic radio currently supports Changi only.':'Standby · game audio priority.');return;}
+ if(!d.fresh){status('Waiting for fresh ADS-B traffic · no invented contacts.');return;}
+ if(speaking||synth?.speaking)return;
+ status('SIMULATED AUDIO · fresh ADS-B traffic · '+(d.tracks||[]).length+' contacts');
+ if(Date.now()<next||!synth)return;
+ const a=(d.tracks||[]).filter(a=>valid(a,f)&&Date.now()-(seen.get(a.id+'|'+f)||0)>90000).sort((a,b)=>a.speedKt-b.speedKt);
+ if(!a.length)return;
+ const flight=a[Math.floor(Math.random()*a.length)],msg=sentence(flight,f);seen.set(flight.id+'|'+f,Date.now());
+ if(seen.size>500)seen.clear();
+ next=Date.now()+14000+Math.random()*12000;
+ const u=new SpeechSynthesisUtterance(msg);u.lang='en-GB';u.rate=.96;u.pitch=.86;u.volume=vol*.7;lastSpeech=u;speaking=true;audible(true);
+ $('jc139RadioLast').textContent='SIMULATED · '+flight.callsign+' · '+msg;
+ u.onend=u.onerror=()=>{if(lastSpeech===u){speaking=false;audible(false);}};
+ synth.speak(u);
+}
+$('jc139RadioOpen').onclick=()=>{panel.hidden=!panel.hidden;};$('jc139RadioClose').onclick=()=>{panel.hidden=true;};
+$('jc139Mode').onchange=()=>{stop();$('jc139StreamBox').hidden=$('jc139Mode').value!=='stream';};
+$('jc139Stop').onclick=stop;
+$('jc139Start').onclick=()=>{
+ stop();const mode=$('jc139Mode').value;if(mode==='off')return;
+ if(mode==='stream'){
+  const url=$('jc139StreamURL').value.trim();try{if(new URL(url).protocol!=='https:')throw Error();}catch(_){status('Enter an authorized HTTPS audio stream URL.');return;}
+  running=true;streamReady=true;audio.src=url;audio.volume=+$('jc139Vol').value/100;const current=++token;
+  audio.play().then(()=>{if(token===current){audible(true);status('External stream connected.');}}).catch(()=>{if(token===current){streamReady=false;status('Stream unavailable · check the provider URL and playback permission.');}});
+ }else{running=true;next=0;status('Monitoring simulated traffic calls.');tick();}
+};
+audio.onplaying=()=>{if(running){audible(true);}};
+audio.onerror=()=>{streamReady=false;audible(false);if(running)status('Stream unavailable.');};
+audio.onpause=()=>audible(false);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.pause();audible(false);}});
+setInterval(tick,500);
+window.__jc139RadioStatus=()=>({running,mode:$('jc139Mode').value,frequency:$('jc139RadioFreq').textContent,last:$('jc139RadioLast').textContent,status:$('jc139RadioStatus').textContent});
 })();
 </script>
 </body>
