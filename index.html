@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08162f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Jetline Captain v133 · World Pilots</title>
+  <title>Jetline Captain v134 · World Pilots</title>
   <style>
     :root{color-scheme:dark;--ink:#edf5ff;--muted:#a6b8d1;--blue:#42d8ff;--base:#07132c;--panel:#10234a;--stroke:#31527c;--green:#48e0a0}
     *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--base);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink)}
@@ -2217,7 +2217,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function hello(){sendToGame({src:'jetline-host',type:'hello'});sendFeed()}
   function startGame(reload=false){
-    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=133'+(reload?'&cloud_reload='+Date.now():'')}
+    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=134'+(reload?'&cloud_reload='+Date.now():'')}
   }
   frame.addEventListener('load',()=>{
     gameLoaded=true;
