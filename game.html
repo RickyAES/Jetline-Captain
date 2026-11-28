@@ -17905,5 +17905,163 @@ body.jc-airport-map-open #jc-airport-surface{box-shadow:0 14px 35px #000e!import
 </script>
 
 
+<style id="jc-v112-external-camera-css">
+#jc111-camera-tools{position:fixed;z-index:2205;display:grid;gap:6px;padding:6px 8px;border-radius:12px;border:1px solid rgba(98,204,240,.42);background:rgba(6,26,44,.82);backdrop-filter:blur(6px);box-shadow:0 12px 28px rgba(0,0,0,.35);color:#eef9ff;font:800 11px/1.2 system-ui,-apple-system,Segoe UI,Arial,sans-serif;pointer-events:auto}
+#jc111-camera-tools button{min-height:30px;padding:5px 9px;border-radius:8px;border:1px solid #5aa7d8;background:#10385f;color:#effbff;font:800 11px/1 system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+#jc111-camera-tools button:hover{background:#185283}
+#jc111-camera-tools .jc111-options{display:grid;gap:6px}
+#jc111-camera-tools .jc111-modes{display:flex;flex-wrap:wrap;gap:5px}
+#jc111-camera-tools .jc111-modes button[aria-pressed="true"]{background:#166b89;border-color:#7ff0ff;color:#fff}
+#jc111-camera-tools .jc111-zoom{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#d8eef8}
+#jc111-camera-tools .jc111-zoom button{min-width:30px;padding:0}
+#jc111-camera-tools .jc111-hint{font-size:10px;opacity:.82;letter-spacing:.02em}
+body.jc-v112-external-active canvas{cursor:grab}
+body.jc-v112-external-drag canvas{cursor:grabbing}
+</style>
+<script id="jc-v112-external-camera-patch">
+(()=>{'use strict';
+ if(typeof jc111==='undefined' || typeof me==='undefined')return;
+ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+ const now=()=>performance.now();
+ Object.assign(jc111,{mode:jc111.mode||'cockpit',zoom:jc111.zoom||1,angle:jc111.angle||0,
+  root:null,scene:null,gear:null,pose:null,toolbar:null,lastFrame:now(),
+  userYaw:0,userPitch:0,drag:null,dragBound:false,parts:null,baseDist:43});
+ if(jc111.root){try{jc111.root.removeFromParent()}catch(_e){}jc111.root=null;jc111.scene=null;}
+ function mat(color,extra={}){return new Xt({color,roughness:.55,metalness:.1,side:2,...extra});}
+ function addMesh(parent,geo,material,x=0,y=0,z=0){const m=new Tt(geo,material);m.position.set(x,y,z);parent.add(m);return m;}
+ function buildWindowStrip(parent,side){const dark=mat(0x172332);for(let i=0;i<40;i++){const x=-20+i*.99;const w=addMesh(parent,new Nn(.105,8,6),dark,x,7.17,side*2.67);w.scale.set(1,.65,.28);}const cockpit=addMesh(parent,new Ae(2.15,.53,.06),dark,-23.15,7.38,side*2.25);cockpit.rotation.y=side===1?0:Math.PI;}
+ function drawTitleTexture(){const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=120;const ctx=canvas.getContext('2d');ctx.fillStyle='#20395f';ctx.font='bold 70px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('SINGAPORE AIRLINES',512,60,980);const tx=new li(canvas);tx.colorSpace='srgb';return new be({map:tx,transparent:true,depthWrite:false,side:2,toneMapped:false});}
+ function drawLogoTexture(){const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d');ctx.strokeStyle='#e1b24d';ctx.lineCap='round';for(let j=0;j<3;j++){ctx.lineWidth=15-j*3;ctx.beginPath();ctx.moveTo(54+j*14,178+j*8);ctx.quadraticCurveTo(123+j*9,86+j*22,196,70+j*29);ctx.stroke();}const tx=new li(c);tx.colorSpace='srgb';return new be({map:tx,transparent:true,depthWrite:false,side:2,toneMapped:false});}
+ function jc112Build(){
+  const root=new me(),pose=new me(),model=new me();root.name='JC112_OWN_SHIP_SQ_787_10';root.add(pose);pose.add(model);model.scale.set(1.18,1.10,1.06);model.position.y=-5.4;
+  const g=jcScootV44Geometries(jcPanelIsMobile());
+  const white=mat(0xf5f7f8),wing=mat(0xe3e7e9),navy=mat(0x20395f),gold=mat(0xd9ad55),dark=mat(0x172332),metal=mat(0x8e9daa),rubber=mat(0x161a20),shadow=mat(0x394a62),windowMat=mat(0x496f95);
+  const parts={flaps:[],spoilers:[],reversers:[],mainGear:[],gearDoors:[],hStabs:[],elevators:[],engineFans:[],wingFlex:[],wheelSpin:[]};
+  const titleMat=drawTitleTexture(),logoMat=drawLogoTexture();
+  // Fuselage
+  const profiles=[[-28.5,.12,.12],[-27.7,.70,.70],[-26.5,1.45,1.54],[-24.8,2.17,2.22],[-22,2.65,2.66],[-18,2.77,2.81],[-10,2.82,2.83],[0,2.82,2.84],[12,2.79,2.82],[18,2.68,2.71],[22,2.13,2.2],[25,1.38,1.46],[27.7,.32,.34],[28.6,.07,.07]];
+  const verts=[],faces=[],colors=[],N=96;
+  for(const [x,ry,rz] of profiles){
+   for(let k=0;k<N;k++){
+    const a=2*Math.PI*k/N,Y=6.02+Math.cos(a)*ry;verts.push(x,Y,Math.sin(a)*rz);
+    let c=0xf5f7f8;if(x>-25&&x<23){if(Y>5.77&&Y<6.13)c=0x20395f;else if(Y>=6.13&&Y<6.30)c=0xd9ad55;}const col=new Vt(c);colors.push(col.r,col.g,col.b);
+   }
+  }
+  for(let j=0;j<profiles.length-1;j++)for(let k=0;k<N;k++){const a=j*N+k,b=j*N+(k+1)%N,c=(j+1)*N+k,d=(j+1)*N+(k+1)%N;faces.push(a,b,c,b,d,c);}
+  const body=jcScootV44Surface(verts,faces);body.setAttribute('color',new Ze(new Float32Array(colors),3));addMesh(model,body,new Xt({color:0xffffff,vertexColors:true,roughness:.55,metalness:.08,side:2}));
+  addMesh(model,g.tail,navy);const rudderPivot=new me();rudderPivot.position.set(24.5,8.55,0);model.add(rudderPivot);const rudder=addMesh(rudderPivot,g.rudder,navy,0,0,0);parts.rudder=rudderPivot;
+  // Wings and control surfaces
+  for(const side of [-1,1]){
+   const wingRoot=new me();wingRoot.position.set(0,0,0);model.add(wingRoot);parts.wingFlex.push(wingRoot);
+   addMesh(wingRoot,side<0?g.wingL:g.wingR,wing);
+   // decorative wingtip / windows / livery
+   buildWindowStrip(model,side);
+   const text=addMesh(model,new Ge(18.7,1.52),titleMat,-12.1,6.65,side*2.90);text.rotation.y=side===1?0:Math.PI;text.renderOrder=4;
+   const emblem=addMesh(model,new Ge(3.0,3.0),logoMat,25.65,11.9,side===1?.52:-.04);emblem.rotation.y=side===1?0:Math.PI;emblem.renderOrder=5;
+   // Engine and reverser sleeve
+   addMesh(model,side<0?g.engine:g.engine,white,0,3.4,side*9.3);
+   const nacelleBand=addMesh(model,new Ae(3.05,1.58,.58),shadow,.15,3.4,side*9.3);parts.reversers.push(nacelleBand);
+   const inlet=addMesh(model,new an(1.70,1.70,.15,28),dark,-3.67,3.4,side*9.3);inlet.rotation.z=Math.PI/2;
+   const fan=addMesh(model,new an(.65,.65,.20,16),metal,-3.78,3.4,side*9.3);fan.rotation.z=Math.PI/2;parts.engineFans.push(fan);
+   addMesh(model,new Ae(3.2,1.65,.77),wing,.1,5.02,side*9.3);
+   // Flaps (inner and outer)
+   const flap1=new me();flap1.position.set(3.4,5.28,side*5.8);model.add(flap1);addMesh(flap1,new Ae(5.8,.18,1.05),white,2.6,-.02,0);parts.flaps.push({pivot:flap1,side,kind:'inner'});
+   const flap2=new me();flap2.position.set(5.4,5.12,side*10.7);model.add(flap2);addMesh(flap2,new Ae(5.2,.16,.88),white,2.35,-.02,0);parts.flaps.push({pivot:flap2,side,kind:'outer'});
+   // Spoilers
+   for(const zOff of [5.2,8.5,11.2]){const sp=new me();sp.position.set(2.6,5.55,side*zOff);model.add(sp);addMesh(sp,new Ae(1.35,.05,.78),shadow,.7,.06,0);parts.spoilers.push({pivot:sp,side});}
+   // Horizontal stabs and elevators
+   const stabPivot=new me();stabPivot.position.set(22.25,8.25,side*4.4);model.add(stabPivot);addMesh(stabPivot,side<0?g.stabL:g.stabR,wing,0,0,0);parts.hStabs.push({pivot:stabPivot,side});
+   const elevPivot=new me();elevPivot.position.set(25.2,8.17,side*6.9);model.add(elevPivot);addMesh(elevPivot,new Ae(3.2,.12,1.15),white,1.55,-.02,0);parts.elevators.push({pivot:elevPivot,side});
+  }
+  // Nose / windshield and a little cockpit glass strip
+  addMesh(model,new Ae(1.4,.35,1.8),windowMat,-24.2,7.5,0);
+  // Gear assemblies
+  const gearRoot=new me();gearRoot.position.y=3.1;model.add(gearRoot);jc111.gear=gearRoot;
+  function gearAssembly(x,z,isNose){const grp=new me();grp.position.set(x,0,z);gearRoot.add(grp);const doorL=new me();doorL.position.set(0,.55,isNose?.38:.48);grp.add(doorL);addMesh(doorL,new Ae(1.6,.08,.52),white,.05,.05,0);const doorR=new me();doorR.position.set(0,.55,isNose?-.38:-.48);grp.add(doorR);addMesh(doorR,new Ae(1.6,.08,.52),white,.05,.05,0);parts.gearDoors.push({left:doorL,right:doorR,nose:isNose});
+    const leg=new me();leg.position.set(0,0,0);grp.add(leg);addMesh(leg,new Ae(.25,isNose?2.3:2.8,.25),metal,0,-1.2,0);const axle=new me();axle.position.set(0,-2.5,0);leg.add(axle);
+    const tireGeo=new an(.53,.53,.36,14);tireGeo.rotateX(Math.PI/2);
+    if(isNose){for(const dz of [-.36,.36]){const w=addMesh(axle,tireGeo,rubber,0,0,dz);parts.wheelSpin.push(w);}}
+    else {for(const dx of [-.78,.78])for(const dz of [-.38,.38]){const w=addMesh(axle,tireGeo,rubber,dx,0,dz);parts.wheelSpin.push(w);}}
+    parts.mainGear.push({group:grp,leg,axle,isNose});
+  }
+  gearAssembly(-20,0,true);gearAssembly(5,-3,false);gearAssembly(5,3,false);
+  jc111.pose=pose;jc111.parts=parts;return root;
+ }
+ function flapNorm(n){const f=Number(n?.flaps??0);if(f<=0)return 0;if(f<=1)return .45;if(f<=2)return .72;if(f<=3)return .9;return 1;}
+ function spoilerNorm(n){const lever=Number(n?.lever??0),brake=Number(n?.brake??0);const reverse=(n?.onGround&&lever<-.04)||false;const land=n?.onGround&&(n?.landed||false);return clamp((land?0.35:0)+brake*0.7+(reverse?0.65:0),0,1);}
+ function reverseNorm(n){return n?.onGround?clamp((-Number(n?.lever??0))/0.28,0,1):0;}
+ function rudderAngle(n){const psi=Number(n?.psi||0);const prev=jc111.prevPsi==null?psi:jc111.prevPsi;const yawRate=(psi-prev)*An*0.35;jc111.prevPsi=psi;return clamp(-Number(n?.phi||0)*6 - yawRate,-22,22)*qe;}
+ function elevatorAngle(n){const theta=Number(n?.theta||0);const vy=Number(n?.vy||0);return clamp(-theta*1.7-vy*.0025,-18,14)*qe;}
+ function hstabTrim(n){const theta=Number(n?.theta||0),spd=Number(n?.spdTarget||Number(n?.v||0)*wn||140);return clamp((theta*-.06)+(spd-170)*-.0012,-.24,.12);}
+ function jc112Animate(n){
+  const parts=jc111.parts;if(!parts)return;
+  const gear=clamp(Number(n?.gearT??n?.gear??1),0,1),flaps=flapNorm(n),spoiler=spoilerNorm(n),rev=reverseNorm(n),rud=rudderAngle(n),elev=elevatorAngle(n),trim=hstabTrim(n);
+  for(const wing of parts.wingFlex){wing.rotation.z=-(Number(n?.phi||0))*qe*.08;wing.rotation.x=-(Number(n?.theta||0))*qe*.02;}
+  parts.flaps.forEach((f,i)=>{const base=(f.kind==='inner'?18:24)*qe;f.pivot.rotation.z=-base*flaps;f.pivot.position.x=(f.kind==='inner'?3.4:5.4)+flaps*.9;f.pivot.position.y=(f.kind==='inner'?5.28:5.12)-flaps*.35;});
+  parts.spoilers.forEach((s,i)=>{s.pivot.rotation.z=(26+4*(i%2))*qe*spoiler;s.pivot.position.y=5.55+spoiler*.08;});
+  parts.reversers.forEach((r,i)=>{r.position.x=.15+rev*1.08;});
+  parts.engineFans.forEach((fan,i)=>{fan.rotation.x += (Number(n?.eng1||n?.eng2||true)?1:0)*(Number(n?.v||0)*0.03+0.22);});
+  parts.hStabs.forEach(s=>{s.pivot.rotation.z=trim;});
+  parts.elevators.forEach(s=>{s.pivot.rotation.z=elev+trim*.35;});
+  if(parts.rudder)parts.rudder.rotation.y=rud;
+  const wheelSpin=(Number(n?.onGround)?Number(n?.v||0)*0.26:Number(n?.v||0)*0.12);
+  parts.wheelSpin.forEach(w=>{w.rotation.z+=wheelSpin;});
+  const gearOpen=1-Math.min(1,Math.abs(gear-.5)*2);
+  parts.mainGear.forEach((g,idx)=>{const tuck=(1-gear)*1.28;g.leg.rotation.z=g.isNose?-tuck:tuck*(idx===1?1:-1);g.leg.position.y=-gear*.15;g.axle.position.y=(g.isNose?-2.45:-2.6)+gear*.05;g.group.visible=gear>.01||gearOpen>.04;});
+  parts.gearDoors.forEach((d,idx)=>{const ang=(55*qe)*gearOpen;d.left.rotation.x=ang;d.right.rotation.x=-ang;});
+  jc111.lastTelemetry={gear,flaps,spoiler,reverse:rev,rudder:rud,elevator:elev,trim};
+ }
+ function cameraBase(mode){switch(mode){case 'front':return {a:0,el:.14};case 'left':return {a:-Math.PI/2,el:.16};case 'right':return {a:Math.PI/2,el:.16};case 'rear':return {a:Math.PI,el:.18};case 'top':return {a:Math.PI*.05,el:1.26};case 'orbit':return {a:jc111.angle,el:.3};default:return {a:0,el:.18};}}
+ jc111Apply=function(camera,n){
+  const active=jc111.mode!=='cockpit'&&E.state==='play'&&It?.scene;
+  if(jc111.toolbar){jc111.toolbar.hidden=E.state!=='play'||!!je.open;const [x,y,w,h]=pe.world;Object.assign(jc111.toolbar.style,{left:Math.round(x+6)+'px',top:Math.round(y+Math.max(4,h-50))+'px',maxWidth:Math.max(132,w-12)+'px'});document.body.classList.toggle('jc-v112-external-active',active);}
+  if(jc111.root&&jc111.scene!==It?.scene){try{jc111.root.removeFromParent()}catch(_e){}jc111.scene=null;jc111.root=null;}
+  if(!active){if(jc111.root)jc111.root.visible=false;return;}
+  if(!jc111.root)jc111.root=jc112Build();
+  if(jc111.scene!==It.scene){It.scene.add(jc111.root);jc111.scene=It.scene;}
+  const root=jc111.root;root.visible=true;root.position.set(n.x,Math.max(5.4,n.y+5.4),n.z);root.rotation.y=-Math.PI/2-n.psi;
+  jc111.pose.rotation.order='ZXY';jc111.pose.rotation.z=-(n.theta||0)*qe;jc111.pose.rotation.x=-(n.phi||0)*qe;
+  jc112Animate(n);
+  const fwd=new K(Math.sin(n.psi),0,-Math.cos(n.psi)),right=new K(Math.cos(n.psi),0,Math.sin(n.psi));
+  const target=new K(n.x,root.position.y+1.2,n.z);
+  const half=camera.fov*qe/2,smallHalf=Math.min(half,Math.atan(Math.tan(half)*camera.aspect));
+  const dist=Math.max(95,jc111.baseDist/Math.max(.18,Math.sin(smallHalf)))*jc111.zoom;
+  const base=cameraBase(jc111.mode);
+  if(jc111.mode==='orbit'&&!jc111.drag)jc111.angle+=Math.max(0,now()-jc111.lastFrame)*.00023;
+  jc111.lastFrame=now();
+  const a=base.a+(jc111.mode==='orbit'?0:jc111.userYaw);
+  const el=clamp(base.el+jc111.userPitch,-.28,1.45);
+  const horiz=Math.cos(el)*dist;
+  camera.position.copy(target)
+   .addScaledVector(fwd,Math.cos(a)*horiz)
+   .addScaledVector(right,Math.sin(a)*horiz);
+  camera.position.y=Math.max(3.1,target.y+Math.sin(el)*dist);
+  camera.up.set(0,1,0);
+  camera.lookAt(target);camera.updateMatrixWorld(true);
+ };
+ jc111Set=function(mode){if(!['cockpit','front','left','right','rear','top','orbit'].includes(mode))return false;jc111.mode=mode;jc111.lastFrame=now();if(mode==='cockpit'&&jc111.root)jc111.root.visible=false;if(mode==='orbit'){jc111.angle=jc111.userYaw||jc111.angle||0;}const b=jc111.toolbar;if(b){const t=b.querySelector('[data-jc111-toggle]');if(t)t.textContent=mode==='cockpit'?'✈ VIEW':'✈ '+mode.toUpperCase();b.querySelectorAll('[data-jc111-mode]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.jc111Mode===mode)));const hint=b.querySelector('.jc111-hint');if(hint)hint.textContent=mode==='cockpit'?'Open external views':'Drag on scenery to turn view · wheel or +/- to zoom';}return true;};
+ jc111UI=function(){
+  let b=document.getElementById('jc111-camera-tools');
+  if(!b){b=document.createElement('div');b.id='jc111-camera-tools';b.dataset.ui='true';document.body.append(b);}jc111.toolbar=b;b.hidden=true;
+  b.innerHTML='<button type="button" data-jc111-toggle aria-expanded="false">✈ VIEW</button><div class="jc111-options" hidden><div class="jc111-modes">'+['cockpit','front','left','right','rear','top','orbit'].map(m=>'<button type="button" data-jc111-mode="'+m+'" aria-pressed="'+(m===jc111.mode)+'">'+m.toUpperCase()+'</button>').join('')+'</div><div class="jc111-zoom"><button type="button" data-jc111-zoom="in" aria-label="Zoom in">＋</button><button type="button" data-jc111-zoom="out" aria-label="Zoom out">−</button><span> SIA 787-10 · EXTERIOR </span></div><div class="jc111-hint">Drag on scenery to turn view · wheel or +/- to zoom</div></div>';
+  const options=b.querySelector('.jc111-options'),toggle=b.querySelector('[data-jc111-toggle]');
+  toggle.onclick=()=>{options.hidden=!options.hidden;toggle.setAttribute('aria-expanded',String(!options.hidden));};
+  b.addEventListener('click',e=>{const m=e.target.closest('[data-jc111-mode]'),z=e.target.closest('[data-jc111-zoom]');if(m){jc111Set(m.dataset.jc111Mode);options.hidden=true;toggle.setAttribute('aria-expanded','false');}if(z){jc111.zoom=clamp(jc111.zoom*(z.dataset.jc111Zoom==='in'?.88:1.14),.68,2.6);}});
+  for(const ev of ['pointerdown','pointerup','touchstart','touchend','click'])b.addEventListener(ev,e=>e.stopPropagation());
+  window.__jcExternalCamera111={set:jc111Set,toggle:()=>toggle.click(),status:()=>({mode:jc111.mode,zoom:jc111.zoom,model:!!jc111.root,visible:!!jc111.root?.visible,position:jc111.root?.position.toArray(),telemetry:jc111.lastTelemetry||null})};
+  jc111Set(jc111.mode);
+ };
+ function dragAllowed(target){if(jc111.mode==='cockpit'||E.state!=='play')return false;const el=target&&target.closest?target.closest('[data-ui],#jc111-camera-tools,.mcdu,.modal,[role="dialog"]'):null;return !el;}
+ function bindDrag(){if(jc111.dragBound||typeof yi==='undefined'||!yi)return;jc111.dragBound=true;
+  yi.addEventListener('pointerdown',e=>{if(!dragAllowed(e.target))return;const rect=yi.getBoundingClientRect();jc111.drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw:jc111.userYaw,pitch:jc111.userPitch,mode:jc111.mode};document.body.classList.add('jc-v112-external-drag');try{yi.setPointerCapture(e.pointerId);}catch(_e){}e.preventDefault();},true);
+  yi.addEventListener('pointermove',e=>{if(!jc111.drag||jc111.drag.id!==e.pointerId)return;const dx=e.clientX-jc111.drag.x,dy=e.clientY-jc111.drag.y;jc111.userYaw=jc111.drag.yaw+dx*.0082;jc111.userPitch=clamp(jc111.drag.pitch+dy*.0064,-1.08,.92);if(jc111.mode==='orbit')jc111.angle=jc111.userYaw;e.preventDefault();},true);
+  const end=e=>{if(!jc111.drag||jc111.drag.id!==e.pointerId)return;jc111.drag=null;document.body.classList.remove('jc-v112-external-drag');try{yi.releasePointerCapture(e.pointerId);}catch(_e){}};
+  yi.addEventListener('pointerup',end,true);yi.addEventListener('pointercancel',end,true);
+  yi.addEventListener('wheel',e=>{if(jc111.mode==='cockpit'||!dragAllowed(e.target))return;jc111.zoom=clamp(jc111.zoom*(e.deltaY<0?.93:1.08),.68,2.6);e.preventDefault();}, {passive:false,capture:true});
+ }
+ if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',()=>{jc111UI();bindDrag();},{once:true});}
+ else {jc111UI();bindDrag();}
+})();
+</script>
 </body>
 </html>
