@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08162f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Jetline Captain v140 · World Pilots</title>
+  <title>Jetline Captain v142 · World Pilots</title>
   <style>
     :root{color-scheme:dark;--ink:#edf5ff;--muted:#a6b8d1;--blue:#42d8ff;--base:#07132c;--panel:#10234a;--stroke:#31527c;--green:#48e0a0}
     *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--base);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink)}
@@ -240,7 +240,7 @@
 
   <div id="routeShade" aria-hidden="true">
     <section id="routePanel" role="dialog" aria-modal="true" aria-labelledby="routeTitle">
-      <div class="routeTitleRow"><h2 id="routeTitle">✈ WORLD FLIGHT ROUTE</h2><button class="pill" id="jc137AirportChart" type="button" hidden>FLIGHT CHART</button><button id="routeClose" class="close" type="button" aria-label="Close flight route selection">×</button></div>
+      <div class="routeTitleRow"><h2 id="routeTitle">✈ WORLD FLIGHT ROUTE</h2><button class="pill" id="jc137AirportChart" type="button" hidden>FLIGHT CHART</button><button class="pill" id="jc142Open" type="button">FLIGHT BOARD</button><button id="routeClose" class="close" type="button" aria-label="Close flight route selection">×</button></div>
       <p>Search the same airport directory used by live radar. Pick any two ICAO airports, then apply the route to your flight. Detailed runway data is used when published; otherwise a practice runway is labelled simulated.</p>
       <div class="routeGrid">
         <div class="routeField"><label for="routeDepSearch">FROM · Departure airport</label>
@@ -417,6 +417,9 @@
     </section>
   </div>
 
+<style>#jc142Board[hidden]{display:none!important}#jc142Board{position:fixed;inset:0;z-index:2147481000;background:#061225e8;padding:12px;display:grid;place-items:center;color:#e6f2ff;font:13px system-ui}#jc142Board section{background:#0b2039;border:1px solid #365b83;border-radius:13px;width:min(850px,100%);max-height:90dvh;overflow:auto;padding:14px}#jc142Board button,#jc142Board select{background:#173b61;border:1px solid #4775a2;color:#fff;padding:8px;border-radius:5px}#jc142Board button[aria-pressed=true]{background:#266dae}#jc142Board table{border-collapse:collapse;width:100%;white-space:nowrap;font-size:12px}#jc142Board td,#jc142Board th{padding:9px 6px;border-bottom:1px solid #30465d;text-align:left}#jc142Board a{color:#8edcff}</style>
+<div id="jc142Board" hidden><section role="dialog" aria-label="Airport flight schedules"><div style="display:flex;align-items:center;justify-content:space-between"><h2 style="margin:0;font-size:18px">AIRPORT FLIGHT BOARD</h2><button id="jc142Close">CLOSE ×</button></div><div style="display:flex;flex-wrap:wrap;gap:6px;margin:12px 0"><select id="jc142Select" aria-label="Airport"></select><button id="jc142departures" aria-pressed="true">DEPARTURES</button><button id="jc142arrivals" aria-pressed="false">ARRIVALS</button><button id="jc142Refresh">REFRESH</button></div><p id="jc142Status" role="status"></p><small id="jc142Zone">SGT</small><div style="overflow-x:auto"><table><thead><tr><th>Flight</th><th>Airline</th><th>Airport</th><th>Scheduled</th><th>Actual / Est.</th><th>Status</th></tr></thead><tbody id="jc142Rows"></tbody></table></div><p><a id="jc142External" href="https://www.airnavradar.com/data/airports/WSSS" target="_blank" rel="noopener noreferrer">Open AirNav Radar airport page</a></p><small>Schedule records are not aircraft positions or real ATC audio. Missing values are left blank. ADS-B tracking remains independent.</small></section></div>
+
 <script>
 'use strict';
 (()=>{
@@ -572,7 +575,7 @@
   const flightScheduleCache=new Map(),flightSchedulePending=new Set(),flightScheduleQueue=[];
   let flightScheduleActive=0;
   const scheduleKey=p=>String(p?.callsign||'').trim().toUpperCase();
-  const flightSchedule=p=>flightScheduleCache.get(scheduleKey(p))||null;
+  const flightSchedule=p=>jc142Match(p)||flightScheduleCache.get(scheduleKey(p))||null;
   const pad2=n=>String(n).padStart(2,'0');
   function sgTime(value){
     if(!value||typeof value!=='string')return '—';
@@ -2217,7 +2220,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function hello(){sendToGame({src:'jetline-host',type:'hello'});sendFeed()}
   function startGame(reload=false){
-    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=140'+(reload?'&cloud_reload='+Date.now():'')}
+    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=142'+(reload?'&cloud_reload='+Date.now():'')}
   }
   frame.addEventListener('load',()=>{
     gameLoaded=true;
@@ -2295,6 +2298,59 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     routeFeedback('Search by ICAO, airport name, city or country.');
   }
   function routeClosePicker(){routeOpen=false;$('routeShade').classList.remove('show');$('routeShade').setAttribute('aria-hidden','true')}
+  const jc142Boards=new Map();
+  const jc142Normalize=v=>String(v||'').trim().toUpperCase();
+  function jc142Match(p){
+   const k=jc142Normalize(p?.callsign);if(!k)return null;
+   const now=Date.now(),candidates=[];
+   for(const d of jc142Boards.values()){
+    if(now-Date.parse(d.asOf)>600000)continue;
+    for(const row of [...d.departures,...d.arrivals]){
+     if(![row.callsign,row.icaoFlight,row.flight].map(jc142Normalize).includes(k))continue;
+     if(row.flightStatus==='CANCELLED')continue;
+     const a=Date.parse(row.actualOut||row.estimatedOut||row.scheduledOut),b=Date.parse(row.actualIn||row.estimatedIn||row.scheduledIn);
+     if(!Number.isFinite(a)||!Number.isFinite(b)||now<a-7200000||now>b+7200000)continue;
+     if(p.registration&&row.registration&&jc142Normalize(p.registration)!==jc142Normalize(row.registration))continue;
+     candidates.push(row);
+    }
+   }
+   const unique=new Map(candidates.map(r=>[[r.icaoFlight||r.callsign||r.flight,r.origin,r.destination,r.scheduledOut].join('|'),r]));
+   return unique.size===1?[...unique.values()][0]:null;
+  }
+  let jc142Airport='WSSS',jc142Mode='departures',jc142Req=0,jc142Timer=null;
+  const jc142Panel=$('jc142Board'),jc142Time=(x,zone)=>{if(!x||!Number.isFinite(Date.parse(x)))return '—';try{return new Intl.DateTimeFormat('en-GB',{timeZone:zone||'UTC',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(x));}catch(_){return new Date(x).toISOString().slice(0,16).replace('T',' ')}};
+  function jc142Render(d){
+    const body=$('jc142Rows');body.replaceChildren();
+    const dep=jc142Mode==='departures',rows=(d?.[jc142Mode]||[]).slice().sort((a,b)=>Date.parse(a[dep?'scheduledOut':'scheduledIn']||0)-Date.parse(b[dep?'scheduledOut':'scheduledIn']||0));
+    const zone=jc142Airport==='WSSS'?'Asia/Singapore':'UTC';
+    $('jc142Zone').textContent=zone==='UTC'?'UTC':'Singapore time (SGT)';
+    for(const f of rows){
+      const r=document.createElement('tr'),values=[f.flight||'—',f.airline||'—',dep?(f.destinationName||f.destination):(f.originName||f.origin),jc142Time(dep?f.scheduledOut:f.scheduledIn,zone),jc142Time(dep?f.actualOut||f.estimatedOut:f.actualIn||f.estimatedIn,zone),(dep?f.actualOut:f.actualIn)?'ACTUAL':(dep?f.estimatedOut:f.estimatedIn)?'ESTIMATED':(f.flightStatus||'SCHEDULED')];
+      if(f.flightStatus==='CANCELLED')values[5]='CANCELLED';
+      for(const val of values){const c=document.createElement('td');c.textContent=val||'—';r.append(c)}body.append(r);
+    }
+    if(!rows.length){const r=document.createElement('tr'),c=document.createElement('td');c.colSpan=6;c.textContent='No schedule records returned.';r.append(c);body.append(r);}
+  }
+  async function jc142Load(){
+    if(jc142Panel.hidden)return;
+    const airport=jc142Airport,id=++jc142Req;
+    $('jc142External').href='https://www.airnavradar.com/data/airports/'+airport;
+    $('jc142Status').textContent='Checking AirNav schedule service…';
+    try{
+      const r=await fetch('/api/airport-schedules?airport='+encodeURIComponent(airport),{signal:AbortSignal.timeout(15000)});
+      const d=await r.json();if(id!==jc142Req)return;
+      if(!r.ok||d.status!=='found'||!Array.isArray(d.departures)||!Array.isArray(d.arrivals))throw Error(d.message||'Schedule service unavailable');
+      jc142Boards.set(airport,d);jc142Render(d);
+      $('jc142Status').textContent='AirNav Radar · fetched '+jc142Time(d.asOf,'Asia/Singapore')+' SGT · scheduled and available estimated/actual data';
+      if(radarOpenState)renderRadar();
+    }catch(e){if(id!==jc142Req)return;const d=jc142Boards.get(airport);if(d&&Date.now()-Date.parse(d.asOf)<600000){jc142Render(d);$('jc142Status').textContent='Refresh unavailable · cached snapshot';}else{$('jc142Rows').replaceChildren();$('jc142Status').textContent='Schedule feed not available. Open AirNav directly for current information.';}}
+  }
+  $('jc142Open').onclick=()=>{const plan=routeGameChoice();jc142Airport=plan.dep||'WSSS';$('jc142Select').replaceChildren();for(const code of new Set(['WSSS',plan.dep,plan.arr].filter(x=>/^[A-Z0-9]{4}$/.test(x||'')))){const o=document.createElement('option');o.value=o.textContent=code;$('jc142Select').append(o)}$('jc142Select').value=jc142Airport;jc142Panel.hidden=false;jc142Load();clearInterval(jc142Timer);jc142Timer=setInterval(jc142Load,300000);};
+  $('jc142Close').onclick=()=>{jc142Panel.hidden=true;jc142Req++;clearInterval(jc142Timer);};
+  $('jc142Select').onchange=()=>{jc142Airport=$('jc142Select').value;$('jc142Rows').replaceChildren();jc142Load()};
+  for(const mode of ['departures','arrivals'])$('jc142'+mode).onclick=()=>{jc142Mode=mode;for(const m of ['departures','arrivals'])$('jc142'+m).setAttribute('aria-pressed',String(m===mode));jc142Render(jc142Boards.get(jc142Airport));};
+  $('jc142Refresh').onclick=jc142Load;
+
   $('routeOpen').onclick=routeOpenPicker;
   $('routeClose').onclick=routeClosePicker;
   $('routeShade').addEventListener('pointerdown',e=>{if(e.target===$('routeShade'))routeClosePicker()});
@@ -2781,85 +2837,112 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
 </style>
 <section id="jc139RadioPanel" hidden aria-label="ATC radio monitor"><div style="display:flex;align-items:center;justify-content:space-between"><h3>ATC RADIO · MONITOR</h3><button id="jc139RadioClose">×</button></div>
 <div id="jc139RadioFreq">118.600 MHz</div><div id="jc139RadioService">Singapore Tower</div>
-<label for="jc139Mode">Audio source</label><select id="jc139Mode"><option value="sim">Traffic-based simulated radio</option><option value="stream">Authorized live audio stream</option><option value="off">Off</option></select>
+<label for="jc139Mode">Audio source</label><select id="jc139Mode"><option value="auto">AUTO · Live receiver / simulated fallback</option><option value="live">Live receiver only</option><option value="sim">Simulated nearby traffic</option><option value="off">Off</option></select>
 <label for="jc139Channel">Changi channel · simulator selection</label><select id="jc139Channel"><option value="auto">AUTO · Flight phase / runway</option><option value="118.600">118.600 · Tower 02L/20R</option><option value="118.250">118.250 · Tower 02C/20C</option><option value="131.400">131.400 · Tower 02R/20L</option><option value="124.300">124.300 · Ground (west)</option><option value="119.300">119.300 · Arrival</option><option value="120.300">120.300 · Departure</option></select>
-<div id="jc139StreamBox" hidden><label for="jc139StreamURL">Provider-authorized HTTPS audio URL for selected channel</label><input id="jc139StreamURL" type="url" placeholder="https://…"><small>Audio is heard from the supplied stream; channel labels do not tune its receiver. Change the URL for another channel. Only use a source authorized for in-game playback.</small></div>
+
 <label for="jc139Vol">Radio volume</label><input type="range" id="jc139Vol" min="0" max="100" value="35">
 <div style="display:flex;gap:8px;margin-top:8px"><button id="jc139Start">START MONITOR</button><button id="jc139Stop">STOP</button></div>
-<div id="jc139RadioStatus" role="status">Radio off. Listening only; no transmission.</div><div id="jc139RadioLast">No traffic call yet.</div>
-<a href="https://www.liveatc.net/search/?icao=wsss" target="_blank" rel="noopener noreferrer">Open Changi live listener (LiveATC)</a> · <a href="https://rotatepilot.com/live-atc/wsss" target="_blank" rel="noopener noreferrer">Alternative listener</a>
-<p style="font-size:11px;color:#a9c7e4">ADS-B provides positions, not radio speech. Generated calls are fictional training audio, never actual clearances. No guaranteed one-to-one sync with external audio. Game warnings take priority.</p></section>
+<div id="jc139RadioStatus" role="status">Auto monitor ready. Listening only; no transmission.</div><div id="jc139RadioLast">No traffic call yet.</div>
+<a id="jc141LiveLink" href="https://www.liveatc.net/search/?icao=wsss" target="_blank" rel="noopener noreferrer">Listen to WSSS on LiveATC</a>
+<p style="font-size:11px;color:#a9c7e4">Auto selects a provider-authorized receiver when configured. Otherwise simulated pilot and controller exchanges use fresh nearby ADS-B tracks. A real receiver is not matched to individual radar tracks. Game warnings take priority. No URL needed from players.</p></section>
 
 <script id="jc139-radio">
 (()=>{
 const $=id=>document.getElementById(id),panel=$('jc139RadioPanel'),audio=new Audio(),synth=window.speechSynthesis;
-audio.preload='none';audio.crossOrigin=null;
-let running=false,next=0,lastKey='',lastSpeech=null,speaking=false,streamReady=false,token=0,seen=new Map();
-const freqMap={'118.600':'Singapore Tower · 02L / 20R','118.250':'Singapore Tower · 02C / 20C','131.400':'Singapore Tower · 02R / 20L','124.300':'Singapore Ground · west sector','119.300':'Singapore Arrival','120.300':'Singapore Departure'};
+audio.preload='none';
+let enabled=true,gesture=false,next=0,seen=new Map(),speech=null,pending=null,streamKey='',streamURL='',attempt=0,blockedUntil=0,connecting=false,generation=0,activeAirport='',activeFrequency='',lastStatus='';
+try{enabled=localStorage.getItem('jc141-radio')!=='off';}catch(_){}
+const freqMap={'118.600':'Tower · 02L / 20R','118.250':'Tower · 02C / 20C','131.400':'Tower · 02R / 20L','124.300':'Ground','119.300':'Arrival','120.300':'Departure'};
 const tower=r=>['02C','20C'].includes(r)?'118.250':['02R','20L'].includes(r)?'131.400':'118.600';
-function frequency(d){if($('jc139Channel').value!=='auto')return $('jc139Channel').value;
- return ['taxi','taxiIn'].includes(d.phase)?'124.300':d.phase==='route'?'120.300':d.phase==='approach'?'119.300':tower(d.runway);}
+const status=t=>{if(t!==lastStatus){$('jc139RadioStatus').textContent=t;lastStatus=t;}};
+const audible=v=>{window.__jc139RadioAudible=!!v;};
 function data(){try{return $('gameFrame').contentWindow?.__jc139RadioData?.()||{}}catch(_){return {}}}
-function status(t){$('jc139RadioStatus').textContent=t;}
-function audible(v){window.__jc139RadioAudible=!!v;}
-function stop(){running=false;token++;audio.pause();audio.removeAttribute('src');audio.load();streamReady=false;audible(false);status('Radio off.');}
-function valid(a,f){
- if(!a.callsign||!a.id)return false;
- if(f==='124.300')return a.onGround&&a.speedKt>=3&&a.speedKt<45;
- if(f==='119.300')return !a.onGround&&a.verticalRate< -150&&a.altFt<12000;
- if(f==='120.300')return !a.onGround&&a.verticalRate>150&&a.altFt<15000;
- return a.runway&&tower(a.runway)===f&&((a.onGround&&a.speedKt>45)||(!a.onGround&&a.altFt<3500&&a.verticalRate< -150));
+function frequency(d){
+ if($('jc139Channel').value!=='auto'&&d.airport==='WSSS')return $('jc139Channel').value;
+ if(d.airport!=='WSSS')return '';
+ return ['taxi','taxiIn'].includes(d.phase)?'124.300':d.phase==='route'?'120.300':d.phase==='approach'?'119.300':tower(d.runway);
 }
-function sentence(a,f){const id=a.callsign.replace(/[^A-Z0-9 ]/gi,'').split('').join(' '),rw=a.runway?a.runway.replace('L',' left').replace('R',' right').replace('C',' centre'):'';
- if(f==='124.300')return id+', ground, taxiing.';
- if(f==='119.300')return id+', Singapore arrival, descending through '+(Math.round(a.altFt/100)*100)+' feet.';
- if(f==='120.300')return id+', Singapore departure, climbing through '+(Math.round(a.altFt/100)*100)+' feet.';
- return id+', Singapore tower, '+(a.onGround?'departure roll':'on approach')+', runway '+rw+'.';
+function service(d,f){if(f)return f==='124.300'?'ground':f==='119.300'?'arrival':f==='120.300'?'departure':'tower';return ['taxi','taxiIn'].includes(d.phase)?'ground':d.phase==='approach'?'arrival':d.phase==='route'?'departure':'tower';}
+function configured(d,f,s){
+ // Administrator-supplied, provider-authorized URLs in existing config.js:
+ // JETLINE_CONFIG.atcStreams = {WSSS: {"118.600":"https://...", combined:"https://..."}}
+ const a=window.JETLINE_CONFIG?.atcStreams?.[d.airport];if(!a)return null;
+ for(const k of [f,s,'combined']){const raw=a[k];if(typeof raw!=='string')continue;
+ try{const u=new URL(raw);if(u.protocol==='https:')return {url:u.href,key:d.airport+'|'+k,label:k==='combined'?'Combined receiver':k};}catch(_){}
+ }return null;
+}
+function resetStream(){generation++;audio.pause();if(streamURL){audio.removeAttribute('src');audio.load();}streamKey=streamURL='';connecting=false;audible(false);}
+function stop(){enabled=false;pending=null;resetStream();if(speech&&synth?.speaking){try{synth.cancel()}catch(_){}}speech=null;audible(false);try{localStorage.setItem('jc141-radio','off')}catch(_){}status('Radio off.');}
+function start(){enabled=true;gesture=true;blockedUntil=0;try{localStorage.setItem('jc141-radio','on')}catch(_){}tick();}
+function unlock(){gesture=true;}
+document.addEventListener('pointerdown',unlock,{capture:true,passive:true});
+const frame=$('gameFrame');
+function bindFrame(){try{frame.contentWindow.document.addEventListener('pointerdown',unlock,{capture:true,passive:true});frame.contentWindow.document.addEventListener('keydown',unlock,{capture:true});}catch(_){}}
+frame.addEventListener('load',bindFrame);bindFrame();
+function valid(a,s,f){
+ if(!a.callsign||!a.id||!Number.isFinite(a.rangeKm)||a.rangeKm>50)return false;
+ if(s==='ground')return a.onGround&&a.speedKt>=3&&a.speedKt<45;
+ if(s==='arrival')return !a.onGround&&Number.isFinite(a.altFt)&&a.verticalRate< -150&&a.altFt<12000;
+ if(s==='departure')return !a.onGround&&Number.isFinite(a.altFt)&&a.verticalRate>150&&a.altFt<15000;
+ return !!a.runway&&(!f||tower(a.runway)===f)&&((a.onGround&&a.speedKt>45)||(!a.onGround&&Number.isFinite(a.altFt)&&a.altFt<3500&&a.verticalRate< -150));
+}
+function messages(a,s,airport){
+ const id=a.callsign.replace(/[^A-Z0-9]/gi,'').split('').join(' '),station=airport==='WSSS'?'Singapore':airport.split('').join(' ');
+ const runway=(a.runway||'').replace('L',' left').replace('R',' right').replace('C',' centre'),alt=Math.round(a.altFt/100)*100;
+ let report=s==='ground'?'taxiing':s==='arrival'?'descending through '+alt+' feet':s==='departure'?'climbing through '+alt+' feet':(a.onGround?'departure roll':'on approach')+', runway '+runway;
+ return [{role:'PILOT',text:station+' '+s+', '+id+', '+report+'.'},{role:'ATC',text:id+', '+station+' '+s+', roger.'}];
+}
+function speak(m,vol){
+ if(!synth||synth.speaking)return false;
+ const u=new SpeechSynthesisUtterance(m.text);u.lang='en-GB';u.rate=m.role==='ATC'?.94:1;u.pitch=m.role==='ATC'?.76:1.03;u.volume=vol*.7;
+ speech=u;audible(true);$('jc139RadioLast').textContent='SIMULATED '+m.role+' · '+m.text;
+ u.onend=u.onerror=()=>{if(speech===u){speech=null;audible(false);}};try{synth.speak(u);return true;}catch(_){speech=null;audible(false);return false;}
 }
 function tick(){
- const d=data(),f=frequency(d),mode=$('jc139Mode').value,vol=+$('jc139Vol').value/100;
- $('jc139RadioFreq').textContent=f+' MHz';$('jc139RadioService').textContent=freqMap[f]||'Singapore radio';
- if(!running)return;
- const quiet=d.state!=='play'||d.paused||d.muted||d.priority||d.emergency||d.holding||document.hidden;
- if(mode==='stream'){
-  // Pause instead of relying on volume alone (iOS ignores media volume).
-  if(quiet||!vol){if(!audio.paused)audio.pause();audible(false);status('Live monitor paused · game audio priority.');}
-  else if(streamReady&&audio.paused){audio.play().catch(()=>status('Tap START to resume stream.'));}
-  if(!audio.paused){audio.volume=vol;audible(true);status('External stream playing · channel is set by provider.');}
-  return;
+ const d=data(),f=frequency(d),s=service(d,f),mode=$('jc139Mode').value,vol=+$('jc139Vol').value/100;
+ const airport=/^[A-Z0-9]{4}$/.test(d.airport||'')?d.airport:'WSSS';
+ $('jc139RadioFreq').textContent=f?f+' MHz':s.toUpperCase()+' · AUTO';
+ $('jc139RadioService').textContent=airport+' · '+(freqMap[f]||s.toUpperCase());
+ $('jc141LiveLink').href='https://www.liveatc.net/search/?icao='+encodeURIComponent(airport.toLowerCase());
+ $('jc141LiveLink').textContent='Listen to '+airport+' on LiveATC';
+ if(activeAirport!==airport||activeFrequency!==f){activeAirport=airport;activeFrequency=f;pending=null;next=0;}
+ if(!enabled||mode==='off'){if(streamURL)resetStream();return;}
+ if(!gesture){status('Auto monitor ready · tap the game or START MONITOR to enable audio.');return;}
+ const quiet=d.state!=='play'||d.paused||d.muted||d.priority||d.emergency||d.holding||document.hidden||!vol;
+ if(quiet){audio.pause();pending=null;audible(!!speech);status('Standby · flight instructions and warnings take priority.');return;}
+ const feed=mode==='sim'?null:configured({...d,airport},f,s);
+ if(feed&&Date.now()>=blockedUntil){
+  if(streamKey!==feed.key||streamURL!==feed.url){resetStream();streamKey=feed.key;streamURL=feed.url;audio.src=feed.url;attempt=0;}
+  if(speech||synth?.speaking)return;
+  if(!audio.paused&&!audio.error){audio.volume=vol;audible(true);status('LIVE RECEIVER · '+airport+' · '+feed.label+' · audio not matched to individual radar tracks.');return;}
+  if(!connecting&&Date.now()-attempt>4000){attempt=Date.now();connecting=true;const gen=generation;audio.volume=vol;status('Connecting to authorized live receiver…');
+   audio.play().then(()=>{if(gen===generation){connecting=false;audible(true);}}).catch(()=>{if(gen===generation){resetStream();blockedUntil=Date.now()+60000;status('Live receiver unavailable · using simulated traffic audio.');}});
+  }return;
  }
- if(quiet||!vol||d.airport!=='WSSS'){audible(false);status(d.airport!=='WSSS'?'Traffic radio currently supports Changi only.':'Standby · game audio priority.');return;}
- if(!d.fresh){status('Waiting for fresh ADS-B traffic · no invented contacts.');return;}
- if(speaking||synth?.speaking)return;
- status('SIMULATED AUDIO · fresh ADS-B traffic · '+(d.tracks||[]).length+' contacts');
- if(Date.now()<next||!synth)return;
- const a=(d.tracks||[]).filter(a=>valid(a,f)&&Date.now()-(seen.get(a.id+'|'+f)||0)>90000).sort((a,b)=>a.speedKt-b.speedKt);
- if(!a.length)return;
- const flight=a[Math.floor(Math.random()*a.length)],msg=sentence(flight,f);seen.set(flight.id+'|'+f,Date.now());
- if(seen.size>500)seen.clear();
- next=Date.now()+14000+Math.random()*12000;
- const u=new SpeechSynthesisUtterance(msg);u.lang='en-GB';u.rate=.96;u.pitch=.86;u.volume=vol*.7;lastSpeech=u;speaking=true;audible(true);
- $('jc139RadioLast').textContent='SIMULATED · '+flight.callsign+' · '+msg;
- u.onend=u.onerror=()=>{if(lastSpeech===u){speaking=false;audible(false);}};
- synth.speak(u);
+ if(streamURL)resetStream();
+ if(mode==='live'){status('No verified live receiver configured for '+airport+'. Use the live listener link.');return;}
+ if(speech||synth?.speaking)return;
+ if(!d.fresh){pending=null;status('SIMULATION · waiting for fresh ADS-B traffic.');return;}
+ const nearby=(d.tracks||[]).filter(a=>Number.isFinite(a.rangeKm)&&a.rangeKm<=50);
+ status('SIMULATED RADIO · '+nearby.length+' nearby ADS-B contacts (50 km) · '+(feed?'live feed offline':'no embedded live feed'));
+ if(pending){const m=pending;pending=null;speak(m,vol);return;}
+ if(Date.now()<next)return;
+ const candidates=nearby.filter(a=>valid(a,s,f)&&Date.now()-(seen.get(a.id+'|'+s)||0)>90000).sort((a,b)=>a.rangeKm-b.rangeKm);
+ if(!candidates.length)return;
+ const flight=candidates[Math.floor(Math.random()*Math.min(5,candidates.length))],msgs=messages(flight,s,airport);
+ seen.set(flight.id+'|'+s,Date.now());if(seen.size>500)seen.clear();
+ next=Date.now()+18000+Math.random()*12000;
+ if(speak(msgs[0],vol))pending=msgs[1];
 }
-$('jc139RadioOpen').onclick=()=>{panel.hidden=!panel.hidden;};$('jc139RadioClose').onclick=()=>{panel.hidden=true;};
-$('jc139Mode').onchange=()=>{stop();$('jc139StreamBox').hidden=$('jc139Mode').value!=='stream';};
-$('jc139Stop').onclick=stop;
-$('jc139Start').onclick=()=>{
- stop();const mode=$('jc139Mode').value;if(mode==='off')return;
- if(mode==='stream'){
-  const url=$('jc139StreamURL').value.trim();try{if(new URL(url).protocol!=='https:')throw Error();}catch(_){status('Enter an authorized HTTPS audio stream URL.');return;}
-  running=true;streamReady=true;audio.src=url;audio.volume=+$('jc139Vol').value/100;const current=++token;
-  audio.play().then(()=>{if(token===current){audible(true);status('External stream connected.');}}).catch(()=>{if(token===current){streamReady=false;status('Stream unavailable · check the provider URL and playback permission.');}});
- }else{running=true;next=0;status('Monitoring simulated traffic calls.');tick();}
-};
-audio.onplaying=()=>{if(running){audible(true);}};
-audio.onerror=()=>{streamReady=false;audible(false);if(running)status('Stream unavailable.');};
-audio.onpause=()=>audible(false);
-document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.pause();audible(false);}});
+$('jc139RadioOpen').onclick=()=>{panel.hidden=!panel.hidden;};
+$('jc139RadioClose').onclick=()=>{panel.hidden=true;};
+$('jc139Start').onclick=start;$('jc139Stop').onclick=stop;
+$('jc139Mode').onchange=()=>{pending=null;resetStream();blockedUntil=0;if($('jc139Mode').value==='off')stop();else start();};
+audio.onpause=()=>audible(!!speech);
+audio.onerror=()=>{if(streamURL){resetStream();blockedUntil=Date.now()+60000;}};
+document.addEventListener('visibilitychange',()=>{if(document.hidden){audio.pause();pending=null;audible(!!speech);}});
 setInterval(tick,500);
-window.__jc139RadioStatus=()=>({running,mode:$('jc139Mode').value,frequency:$('jc139RadioFreq').textContent,last:$('jc139RadioLast').textContent,status:$('jc139RadioStatus').textContent});
+window.__jc139RadioStatus=()=>({running:enabled,mode:$('jc139Mode').value,frequency:$('jc139RadioFreq').textContent,last:$('jc139RadioLast').textContent,status:lastStatus});
 })();
 </script>
 </body>
