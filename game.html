@@ -17938,6 +17938,9 @@ body.jc-v112-external-drag canvas{cursor:grabbing}
   const white=mat(0xf5f7f8),wing=mat(0xe3e7e9),navy=mat(0x20395f),gold=mat(0xd9ad55),dark=mat(0x172332),metal=mat(0x8e9daa),rubber=mat(0x161a20),shadow=mat(0x394a62),windowMat=mat(0x496f95);
   const parts={flaps:[],spoilers:[],reversers:[],mainGear:[],gearDoors:[],hStabs:[],elevators:[],engineFans:[],wingFlex:[],wheelSpin:[]};
   const titleMat=drawTitleTexture(),logoMat=drawLogoTexture();
+  const wingSpanScale=.76, wingChordScale=.98, wingYOffset=.02;
+  const innerFlapZ=4.9, outerFlapZ=8.6, engineZ=7.95, wingBoxZ=7.95;
+  const spoilerZs=[4.6,6.85,8.9];
   // Fuselage
   const profiles=[[-28.5,.12,.12],[-27.7,.70,.70],[-26.5,1.45,1.54],[-24.8,2.17,2.22],[-22,2.65,2.66],[-18,2.77,2.81],[-10,2.82,2.83],[0,2.82,2.84],[12,2.79,2.82],[18,2.68,2.71],[22,2.13,2.2],[25,1.38,1.46],[27.7,.32,.34],[28.6,.07,.07]];
   const verts=[],faces=[],colors=[],N=96;
@@ -17953,22 +17956,22 @@ body.jc-v112-external-drag canvas{cursor:grabbing}
   // Wings and control surfaces
   for(const side of [-1,1]){
    const wingRoot=new me();wingRoot.position.set(0,0,0);model.add(wingRoot);parts.wingFlex.push(wingRoot);
-   addMesh(wingRoot,side<0?g.wingL:g.wingR,wing);
+   const wingMesh=addMesh(wingRoot,side<0?g.wingL:g.wingR,wing);wingMesh.scale.set(wingChordScale,1,wingSpanScale);wingMesh.position.y+=wingYOffset;
    // decorative wingtip / windows / livery
    buildWindowStrip(model,side);
    const text=addMesh(model,new Ge(18.7,1.52),titleMat,-12.1,6.65,side*2.90);text.rotation.y=side===1?0:Math.PI;text.renderOrder=4;
    const emblem=addMesh(model,new Ge(3.0,3.0),logoMat,25.65,11.9,side===1?.52:-.04);emblem.rotation.y=side===1?0:Math.PI;emblem.renderOrder=5;
    // Engine and reverser sleeve
-   addMesh(model,side<0?g.engine:g.engine,white,0,3.4,side*9.3);
-   const nacelleBand=addMesh(model,new Ae(3.05,1.58,.58),shadow,.15,3.4,side*9.3);parts.reversers.push(nacelleBand);
-   const inlet=addMesh(model,new an(1.70,1.70,.15,28),dark,-3.67,3.4,side*9.3);inlet.rotation.z=Math.PI/2;
-   const fan=addMesh(model,new an(.65,.65,.20,16),metal,-3.78,3.4,side*9.3);fan.rotation.z=Math.PI/2;parts.engineFans.push(fan);
-   addMesh(model,new Ae(3.2,1.65,.77),wing,.1,5.02,side*9.3);
+   addMesh(model,side<0?g.engine:g.engine,white,0,3.4,side*engineZ);
+   const nacelleBand=addMesh(model,new Ae(3.05,1.58,.58),shadow,.15,3.4,side*engineZ);parts.reversers.push(nacelleBand);
+   const inlet=addMesh(model,new an(1.70,1.70,.15,28),dark,-3.67,3.4,side*engineZ);inlet.rotation.z=Math.PI/2;
+   const fan=addMesh(model,new an(.65,.65,.20,16),metal,-3.78,3.4,side*engineZ);fan.rotation.z=Math.PI/2;parts.engineFans.push(fan);
+   addMesh(model,new Ae(3.2,1.65,.77),wing,.1,5.02,side*wingBoxZ);
    // Flaps (inner and outer)
-   const flap1=new me();flap1.position.set(3.4,5.28,side*5.8);model.add(flap1);addMesh(flap1,new Ae(5.8,.18,1.05),white,2.6,-.02,0);parts.flaps.push({pivot:flap1,side,kind:'inner'});
-   const flap2=new me();flap2.position.set(5.4,5.12,side*10.7);model.add(flap2);addMesh(flap2,new Ae(5.2,.16,.88),white,2.35,-.02,0);parts.flaps.push({pivot:flap2,side,kind:'outer'});
+   const flap1=new me();flap1.position.set(3.4,5.28,side*innerFlapZ);model.add(flap1);addMesh(flap1,new Ae(5.2,.18,.98),white,2.35,-.02,0);parts.flaps.push({pivot:flap1,side,kind:'inner'});
+   const flap2=new me();flap2.position.set(5.1,5.12,side*outerFlapZ);model.add(flap2);addMesh(flap2,new Ae(4.4,.16,.78),white,2.05,-.02,0);parts.flaps.push({pivot:flap2,side,kind:'outer'});
    // Spoilers
-   for(const zOff of [5.2,8.5,11.2]){const sp=new me();sp.position.set(2.6,5.55,side*zOff);model.add(sp);addMesh(sp,new Ae(1.35,.05,.78),shadow,.7,.06,0);parts.spoilers.push({pivot:sp,side});}
+   for(const zOff of spoilerZs){const sp=new me();sp.position.set(2.6,5.55,side*zOff);model.add(sp);addMesh(sp,new Ae(1.15,.05,.64),shadow,.58,.06,0);parts.spoilers.push({pivot:sp,side});}
    // Horizontal stabs and elevators
    const stabPivot=new me();stabPivot.position.set(22.25,8.25,side*4.4);model.add(stabPivot);addMesh(stabPivot,side<0?g.stabL:g.stabR,wing,0,0,0);parts.hStabs.push({pivot:stabPivot,side});
    const elevPivot=new me();elevPivot.position.set(25.2,8.17,side*6.9);model.add(elevPivot);addMesh(elevPivot,new Ae(3.2,.12,1.15),white,1.55,-.02,0);parts.elevators.push({pivot:elevPivot,side});
@@ -17997,7 +18000,7 @@ body.jc-v112-external-drag canvas{cursor:grabbing}
   const parts=jc111.parts;if(!parts)return;
   const gear=clamp(Number(n?.gearT??n?.gear??1),0,1),flaps=flapNorm(n),spoiler=spoilerNorm(n),rev=reverseNorm(n),rud=rudderAngle(n),elev=elevatorAngle(n),trim=hstabTrim(n);
   for(const wing of parts.wingFlex){wing.rotation.z=-(Number(n?.phi||0))*qe*.08;wing.rotation.x=-(Number(n?.theta||0))*qe*.02;}
-  parts.flaps.forEach((f,i)=>{const base=(f.kind==='inner'?18:24)*qe;f.pivot.rotation.z=-base*flaps;f.pivot.position.x=(f.kind==='inner'?3.4:5.4)+flaps*.9;f.pivot.position.y=(f.kind==='inner'?5.28:5.12)-flaps*.35;});
+  parts.flaps.forEach((f,i)=>{const base=(f.kind==='inner'?18:24)*qe;f.pivot.rotation.z=-base*flaps;f.pivot.position.x=(f.kind==='inner'?3.4:5.1)+flaps*.8;f.pivot.position.y=(f.kind==='inner'?5.28:5.12)-flaps*.35;});
   parts.spoilers.forEach((s,i)=>{s.pivot.rotation.z=(26+4*(i%2))*qe*spoiler;s.pivot.position.y=5.55+spoiler*.08;});
   parts.reversers.forEach((r,i)=>{r.position.x=.15+rev*1.08;});
   parts.engineFans.forEach((fan,i)=>{fan.rotation.x += (Number(n?.eng1||n?.eng2||true)?1:0)*(Number(n?.v||0)*0.03+0.22);});
