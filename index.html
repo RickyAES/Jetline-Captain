@@ -2217,7 +2217,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function hello(){sendToGame({src:'jetline-host',type:'hello'});sendFeed()}
   function startGame(reload=false){
-    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=137'+(reload?'&cloud_reload='+Date.now():'')}
+    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=138'+(reload?'&cloud_reload='+Date.now():'')}
   }
   frame.addEventListener('load',()=>{
     gameLoaded=true;
