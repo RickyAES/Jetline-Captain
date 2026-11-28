@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08162f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Jetline Captain v124 · World Pilots</title>
+  <title>Jetline Captain v126 · World Pilots</title>
   <style>
     :root{color-scheme:dark;--ink:#edf5ff;--muted:#a6b8d1;--blue:#42d8ff;--base:#07132c;--panel:#10234a;--stroke:#31527c;--green:#48e0a0}
     *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--base);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--ink)}
@@ -1856,6 +1856,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     else if(h.stage==='turn-in')text='MANEUVER: Turn back to the inbound holding course; use FCU HDG mode or manual controls.';
     else if(h.stage==='established')text='HOLD ESTABLISHED. Maintain heading, altitude and speed. Await further clearance.';
     else if(h.stage==='released')text='ATC has cleared you to leave the hold. Restore NAV mode or resume your flight plan.';
+    text+=' · CIRCUITS '+h.laps+'/'+h.requiredLaps+'.';
     $('holdInstruction').textContent=text+(h.stage!=='released'?' MISSION CLOCK PAUSED; WAYPOINT MISSES SUSPENDED while holding.':' Mission countdown and waypoint checks resumed.');
   }
   function renderHold(r){
@@ -1892,9 +1893,9 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     const maxKt=targetSpeed(alt);
     atcHold={fix,arr:r.arr,dep:r.dep,stage:'clearance',startedAt:r.t,stageAt:r.t,
       lastT:r.t,steady:0,headingAtClearance:r.heading,inbound,outbound,turn,entry,
-      outboundTarget:outbound,alt,maxKt,points:0,answered:false,wrong:false};
+      outboundTarget:outbound,alt,maxKt,points:0,laps:0,requiredLaps:2,answered:false,wrong:false};
     const bypass=gameHoldingExempt(true);
-    if(!bypass?.active)console.warn('Native missed-fix protection is not active; ensure updated game.html is deployed.');
+    if(!bypass?.active){atcHold=null;return;}
     updateHoldHud(r);
     const clearance=`Jetline ${r.info.level||1}, for traffic sequencing into ${r.arr}, hold at ${fix}. Inbound course ${padHdg(inbound)}, ${turn}-hand turns. Maintain ${alt} feet. Speed not above ${maxKt} knots. Expect further clearance.`;
     $('holdClearance').textContent='ATC: '+clearance;
@@ -1949,13 +1950,17 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
       return;
     }
     if(r.info.st!=='play')return;
+    let scenario=null;
+    try{scenario=frame.contentWindow?.__jcV98ScenarioStatus?.();}catch(_){}
+    if(!scenario?.selected||scenario.level<=10||scenario.mode!=='hold'||scenario.emergency){
+      if(atcHold){resetHold();try{window.speechSynthesis?.cancel()}catch(_){}}
+      atcHoldDone=true;return;
+    }
     if(previousGameT!=null&&r.t+5<previousGameT){resetHold();atcHoldFlight='';}
     previousGameT=r.t;
-    const key=`${r.dep}|${r.arr}|${r.info.level||1}`;
+    const key=String(scenario.flightId||0);
     if(key!==atcHoldFlight){resetHold();atcHoldFlight=key;
-      // Every level receives ONE surprise ATC hold if the pilot reaches the enroute
-      // portion. The waypoint/trigger time is randomized independently of airport.
-      // In particular, smaller airports are no longer excluded by a 35% roll.
+      // Engine chooses the one scenario; only holding flights use this controller.
       const n=Math.max(1,r.info.route?.wps?.length||1);
       atcHoldSchedule={
         waypoint:Math.floor(Math.random()*n),
@@ -1967,14 +1972,14 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     }
     if(!atcHold){
       const plan=atcHoldSchedule;
-      if(!atcHoldDone&&plan&&!r.info.paused){
+      if(!atcHoldDone&&!scenario.done&&plan&&!r.info.paused){
         if(r.phase==='route'){
           if(plan.routeStart==null)plan.routeStart=r.t;
           const enrouteSec=Math.max(0,r.t-plan.routeStart);
           const passed=Number(r.info.wpIdx)||0;
           // Use a randomly picked enroute fix. The deadline prevents missions with
           // difficult waypoint navigation from waiting forever for a hold.
-          if((enrouteSec>=plan.routeDelay&&passed>=plan.waypoint)||enrouteSec>=plan.routeDeadline){
+          if(r.alt>=1500&&((enrouteSec>=plan.routeDelay&&passed>=plan.waypoint)||enrouteSec>=plan.routeDeadline)){
             issueHold(r);
           }
         }else if(r.phase==='approach'){
@@ -1994,26 +1999,36 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
     const speedOk=r.kt<=h.maxKt+15;
     if(h.stage==='turn-out'){
       h.steady=hdgErr(h.outboundTarget)<20&&altOk&&speedOk?h.steady+dt:0;
-      if(h.steady>=4){h.points+=25;setHoldStage('outbound',r.t);
+      if(h.steady>=4){h.points+=12.5;setHoldStage('outbound',r.t);
         $('holdFeedback').textContent=`Good heading capture. Fly outbound ${padHdg(h.outboundTarget)} for the holding leg.`;
         speech(`Continue outbound heading ${angle(h.outboundTarget)}.`);
       }
     }else if(h.stage==='outbound'){
-      if(r.t-h.stageAt>=13){setHoldStage('turn-in',r.t);
+      h.steady=hdgErr(h.outboundTarget)<20&&altOk&&speedOk?h.steady+dt:0;
+      if(h.steady>=60){setHoldStage('turn-in',r.t);
         $('holdFeedback').textContent=`ATC: Turn ${h.turn} to intercept inbound ${padHdg(h.inbound)}.`;
         speech(`Jetline, turn ${h.turn} to intercept inbound course ${angle(h.inbound)}.`);
       }
     }else if(h.stage==='turn-in'){
       h.steady=hdgErr(h.inbound)<20&&altOk&&speedOk?h.steady+dt:0;
-      if(h.steady>=4){h.points+=25;setHoldStage('established',r.t);
+      if(h.steady>=4){h.points+=12.5;setHoldStage('established',r.t);
         $('holdFeedback').textContent='Holding established. Maintain altitude and await ATC release.';
       }
     }else if(h.stage==='established'){
-      if(r.t-h.stageAt>=11){setHoldStage('released',r.t);
+      h.steady=hdgErr(h.inbound)<20&&altOk&&speedOk?h.steady+dt:0;
+      if(h.steady>=60){
+        h.laps++;h.points+=25;
+        if(h.laps<h.requiredLaps){
+          setHoldStage('turn-out',r.t);
+          $('holdFeedback').textContent='Circuit '+h.laps+' of '+h.requiredLaps+' complete. Continue holding; turn outbound.';
+          speech('Jetline, continue holding. Turn '+h.turn+' outbound for circuit '+(h.laps+1)+'.');
+          renderHold(r);updateHoldHud(r);return;
+        }
+        setHoldStage('released',r.t);
         const cleared=gameHoldingExempt(false,true); // Exclude holding time, grant at least 120 seconds to rejoin the route and skip passed fixes.
         h.releasedAt=r.t;
         updateHoldHud(null);
-        if(altOk&&speedOk)h.points+=25;
+        h.points=Math.min(100,Math.round(h.points));
         $('holdClearance').textContent=`ATC: Jetline, cleared to exit the hold. Resume navigation to ${h.arr}.`;
         $('holdFeedback').textContent=`Holding complete: ${h.points}/100 procedure points. Flight clock resumes with ${Math.ceil(cleared?.timeRemaining||0)} seconds remaining. (Separate from flight score.)`;
         $('holdFeedback').style.color='#78ebbe';
@@ -2038,7 +2053,7 @@ function selectRadarPlane(p){radarSelected=p?.hex||p?.callsign||null;if(p)queueF
   }
   function hello(){sendToGame({src:'jetline-host',type:'hello'});sendFeed()}
   function startGame(reload=false){
-    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=124'+(reload?'&cloud_reload='+Date.now():'')}
+    if(!gameLoaded||reload){gameLoaded=false;frame.src='game.html?v=126'+(reload?'&cloud_reload='+Date.now():'')}
   }
   frame.addEventListener('load',()=>{
     gameLoaded=true;
