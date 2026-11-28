@@ -17836,5 +17836,111 @@ body.jc-airport-map-open #jc-airport-surface{box-shadow:0 14px 35px #000e!import
 })();
 </script>
 
+<style id="jc-v110-aircraft-view-style">
+#jc-v110-view-open{position:fixed;left:12px;bottom:14px;z-index:2200;min-height:34px;padding:0 12px;border-radius:10px;border:1px solid #4acaf0;background:#103c68;color:#eaf9ff;font:800 12px/1 system-ui,-apple-system,Segoe UI,Arial,sans-serif;box-shadow:0 8px 20px rgba(0,0,0,.35);display:flex;align-items:center;gap:6px}
+#jc-v110-view-open:hover{background:#155081}
+#jc-v110-view-open .sub{font-size:10px;opacity:.8;letter-spacing:.04em}
+#jc-v110-panel{position:fixed;left:12px;bottom:56px;z-index:2201;width:min(460px,calc(100vw - 24px));height:min(360px,46vh);min-height:280px;border-radius:14px;border:1px solid #3ca7d6;background:linear-gradient(155deg,#0f2848f7,#071426f7);box-shadow:0 18px 48px rgba(0,0,0,.5);display:none;overflow:hidden;color:#eef8ff;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;backdrop-filter:blur(5px)}
+#jc-v110-panel.open{display:flex;flex-direction:column}
+#jc-v110-panel.jc-v110-min{height:48px;min-height:48px}
+#jc-v110-panel.jc-v110-min .jc-v110-body{display:none}
+#jc-v110-panel.jc-v110-dragging .jc-v110-hd{cursor:grabbing}
+#jc-v110-panel .jc-v110-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(110,190,225,.24);background:linear-gradient(180deg,#143b67,#0c2442);cursor:grab;user-select:none}
+#jc-v110-panel .jc-v110-title{display:flex;flex-direction:column;min-width:0}
+#jc-v110-panel .jc-v110-title strong{font-size:13px;letter-spacing:.04em;color:#9cecff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#jc-v110-panel .jc-v110-title span{font-size:10px;color:#c5deef;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#jc-v110-panel .jc-v110-actions{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
+#jc-v110-panel .jc-v110-actions button,#jc-v110-panel .jc-v110-tabs button{border:1px solid #457ca8;background:#123761;color:#f1fbff;border-radius:8px;font:800 11px/1 system-ui;padding:6px 9px;min-height:30px}
+#jc-v110-panel .jc-v110-actions button:hover,#jc-v110-panel .jc-v110-tabs button:hover{background:#194975}
+#jc-v110-panel .jc-v110-tabs button[aria-pressed="true"]{border-color:#63dff8;background:#156384;color:#fff}
+#jc-v110-panel .jc-v110-body{display:flex;flex-direction:column;gap:8px;padding:8px 10px 10px;min-height:0;flex:1}
+#jc-v110-panel .jc-v110-tabs{display:flex;flex-wrap:wrap;gap:6px}
+#jc-v110-panel .jc-v110-canvas-wrap{position:relative;flex:1;min-height:170px;border:1px solid rgba(90,164,203,.3);border-radius:12px;background:radial-gradient(circle at 50% 15%,rgba(42,93,144,.35),transparent 45%),linear-gradient(180deg,#071526,#0b1d34);overflow:hidden}
+#jc-v110-canvas{display:block;width:100%;height:100%}
+#jc-v110-panel .jc-v110-foot{display:flex;justify-content:space-between;gap:10px;font-size:10px;line-height:1.35;color:#b7d4e8}
+#jc-v110-panel .jc-v110-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:999px;border:1px solid rgba(96,172,208,.3);background:rgba(8,28,50,.65);white-space:nowrap}
+@media (max-width:720px){#jc-v110-view-open{left:8px;bottom:8px;padding:0 10px}#jc-v110-view-open .sub{display:none}#jc-v110-panel{left:8px;bottom:48px;width:min(96vw,460px);height:min(380px,52vh)}}
+</style>
+<script id="jc-v110-aircraft-view">
+(()=>{'use strict';
+ const onReady=fn=>document.readyState==='loading'?document.addEventListener('DOMContentLoaded',fn,{once:true}):fn();
+ onReady(()=>{
+  if(document.getElementById('jc-v110-panel'))return;
+  const body=document.body;if(!body)return;
+  const open=document.createElement('button');
+  open.id='jc-v110-view-open';open.type='button';
+  open.innerHTML='✈ <span>B787 VIEW</span> <span class="sub">FRONT · SIDE · TOP</span>';
+  const panel=document.createElement('section');
+  panel.id='jc-v110-panel';
+  panel.setAttribute('aria-label','Singapore Airlines 787 aircraft viewer');
+  panel.innerHTML=`<div class="jc-v110-hd"><div class="jc-v110-title"><strong>SINGAPORE AIRLINES 787 VIEWER</strong><span>Front view · side view · top view · stylized training model</span></div><div class="jc-v110-actions"><button type="button" id="jc-v110-min">MIN</button><button type="button" id="jc-v110-close">✕</button></div></div><div class="jc-v110-body"><div class="jc-v110-tabs" role="group" aria-label="Aircraft view selector"><button type="button" data-view="front">FRONT</button><button type="button" data-view="side">SIDE</button><button type="button" data-view="top">TOP</button><button type="button" data-view="all" aria-pressed="true">ALL</button></div><div class="jc-v110-canvas-wrap"><canvas id="jc-v110-canvas" aria-label="Aircraft viewer canvas"></canvas></div><div class="jc-v110-foot"><span class="jc-v110-chip">MODEL: SIA 787 DREAMLINER</span><span class="jc-v110-chip">View: <strong id="jc-v110-label">ALL</strong></span></div></div>`;
+  body.append(open,panel);
+  const canvas=panel.querySelector('#jc-v110-canvas');
+  const ctx=canvas.getContext('2d');
+  const label=panel.querySelector('#jc-v110-label');
+  const tabButtons=[...panel.querySelectorAll('[data-view]')];
+  const state={view:'all',drag:null};
+
+  function setOpen(v){panel.classList.toggle('open',v);if(v){panel.classList.remove('jc-v110-min');drawSoon();}}
+  open.addEventListener('click',()=>setOpen(!panel.classList.contains('open')));
+  panel.querySelector('#jc-v110-close').addEventListener('click',()=>setOpen(false));
+  panel.querySelector('#jc-v110-min').addEventListener('click',()=>panel.classList.toggle('jc-v110-min'));
+  tabButtons.forEach(btn=>btn.addEventListener('click',()=>setView(btn.dataset.view)));
+  function setView(v){state.view=v;label.textContent=v.toUpperCase();tabButtons.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===v)));drawSoon();}
+
+  const header=panel.querySelector('.jc-v110-hd');
+  function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
+  function dragDown(e){if(e.button!==0||e.target.closest('button'))return;const r=panel.getBoundingClientRect();state.drag={id:e.pointerId,dx:e.clientX-r.left,dy:e.clientY-r.top};header.setPointerCapture(e.pointerId);panel.classList.add('jc-v110-dragging');e.preventDefault();}
+  function dragMove(e){if(!state.drag||state.drag.id!==e.pointerId)return;const r=panel.getBoundingClientRect();const x=clamp(e.clientX-state.drag.dx,6,window.innerWidth-r.width-6);const y=clamp(e.clientY-state.drag.dy,6,window.innerHeight-r.height-6);Object.assign(panel.style,{left:x+'px',top:y+'px',right:'auto',bottom:'auto'});e.preventDefault();}
+  function dragEnd(e){if(!state.drag||state.drag.id!==e.pointerId)return;state.drag=null;panel.classList.remove('jc-v110-dragging');try{header.releasePointerCapture(e.pointerId);}catch{}}
+  header.addEventListener('pointerdown',dragDown);header.addEventListener('pointermove',dragMove);header.addEventListener('pointerup',dragEnd);header.addEventListener('pointercancel',dragEnd);header.addEventListener('dblclick',e=>{if(e.target.closest('button'))return;panel.style.left='12px';panel.style.bottom='56px';panel.style.top='';panel.style.right='';});
+
+  const gold='#c9a54b', blue='#123b70', blue2='#205997', fuselage='#f8fbff', line='#17304f', shadow='rgba(0,0,0,.18)', windowBlue='#496f95';
+  function resize(){const dpr=Math.max(1,window.devicePixelRatio||1);const rect=canvas.getBoundingClientRect();const w=Math.max(220,Math.round(rect.width));const h=Math.max(150,Math.round(rect.height));if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}ctx.setTransform(dpr,0,0,dpr,0,0);draw();}
+  let raf=0;function drawSoon(){cancelAnimationFrame(raf);raf=requestAnimationFrame(resize);}window.addEventListener('resize',drawSoon);
+
+  function roundedRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function bannerText(t,x,y){ctx.fillStyle='rgba(188,227,245,.88)';ctx.font='700 11px system-ui';ctx.fillText(t,x,y);}
+  function drawGrid(x,y,w,h){ctx.save();ctx.strokeStyle='rgba(87,142,179,.13)';ctx.lineWidth=1;for(let i=1;i<6;i++){const yy=y+i*h/6;ctx.beginPath();ctx.moveTo(x,yy);ctx.lineTo(x+w,yy);ctx.stroke();}for(let i=1;i<8;i++){const xx=x+i*w/8;ctx.beginPath();ctx.moveTo(xx,y);ctx.lineTo(xx,y+h);ctx.stroke();}ctx.restore();}
+  function drawTailMark(cx,cy,s){ctx.save();ctx.translate(cx,cy);ctx.scale(s,s);ctx.fillStyle=gold;ctx.beginPath();ctx.moveTo(-3,-15);ctx.quadraticCurveTo(6,-12,10,-4);ctx.quadraticCurveTo(2,-6,-5,2);ctx.quadraticCurveTo(2,3,7,10);ctx.quadraticCurveTo(-4,8,-10,1);ctx.quadraticCurveTo(-8,-9,-3,-15);ctx.fill();ctx.restore();}
+  function drawWindows(x,y,len,count,spacing){ctx.save();ctx.fillStyle=windowBlue;for(let i=0;i<count;i++){const wx=x+i*spacing;if(wx>x+len)break;roundedRect(wx,y,7,3.2,1.6);ctx.fill();}ctx.restore();}
+  function drawSide(x,y,w,h){ctx.save();ctx.translate(x,y);drawGrid(0,0,w,h);bannerText('SIDE VIEW',12,18);
+   const cy=h*.58, fusH=h*.14, nose=w*.12, tail=w*.09, bodyX=w*.1, bodyW=w*.78;ctx.fillStyle=shadow;roundedRect(bodyX+4,cy-fusH/2+6,bodyW,fusH,10);ctx.fill();
+   ctx.fillStyle=fuselage;ctx.strokeStyle=line;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(bodyX,cy);ctx.quadraticCurveTo(bodyX+nose*.35,cy-fusH*.9,bodyX+nose,cy-fusH*.42);ctx.lineTo(bodyX+bodyW-tail,cy-fusH*.42);ctx.quadraticCurveTo(bodyX+bodyW-tail*.15,cy-fusH*.62,bodyX+bodyW,cy-fusH*.1);ctx.quadraticCurveTo(bodyX+bodyW-tail*.2,cy+fusH*.16,bodyX+bodyW-tail,cy+fusH*.42);ctx.lineTo(bodyX+nose,cy+fusH*.42);ctx.quadraticCurveTo(bodyX+nose*.35,cy+fusH*.9,bodyX,cy);ctx.closePath();ctx.fill();ctx.stroke();
+   ctx.fillStyle=blue;ctx.fillRect(bodyX+bodyW*.17,cy-fusH*.46,bodyW*.22,fusH*.9);ctx.fillStyle=gold;ctx.fillRect(bodyX+bodyW*.39,cy-fusH*.05,bodyW*.22,3.5);
+   drawWindows(bodyX+bodyW*.09,cy-fusH*.06,bodyW*.65,20,13);
+   ctx.fillStyle=blue;ctx.beginPath();ctx.moveTo(bodyX+bodyW*.79,cy-fusH*.42);ctx.lineTo(bodyX+bodyW*.84,cy-h*.18);ctx.lineTo(bodyX+bodyW*.92,cy-h*.18);ctx.lineTo(bodyX+bodyW*.89,cy-fusH*.42);ctx.closePath();ctx.fill();drawTailMark(bodyX+bodyW*.86,cy-h*.22,.7);
+   ctx.fillStyle=blue2;ctx.beginPath();ctx.moveTo(bodyX+bodyW*.33,cy+fusH*.06);ctx.lineTo(bodyX+bodyW*.53,cy-h*.12);ctx.lineTo(bodyX+bodyW*.64,cy-h*.11);ctx.lineTo(bodyX+bodyW*.44,cy+fusH*.15);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(bodyX+bodyW*.59,cy+fusH*.04);ctx.lineTo(bodyX+bodyW*.72,cy-h*.03);ctx.lineTo(bodyX+bodyW*.78,cy-h*.02);ctx.lineTo(bodyX+bodyW*.67,cy+fusH*.14);ctx.closePath();ctx.fill();
+   ctx.fillStyle=blue2;ctx.beginPath();ctx.moveTo(bodyX+bodyW*.69,cy+fusH*.08);ctx.lineTo(bodyX+bodyW*.77,cy+fusH*.21);ctx.lineTo(bodyX+bodyW*.72,cy+fusH*.27);ctx.lineTo(bodyX+bodyW*.61,cy+fusH*.1);ctx.closePath();ctx.fill();
+   ctx.fillStyle=shadow;ctx.fillRect(bodyX+bodyW*.44,cy+fusH*.18,w*.07,h*.03);ctx.fillRect(bodyX+bodyW*.61,cy+fusH*.18,w*.07,h*.03);
+   ctx.fillStyle='#e9edf2';ctx.strokeStyle=line;ctx.beginPath();ctx.ellipse(bodyX+bodyW*.47,cy+fusH*.17,w*.034,h*.045,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.ellipse(bodyX+bodyW*.64,cy+fusH*.17,w*.034,h*.045,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+   ctx.fillStyle=gold;ctx.font='700 10px system-ui';ctx.fillText('SINGAPORE AIRLINES',bodyX+bodyW*.24,cy-fusH*.14);
+   ctx.restore();}
+  function drawTop(x,y,w,h){ctx.save();ctx.translate(x,y);drawGrid(0,0,w,h);bannerText('TOP VIEW',12,18);
+   const cx=w*.5, cy=h*.56, bodyL=w*.64, bodyW=w*.1;ctx.fillStyle=shadow;ctx.beginPath();ctx.ellipse(cx+5,cy+6,bodyL*.5,bodyW*.58,0,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle=fuselage;ctx.strokeStyle=line;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(cx,cy,bodyL*.5,bodyW*.55,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+   ctx.fillStyle=blue;ctx.fillRect(cx-bodyL*.16,cy-bodyW*.47,bodyL*.17,bodyW*.94);ctx.fillStyle=gold;ctx.fillRect(cx+bodyL*.02,cy-2,bodyL*.16,4);
+   ctx.fillStyle=blue2;ctx.beginPath();ctx.moveTo(cx-bodyL*.04,cy-bodyW*.16);ctx.lineTo(cx-bodyL*.23,cy-h*.17);ctx.lineTo(cx-bodyL*.28,cy-h*.17);ctx.lineTo(cx-bodyL*.08,cy+1);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(cx-bodyL*.04,cy+bodyW*.16);ctx.lineTo(cx-bodyL*.23,cy+h*.17);ctx.lineTo(cx-bodyL*.28,cy+h*.17);ctx.lineTo(cx-bodyL*.08,cy-1);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(cx+bodyL*.02,cy-bodyW*.13);ctx.lineTo(cx+bodyL*.23,cy-h*.11);ctx.lineTo(cx+bodyL*.28,cy-h*.1);ctx.lineTo(cx+bodyL*.06,cy+1);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(cx+bodyL*.02,cy+bodyW*.13);ctx.lineTo(cx+bodyL*.23,cy+h*.11);ctx.lineTo(cx+bodyL*.28,cy+h*.1);ctx.lineTo(cx+bodyL*.06,cy-1);ctx.closePath();ctx.fill();
+   ctx.fillStyle='#e9edf2';ctx.strokeStyle=line;ctx.beginPath();ctx.ellipse(cx-bodyL*.06,cy-h*.13,w*.035,h*.026,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.ellipse(cx-bodyL*.06,cy+h*.13,w*.035,h*.026,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.ellipse(cx+bodyL*.06,cy-h*.09,w*.035,h*.026,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.ellipse(cx+bodyL*.06,cy+h*.09,w*.035,h*.026,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+   ctx.fillStyle=blue;ctx.beginPath();ctx.moveTo(cx+bodyL*.28,cy);ctx.lineTo(cx+bodyL*.38,cy-h*.08);ctx.lineTo(cx+bodyL*.42,cy-h*.08);ctx.lineTo(cx+bodyL*.39,cy);ctx.lineTo(cx+bodyL*.42,cy+h*.08);ctx.lineTo(cx+bodyL*.38,cy+h*.08);ctx.closePath();ctx.fill();drawTailMark(cx+bodyL*.37,cy,.6);
+   ctx.restore();}
+  function drawFront(x,y,w,h){ctx.save();ctx.translate(x,y);drawGrid(0,0,w,h);bannerText('FRONT VIEW',12,18);
+   const cx=w*.5, cy=h*.54;ctx.fillStyle=shadow;ctx.fillRect(w*.1,cy+8,w*.8,8);
+   ctx.fillStyle=blue2;ctx.fillRect(w*.14,cy-8,w*.72,9);ctx.fillRect(w*.12,cy-2,w*.76,4);
+   ctx.fillStyle='#e9edf2';ctx.strokeStyle=line;ctx.lineWidth=2;roundedRect(cx-w*.03,cy-h*.08,w*.06,h*.18,15);ctx.fill();ctx.stroke();
+   ctx.fillStyle=windowBlue;roundedRect(cx-w*.018,cy-h*.055,w*.036,h*.03,7);ctx.fill();
+   ctx.fillStyle=blue;ctx.beginPath();ctx.moveTo(cx-w*.018,cy-h*.08);ctx.lineTo(cx-w*.05,cy-h*.24);ctx.lineTo(cx+w*.05,cy-h*.24);ctx.lineTo(cx+w*.018,cy-h*.08);ctx.closePath();ctx.fill();
+   ctx.fillStyle='#e9edf2';ctx.strokeStyle=line;ctx.beginPath();ctx.ellipse(cx-w*.17,cy+h*.02,w*.055,h*.085,0,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.ellipse(cx+w*.17,cy+h*.02,w*.055,h*.085,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+   ctx.fillStyle=blue;ctx.fillRect(cx-w*.21,cy-h*.005,w*.06,6);ctx.fillRect(cx+w*.15,cy-h*.005,w*.06,6);
+   ctx.fillStyle=blue;ctx.beginPath();ctx.moveTo(cx-w*.014,cy-h*.24);ctx.lineTo(cx-w*.035,cy-h*.34);ctx.lineTo(cx+w*.035,cy-h*.34);ctx.lineTo(cx+w*.014,cy-h*.24);ctx.closePath();ctx.fill();drawTailMark(cx,cy-h*.28,.5);
+   ctx.fillStyle=gold;ctx.fillRect(cx-w*.02,cy-h*.01,w*.04,4);
+   ctx.restore();}
+  function clear(){const w=canvas.width/(window.devicePixelRatio||1),h=canvas.height/(window.devicePixelRatio||1);ctx.clearRect(0,0,w,h);const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#071322');g.addColorStop(1,'#0b2039');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);return {w,h};}
+  function draw(){const {w,h}=clear();if(state.view==='side')drawSide(8,8,w-16,h-16);else if(state.view==='top')drawTop(8,8,w-16,h-16);else if(state.view==='front')drawFront(8,8,w-16,h-16);else{const pad=8;const gap=8;const topH=Math.max(110,Math.floor((h-pad*2-gap)*.46));drawTop(pad,pad,w-pad*2,topH);const lowY=pad+topH+gap;const lowH=h-lowY-pad;const cellW=(w-pad*2-gap)/2;drawFront(pad,lowY,cellW,lowH);drawSide(pad+cellW+gap,lowY,cellW,lowH);} }
+  drawSoon();
+  window.__jcAircraftViewer110={open:()=>setOpen(true),close:()=>setOpen(false),setView,draw:drawSoon};
+ });
+})();
+</script>
 </body>
 </html>
